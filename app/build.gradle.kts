@@ -24,6 +24,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true   // нужна версия в BuildConfig.VERSION_NAME для автообновления
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.14"
