@@ -57,10 +57,18 @@ dependencies {
     // Загрузка постеров
     implementation("io.coil-kt:coil-compose:2.6.0")
 
-    // Сеть (для поиска и TMDB — пригодится на следующем шаге)
+    // Сеть (TMDB, GitHub-обновления)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("org.jsoup:jsoup:1.18.1")
 
-    // Торрент-движок (подключим на этапе стриминга)
-    // implementation("com.github.AriasC:jlhttp:...") — точную версию закрепим позже
+    // Торрент-движок (jlibtorrent = JNI-обёртка над libtorrent)
+    val jlibtorrent = "2.0.12.9"
+    implementation("com.frostwire:jlibtorrent:$jlibtorrent")
+    implementation("com.frostwire:jlibtorrent-android-arm:$jlibtorrent")
+    implementation("com.frostwire:jlibtorrent-android-arm64:$jlibtorrent")
+    implementation("com.frostwire:jlibtorrent-android-x86:$jlibtorrent")
+    implementation("com.frostwire:jlibtorrent-android-x86_64:$jlibtorrent")
+
+    // Плеер (Media3 / ExoPlayer)
+    implementation("androidx.media3:media3-exoplayer:1.4.1")
+    implementation("androidx.media3:media3-ui:1.4.1")
 }

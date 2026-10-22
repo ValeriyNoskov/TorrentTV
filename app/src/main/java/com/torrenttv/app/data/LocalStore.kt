@@ -83,6 +83,15 @@ class LocalStore(context: Context) {
             .apply()
     }
 
+    // ---------- Magnet-ссылки (источник видео для карточки) ----------
+
+    fun saveMagnet(item: MediaItem, magnet: String) {
+        prefs.edit().putString("magnet:" + item.storeKey, magnet).apply()
+    }
+
+    fun getMagnet(item: MediaItem): String? =
+        prefs.getString("magnet:" + item.storeKey, null)
+
     // ---------- Внутреннее ----------
 
     private fun readList(key: String): List<MediaItem> {

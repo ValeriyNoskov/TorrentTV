@@ -19,6 +19,8 @@ sealed interface Screen {
     data object Home : Screen
     data object Search : Screen
     data class Details(val item: MediaItem) : Screen
+    data class MagnetEntry(val item: MediaItem) : Screen
+    data class Player(val item: MediaItem) : Screen
 }
 
 class MainActivity : ComponentActivity() {
@@ -51,6 +53,19 @@ private fun App() {
         is Screen.Details -> DetailsScreen(
             item = s.item,
             onBack = { screen = Screen.Home },
+            onWatch = { screen = Screen.Player(s.item) },
+            onEnterMagnet = { screen = Screen.MagnetEntry(s.item) },
+        )
+
+        is Screen.MagnetEntry -> MagnetEntryScreen(
+            item = s.item,
+            onDone = { screen = Screen.Player(s.item) },
+            onBack = { screen = Screen.Details(s.item) },
+        )
+
+        is Screen.Player -> PlayerScreen(
+            item = s.item,
+            onBack = { screen = Screen.Details(s.item) },
         )
     }
 }

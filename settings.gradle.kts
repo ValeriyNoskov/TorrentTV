@@ -10,6 +10,11 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // Официальный Maven-репозиторий FrostWire (jlibtorrent)
+        maven {
+            url = uri("https://dl.frostwire.com/maven")
+            content { includeGroup("com.frostwire") }
+        }
     }
 }
 rootProject.name = "TorrentTV"

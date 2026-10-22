@@ -30,12 +30,18 @@ import coil.compose.AsyncImage
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
 
-/** Карточка фильма/сериала: описание, избранное, запуск просмотра. */
+/** Карточка фильма/сериала: описание, избранное, magnet и запуск просмотра. */
 @Composable
-fun DetailsScreen(item: MediaItem, onBack: () -> Unit) {
+fun DetailsScreen(
+    item: MediaItem,
+    onBack: () -> Unit,
+    onWatch: () -> Unit = {},
+    onEnterMagnet: () -> Unit = {},
+) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
     var fav by remember { mutableStateOf(store.isFavorite(item)) }
+    var magnet by remember { mutableStateOf(store.getMagnet(item) != null) }
     var status by remember { mutableStateOf("") }
 
     Column(
@@ -93,11 +99,18 @@ fun DetailsScreen(item: MediaItem, onBack: () -> Unit) {
 
                 Row {
                     Button(onClick = {
-                        // Пока плеера нет — фиксируем начало просмотра,
-                        // карточка попадает в «Продолжить просмотр»
-                        store.saveProgress(item, positionSec = 0, durationSec = 0)
-                        status = "Добавлено в «Продолжить просмотр». Плеер — следующий этап разработки."
+                        if (magnet) {
+                            // Фиксируем начало просмотра и открываем плеер
+                            store.saveProgress(item, positionSec = 0, durationSec = 0)
+                            onWatch()
+                        } else {
+                            status = "Сначала укажите magnet-ссылку торрента"
+                        }
                     }) { Text("▶ Смотреть") }
+                    Spacer(Modifier.width(16.dp))
+                    Button(onClick = onEnterMagnet) {
+                        Text(if (magnet) "🔗 Заменить magnet" else "🔗 Указать magnet")
+                    }
                     Spacer(Modifier.width(16.dp))
                     Button(onClick = { fav = store.toggleFavorite(item) }) {
                         Text(if (fav) "★ В избранном" else "☆ В избранное")
