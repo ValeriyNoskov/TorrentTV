@@ -56,6 +56,7 @@ private val KEY_ROWS = listOf(
 @Composable
 fun SearchScreen(onBack: () -> Unit, onOpenDetails: (MediaItem) -> Unit) {
     val context = LocalContext.current
+    val store = remember { LocalStore(context) }
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
@@ -96,7 +97,7 @@ fun SearchScreen(onBack: () -> Unit, onOpenDetails: (MediaItem) -> Unit) {
         if (query.length >= 2) {
             loading = true
             delay(500)
-            results = TmdbClient.search(query)
+            results = TmdbClient.search(query).filter { store.isAllowed(it) }
             loading = false
         } else {
             results = emptyList()

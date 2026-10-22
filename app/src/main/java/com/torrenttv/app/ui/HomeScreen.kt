@@ -47,6 +47,7 @@ fun HomeScreen(
     currentVersion: String,
     onOpenSearch: () -> Unit,
     onOpenDetails: (MediaItem) -> Unit,
+    onOpenSettings: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
@@ -69,7 +70,7 @@ fun HomeScreen(
         movieGenres = mg
         tvGenres = tg
         heroItem = withContext(Dispatchers.IO) {
-            TmdbClient.trending(1).firstOrNull { it.backdropUrl.isNotBlank() }
+            TmdbClient.trending(1).firstOrNull { it.backdropUrl.isNotBlank() && store.isAllowed(it) }
         }
     }
 
@@ -93,6 +94,8 @@ fun HomeScreen(
                         Spacer(Modifier.width(8.dp))
                         Text("Поиск")
                     }
+                    Spacer(Modifier.width(16.dp))
+                    Button(onClick = onOpenSettings) { Text("⚙ Настройки") }
                     Spacer(Modifier.width(24.dp))
                     Text(
                         text = "ВНосКино",
@@ -144,6 +147,7 @@ fun HomeScreen(
                         title = "🔥 Сейчас в тренде",
                         loader = { page -> TmdbClient.trending(page) },
                         onOpen = onOpenDetails,
+                            filterFn = { store.isAllowed(it) },
                     )
                 }
                 item {
@@ -161,6 +165,7 @@ fun HomeScreen(
                             title = "Фильмы · ${g.name}",
                             loader = { page -> TmdbClient.moviesByGenre(g.id, page) },
                             onOpen = onOpenDetails,
+                            filterFn = { store.isAllowed(it) },
                             keyTag = g.id,
                         )
                     }
@@ -170,6 +175,7 @@ fun HomeScreen(
                         title = "Популярные фильмы",
                         loader = { page -> TmdbClient.popularMovies(page) },
                         onOpen = onOpenDetails,
+                            filterFn = { store.isAllowed(it) },
                     )
                 }
                 item {
@@ -177,6 +183,7 @@ fun HomeScreen(
                         title = "Топ фильмов",
                         loader = { page -> TmdbClient.topRatedMovies(page) },
                         onOpen = onOpenDetails,
+                            filterFn = { store.isAllowed(it) },
                     )
                 }
                 item {
@@ -194,6 +201,7 @@ fun HomeScreen(
                             title = "Сериалы · ${g.name}",
                             loader = { page -> TmdbClient.tvByGenre(g.id, page) },
                             onOpen = onOpenDetails,
+                            filterFn = { store.isAllowed(it) },
                             keyTag = g.id,
                         )
                     }
@@ -203,6 +211,7 @@ fun HomeScreen(
                         title = "Популярные сериалы",
                         loader = { page -> TmdbClient.popularTv(page) },
                         onOpen = onOpenDetails,
+                            filterFn = { store.isAllowed(it) },
                     )
                 }
                 item {
@@ -210,6 +219,7 @@ fun HomeScreen(
                         title = "Топ сериалов",
                         loader = { page -> TmdbClient.topRatedTv(page) },
                         onOpen = onOpenDetails,
+                            filterFn = { store.isAllowed(it) },
                     )
                 }
                 item { Spacer(Modifier.height(24.dp)) }

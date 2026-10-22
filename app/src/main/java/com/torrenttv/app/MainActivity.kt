@@ -18,6 +18,7 @@ import com.torrenttv.app.ui.SearchScreen
 sealed interface Screen {
     data object Home : Screen
     data object Search : Screen
+    data object Settings : Screen
     data class Details(val item: MediaItem) : Screen
     data class MagnetEntry(val item: MediaItem) : Screen
     data class Player(val item: MediaItem) : Screen
@@ -43,6 +44,11 @@ private fun App() {
             currentVersion = BuildConfig.VERSION_NAME,
             onOpenSearch = { screen = Screen.Search },
             onOpenDetails = { screen = Screen.Details(it) },
+            onOpenSettings = { screen = Screen.Settings },
+        )
+
+        Screen.Settings -> SettingsScreen(
+            onBack = { screen = Screen.Home },
         )
 
         Screen.Search -> SearchScreen(

@@ -219,6 +219,7 @@ fun PagedMediaRow(
     loader: suspend (Int) -> List<MediaItem>,
     onOpen: (MediaItem) -> Unit,
     keyTag: Any? = null,
+    filterFn: (MediaItem) -> Boolean = { true },
 ) {
     var items by remember(keyTag) { mutableStateOf<List<MediaItem>>(emptyList()) }
     var page by remember(keyTag) { mutableIntStateOf(0) }
@@ -232,12 +233,21 @@ fun PagedMediaRow(
         busy.set(true)
         scope.launch {
             try {
-                val next = withContext(Dispatchers.IO) { loader(page + 1) }
-                if (next.isEmpty()) {
-                    exhausted = true
-                } else {
-                    items = items + next
+                // Грузим страницы, пока не наберётся видимый контент после фильтра
+                var attempts = 0
+                while (attempts < 5 && !exhausted) {
+                    val next = withContext(Dispatchers.IO) { loader(page + 1) }
+                    if (next.isEmpty()) {
+                        exhausted = true
+                        break
+                    }
                     page += 1
+                    val filtered = next.filter(filterFn)
+                    if (filtered.isNotEmpty()) {
+                        items = items + filtered
+                        break
+                    }
+                    attempts += 1
                 }
             } finally {
                 busy.set(false)
@@ -296,7 +306,8 @@ fun PagedMediaRow(
     }
 }
 
-/** Полоса жанровых фильтров. */
+/**
+ * Полоса жанровых фильтров. */
 @Composable
 fun GenreChips(
     genres: List<Genre>,
@@ -310,6 +321,21 @@ fun GenreChips(
         items(genres.size) { i ->
             val g = genres[i]
             GenreChip(g.name, selected?.id == g.id) { onSelect(g) }
+        }
+    }
+}
+
+/** Мульти-выбор жанров (для настроек: выделено = исключено). */
+@Composable
+fun GenreChipsMulti(
+    genres: List<Genre>,
+    selectedIds: Set<Int>,
+    onToggle: (Int) -> Unit,
+) {
+    LazyRow {
+        items(genres.size) { i ->
+            val g = genres[i]
+            GenreChip(g.name, g.id in selectedIds) { onToggle(g.id) }
         }
     }
 }

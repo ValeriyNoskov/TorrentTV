@@ -1,5 +1,6 @@
 package com.torrenttv.app.data
 
+import org.json.JSONArray
 import org.json.JSONObject
 
 /** Универсальная карточка контента (фильм или сериал). */
@@ -11,6 +12,7 @@ data class MediaItem(
     val posterUrl: String = "",
     val backdropUrl: String = "",
     val rating: Double = 0.0,
+    val genreIds: List<Int> = emptyList(),
     val overview: String = "",
 ) {
     /** Ключ для локального хранения (прогресс/избранное). */
@@ -26,6 +28,7 @@ data class MediaItem(
         .put("poster", posterUrl)
         .put("backdrop", backdropUrl)
         .put("rating", rating)
+        .put("genreIds", JSONArray(genreIds))
         .put("overview", overview)
 
     companion object {
@@ -37,6 +40,9 @@ data class MediaItem(
             posterUrl = o.optString("poster", ""),
             backdropUrl = o.optString("backdrop", ""),
             rating = o.optDouble("rating", 0.0),
+            genreIds = o.optJSONArray("genreIds")?.let { arr ->
+                (0 until arr.length()).map { arr.optInt(it) }
+            } ?: emptyList(),
             overview = o.optString("overview", ""),
         )
     }

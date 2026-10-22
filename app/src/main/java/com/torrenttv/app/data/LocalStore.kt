@@ -92,6 +92,40 @@ class LocalStore(context: Context) {
     fun getMagnet(item: MediaItem): String? =
         prefs.getString("magnet:" + item.storeKey, null)
 
+    // ---------- Настройки фильтрации поиска ----------
+
+    /** Исключённые жанры (id TMDB). */
+    fun excludedGenreIds(): Set<Int> =
+        prefs.getString("excl_genres", "")
+            ?.split(',')?.filter { it.isNotBlank() }?.mapNotNull { it.toIntOrNull() }?.toSet()
+            ?: emptySet()
+
+    fun setExcludedGenreIds(ids: Set<Int>) {
+        prefs.edit().putString("excl_genres", ids.joinToString(",")).apply()
+    }
+
+    /** Стоп-слова: блокировать контент, если слово встречается в названии/описании. */
+    fun excludedKeywords(): List<String> =
+        prefs.getString("excl_kw", "")
+            ?.split(',')?.filter { it.isNotBlank() }
+            ?: emptyList()
+
+    fun setExcludedKeywords(kws: List<String>) {
+        prefs.edit().putString("excl_kw", kws.joinToString(",")).apply()
+    }
+
+    /** Пропускать ли карточку с учётом настроек фильтрации. */
+    fun isAllowed(item: MediaItem): Boolean {
+        val excluded = excludedGenreIds()
+        if (item.genreIds.any { it in excluded }) return false
+        val kws = excludedKeywords()
+        if (kws.isNotEmpty()) {
+            val text = (item.title + " " + item.overview).lowercase()
+            if (kws.any { text.contains(it.lowercase()) }) return false
+        }
+        return true
+    }
+
     // ---------- Внутреннее ----------
 
     private fun readList(key: String): List<MediaItem> {

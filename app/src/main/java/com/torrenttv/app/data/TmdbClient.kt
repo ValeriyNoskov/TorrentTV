@@ -63,6 +63,9 @@ object TmdbClient {
             val title = o.optString("title", "").ifBlank { o.optString("name") }
             if (title.isBlank()) return@mapNotNull null
             val date = o.optString("release_date", "").ifBlank { o.optString("first_air_date", "") }
+            val genreIds = o.optJSONArray("genre_ids")?.let { garr ->
+                (0 until garr.length()).map { garr.optInt(it) }
+            } ?: emptyList()
             MediaItem(
                 id = o.getInt("id"),
                 type = type,
@@ -73,6 +76,7 @@ object TmdbClient {
                 backdropUrl = o.optString("backdrop_path", "").removePrefix("/")
                     .let { if (it.isBlank()) "" else "$IMAGE_BACKDROP/$it" },
                 rating = o.optDouble("vote_average", 0.0),
+                genreIds = genreIds,
                 overview = o.optString("overview", ""),
             )
         }
