@@ -33,12 +33,15 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.torrenttv.app.BuildConfig
+import com.torrenttv.app.data.Genre
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
 import com.torrenttv.app.data.TmdbClient
 import com.torrenttv.app.update.UpdateManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-/** Домашний экран: поиск, «Продолжить», «Избранное», каталоги фильмов и сериалов. */
+/** Домашний экран: поиск, «Продолжить», «Избранное» и каталоги с жанрами и подгрузкой. */
 @Composable
 fun HomeScreen(
     currentVersion: String,
@@ -50,15 +53,20 @@ fun HomeScreen(
 
     var favorites by remember { mutableStateOf(store.favorites()) }
     var progress by remember { mutableStateOf(store.continueWatching()) }
-    var movies by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
-    var tvShows by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+    var movieGenres by remember { mutableStateOf<List<Genre>>(emptyList()) }
+    var tvGenres by remember { mutableStateOf<List<Genre>>(emptyList()) }
+    var selectedMovieGenre by remember { mutableStateOf<Genre?>(null) }
+    var selectedTvGenre by remember { mutableStateOf<Genre?>(null) }
     var updateInfo by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
     var updateStatus by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
-        movies = TmdbClient.popularMovies()
-        tvShows = TmdbClient.popularTv()
         UpdateManager.checkForUpdate(currentVersion) { updateInfo = it }
+        val (mg, tg) = withContext(Dispatchers.IO) {
+            TmdbClient.movieGenres() to TmdbClient.tvGenres()
+        }
+        movieGenres = mg
+        tvGenres = tg
     }
 
     Box(
@@ -125,10 +133,77 @@ fun HomeScreen(
                     )
                 }
                 item {
-                    MediaRow("Популярные фильмы", movies, onOpenDetails)
+                    PagedMediaRow(
+                        title = "🔥 Сейчас в тренде",
+                        loader = { page -> TmdbClient.trending(page) },
+                        onOpen = onOpenDetails,
+                    )
                 }
                 item {
-                    MediaRow("Популярные сериалы", tvShows, onOpenDetails)
+                    Text(
+                        text = "Фильмы по жанрам",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 17.sp,
+                        modifier = Modifier.padding(horizontal = 32.dp, vertical = 4.dp),
+                    )
+                    GenreChips(movieGenres, selectedMovieGenre) { selectedMovieGenre = it }
+                }
+                selectedMovieGenre?.let { g ->
+                    item {
+                        PagedMediaRow(
+                            title = "Фильмы · ${g.name}",
+                            loader = { page -> TmdbClient.moviesByGenre(g.id, page) },
+                            onOpen = onOpenDetails,
+                            keyTag = g.id,
+                        )
+                    }
+                }
+                item {
+                    PagedMediaRow(
+                        title = "Популярные фильмы",
+                        loader = { page -> TmdbClient.popularMovies(page) },
+                        onOpen = onOpenDetails,
+                    )
+                }
+                item {
+                    PagedMediaRow(
+                        title = "Топ фильмов",
+                        loader = { page -> TmdbClient.topRatedMovies(page) },
+                        onOpen = onOpenDetails,
+                    )
+                }
+                item {
+                    Text(
+                        text = "Сериалы по жанрам",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 17.sp,
+                        modifier = Modifier.padding(horizontal = 32.dp, vertical = 4.dp),
+                    )
+                    GenreChips(tvGenres, selectedTvGenre) { selectedTvGenre = it }
+                }
+                selectedTvGenre?.let { g ->
+                    item {
+                        PagedMediaRow(
+                            title = "Сериалы · ${g.name}",
+                            loader = { page -> TmdbClient.tvByGenre(g.id, page) },
+                            onOpen = onOpenDetails,
+                            keyTag = g.id,
+                        )
+                    }
+                }
+                item {
+                    PagedMediaRow(
+                        title = "Популярные сериалы",
+                        loader = { page -> TmdbClient.popularTv(page) },
+                        onOpen = onOpenDetails,
+                    )
+                }
+                item {
+                    PagedMediaRow(
+                        title = "Топ сериалов",
+                        loader = { page -> TmdbClient.topRatedTv(page) },
+                        onOpen = onOpenDetails,
+                    )
                 }
                 item { Spacer(Modifier.height(24.dp)) }
             }

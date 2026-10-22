@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,20 +30,29 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
+import com.torrenttv.app.data.TmdbClient
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-/** Карточка фильма/сериала: описание, избранное, magnet и запуск просмотра. */
+/** Карточка фильма/сериала: описание, избранное, magnet, просмотр и «Похожее». */
 @Composable
 fun DetailsScreen(
     item: MediaItem,
     onBack: () -> Unit,
     onWatch: () -> Unit = {},
     onEnterMagnet: () -> Unit = {},
+    onOpenDetails: (MediaItem) -> Unit = {},
 ) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
     var fav by remember { mutableStateOf(store.isFavorite(item)) }
     var magnet by remember { mutableStateOf(store.getMagnet(item) != null) }
     var status by remember { mutableStateOf("") }
+    var similar by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+
+    LaunchedEffect(item) {
+        similar = withContext(Dispatchers.IO) { TmdbClient.similar(item) }
+    }
 
     Column(
         Modifier
@@ -120,6 +130,13 @@ fun DetailsScreen(
                 if (status.isNotBlank()) {
                     Text(status, color = Color(0xFFFFD54F), fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
                 }
+            }
+        }
+
+        // Похожее
+        if (similar.isNotEmpty()) {
+            Box(Modifier.weight(0.45f)) {
+                MediaRow("Похожее", similar, onOpenDetails)
             }
         }
 

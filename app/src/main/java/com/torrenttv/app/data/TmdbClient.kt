@@ -7,9 +7,13 @@ import okhttp3.Request
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
+/** Жанр TMDB. */
+data class Genre(val id: Int, val name: String)
+
 /**
  * Клиент TMDB (The Movie Database) — источник каталогов фильмов и сериалов
  * и метаданных для поиска. API-ключ задаётся в gradle.properties: tmdbApiKey=...
+ * Все методы блокирующие — вызывать из фонового потока.
  */
 object TmdbClient {
 
@@ -70,13 +74,69 @@ object TmdbClient {
         }
     }
 
+    // ---------- Поиск ----------
+
     /** Поиск по названию (фильмы + сериалы). */
     fun search(query: String): List<MediaItem> =
         parseList(get("/search/multi", mapOf("query" to query)))
 
-    /** Каталог популярных фильмов. */
-    fun popularMovies(): List<MediaItem> = parseList(get("/movie/popular"))
+    // ---------- Каталоги (с постраничной подгрузкой) ----------
 
-    /** Каталог популярных сериалов. */
-    fun popularTv(): List<MediaItem> = parseList(get("/tv/popular"))
+    fun trending(page: Int = 1): List<MediaItem> =
+        parseList(get("/trending/all/day", mapOf("page" to page.toString())))
+
+    fun popularMovies(page: Int = 1): List<MediaItem> =
+        parseList(get("/movie/popular", mapOf("page" to page.toString())))
+
+    fun popularTv(page: Int = 1): List<MediaItem> =
+        parseList(get("/tv/popular", mapOf("page" to page.toString())))
+
+    fun topRatedMovies(page: Int = 1): List<MediaItem> =
+        parseList(get("/movie/top_rated", mapOf("page" to page.toString())))
+
+    fun topRatedTv(page: Int = 1): List<MediaItem> =
+        parseList(get("/tv/top_rated", mapOf("page" to page.toString())))
+
+    fun moviesByGenre(genreId: Int, page: Int = 1): List<MediaItem> =
+        parseList(
+            get(
+                "/discover/movie",
+                mapOf(
+                    "with_genres" to genreId.toString(),
+                    "sort_by" to "popularity.desc",
+                    "page" to page.toString(),
+                ),
+            ),
+        )
+
+    fun tvByGenre(genreId: Int, page: Int = 1): List<MediaItem> =
+        parseList(
+            get(
+                "/discover/tv",
+                mapOf(
+                    "with_genres" to genreId.toString(),
+                    "sort_by" to "popularity.desc",
+                    "page" to page.toString(),
+                ),
+            ),
+        )
+
+    /** Похожее для карточки-углубления. */
+    fun similar(item: MediaItem): List<MediaItem> =
+        parseList(get("/" + item.type + "/" + item.id + "/similar", mapOf("page" to "1")))
+
+    // ---------- Жанры ----------
+
+    fun movieGenres(): List<Genre> = genres("/genre/movie/list")
+
+    fun tvGenres(): List<Genre> = genres("/genre/tv/list")
+
+    private fun genres(path: String): List<Genre> {
+        val json = get(path) ?: return emptyList()
+        val arr = json.optJSONArray("genres") ?: return emptyList()
+        return (0 until arr.length()).map {
+            val g = arr.getJSONObject(it)
+            Genre(id = g.getInt("id"), name = g.getString("name"))
+        }
+    }
 }

@@ -55,6 +55,7 @@ private fun App() {
             onBack = { screen = Screen.Home },
             onWatch = { screen = Screen.Player(s.item) },
             onEnterMagnet = { screen = Screen.MagnetEntry(s.item) },
+            onOpenDetails = { screen = Screen.Details(it) },
         )
 
         is Screen.MagnetEntry -> MagnetEntryScreen(
