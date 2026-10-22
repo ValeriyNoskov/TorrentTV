@@ -35,19 +35,23 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Настройки поиска: исключаемые жанры (фильмы/сериалы отдельно)
- * и стоп-слова — контент с ними в названии/описании скрывается.
+ * Настройки поиска: исключаемые жанры и страны (фильмы/сериалы отдельно),
+ * стоп-слова — контент с ними скрывается.
  * Действует на каталоги, тренды, hero-баннер и поиск.
  */
+private const val COUNTRIES_PAGE = 12
+
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
 
     var excluded by remember { mutableStateOf(store.excludedGenreIds()) }
+    var excludedCountries by remember { mutableStateOf(store.excludedCountryIds()) }
     var keywords by remember { mutableStateOf(store.excludedKeywords()) }
     var movieGenres by remember { mutableStateOf<List<Genre>>(emptyList()) }
     var tvGenres by remember { mutableStateOf<List<Genre>>(emptyList()) }
+    var countries by remember { mutableStateOf<List<Genre>>(emptyList()) }
     var kw by remember { mutableStateOf("") }
     val kbFocus = remember { FocusRequester() }
 
@@ -55,6 +59,7 @@ fun SettingsScreen(onBack: () -> Unit) {
         withContext(Dispatchers.IO) {
             movieGenres = MediaApi.movieGenres()
             tvGenres = MediaApi.tvGenres()
+            countries = MediaApi.countries()
         }
     }
 
@@ -86,6 +91,51 @@ fun SettingsScreen(onBack: () -> Unit) {
         GenreChipsMulti(tvGenres, excluded) { id ->
             excluded = if (id in excluded) excluded - id else excluded + id
             store.setExcludedGenreIds(excluded)
+        }
+
+        // ---------- Страны ----------
+        Text(
+            text = "СТРАНЫ — отмеченные галочкой ☑ страны исключены из каталогов и поиска",
+            color = Color.White.copy(alpha = 0.55f),
+            fontSize = 14.sp,
+            modifier = Modifier.padding(top = 20.dp, bottom = 2.dp),
+        )
+        if (countries.isEmpty()) {
+            Text(
+                "Список стран загрузится после первого открытия каталогов",
+                color = Color.White.copy(alpha = 0.35f),
+                fontSize = 14.sp,
+            )
+        } else {
+            var countryPage by remember { mutableStateOf(0) }
+            val visible = countries.drop(countryPage * COUNTRIES_PAGE).take(COUNTRIES_PAGE)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "${countryPage * COUNTRIES_PAGE + 1}–${countryPage * COUNTRIES_PAGE + visible.size} из ${countries.size}",
+                    color = Color.White.copy(alpha = 0.55f),
+                    fontSize = 13.sp,
+                    modifier = Modifier.width(110.dp),
+                )
+                Button(
+                    onClick = { if (countryPage > 0) countryPage-- },
+                    enabled = countryPage > 0,
+                ) { Text("←") }
+                Button(
+                    onClick = { if ((countryPage + 1) * COUNTRIES_PAGE < countries.size) countryPage++ },
+                    enabled = (countryPage + 1) * COUNTRIES_PAGE < countries.size,
+                ) { Text("→") }
+            }
+            LazyRow {
+                items(visible.size) { i ->
+                    val c = visible[i]
+                    CheckChip(c.name, c.id in excludedCountries) {
+                        excludedCountries =
+                            if (c.id in excludedCountries) excludedCountries - c.id
+                            else excludedCountries + c.id
+                        store.setExcludedCountryIds(excludedCountries)
+                    }
+                }
+            }
         }
 
         // ---------- Стоп-слова ----------

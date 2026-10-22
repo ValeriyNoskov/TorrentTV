@@ -46,4 +46,8 @@ object MediaApi {
 
     fun tvGenres(): List<Genre> =
         if (kp) KinopoiskClient.tvGenres() else TmdbClient.tvGenres()
+
+    /** Список стран для фильтра (для TMDB не поддерживается — пустой список). */
+    fun countries(): List<Genre> =
+        if (kp) KinopoiskClient.countries() else emptyList()
 }

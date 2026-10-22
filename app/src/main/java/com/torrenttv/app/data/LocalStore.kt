@@ -114,10 +114,22 @@ class LocalStore(context: Context) {
         prefs.edit().putString("excl_kw", kws.joinToString(",")).apply()
     }
 
+    /** Исключённые страны (id из /filters). */
+    fun excludedCountryIds(): Set<Int> =
+        prefs.getString("excl_countries", "")
+            ?.split(',')?.filter { it.isNotBlank() }?.mapNotNull { it.toIntOrNull() }?.toSet()
+            ?: emptySet()
+
+    fun setExcludedCountryIds(ids: Set<Int>) {
+        prefs.edit().putString("excl_countries", ids.joinToString(",")).apply()
+    }
+
     /** Пропускать ли карточку с учётом настроек фильтрации. */
     fun isAllowed(item: MediaItem): Boolean {
         val excluded = excludedGenreIds()
         if (item.genreIds.any { it in excluded }) return false
+        val excludedCountries = excludedCountryIds()
+        if (item.countryIds.any { it in excludedCountries }) return false
         val kws = excludedKeywords()
         if (kws.isNotEmpty()) {
             val text = (item.title + " " + item.overview).lowercase()

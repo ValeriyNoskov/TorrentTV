@@ -13,6 +13,7 @@ data class MediaItem(
     val backdropUrl: String = "",
     val rating: Double = 0.0,
     val genreIds: List<Int> = emptyList(),
+    val countryIds: List<Int> = emptyList(),
     val overview: String = "",
 ) {
     /** Ключ для локального хранения (прогресс/избранное). */
@@ -29,6 +30,7 @@ data class MediaItem(
         .put("backdrop", backdropUrl)
         .put("rating", rating)
         .put("genreIds", JSONArray(genreIds))
+        .put("countryIds", JSONArray(countryIds))
         .put("overview", overview)
 
     companion object {
@@ -41,6 +43,9 @@ data class MediaItem(
             backdropUrl = o.optString("backdrop", ""),
             rating = o.optDouble("rating", 0.0),
             genreIds = o.optJSONArray("genreIds")?.let { arr ->
+                (0 until arr.length()).map { arr.optInt(it) }
+            } ?: emptyList(),
+            countryIds = o.optJSONArray("countryIds")?.let { arr ->
                 (0 until arr.length()).map { arr.optInt(it) }
             } ?: emptyList(),
             overview = o.optString("overview", ""),

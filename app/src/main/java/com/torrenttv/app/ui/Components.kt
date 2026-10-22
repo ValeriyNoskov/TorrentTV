@@ -72,11 +72,22 @@ fun HeroBanner(item: MediaItem, onOpenDetails: (MediaItem) -> Unit) {
             .height(340.dp)
             .mouseClick { onOpenDetails(item) },
         shape = clickableSurfaceShape(RoundedCornerShape(14.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color(0xFF1F2430),
+            focusedContainerColor = Color(0xFF1F2430),
+        ),
     ) {
         Box {
             if (item.backdropUrl.isNotBlank()) {
                 AsyncImage(
                     model = item.backdropUrl,
+                    contentDescription = item.title,
+                    modifier = Modifier.fillMaxWidth().height(340.dp),
+                    contentScale = ContentScale.Crop,
+                )
+            } else if (item.posterUrl.isNotBlank()) {
+                AsyncImage(
+                    model = item.posterUrl,
                     contentDescription = item.title,
                     modifier = Modifier.fillMaxWidth().height(340.dp),
                     contentScale = ContentScale.Crop,
@@ -159,6 +170,10 @@ fun PosterCard(item: MediaItem, onClick: () -> Unit) {
             .padding(6.dp)
             .mouseClick { onClick() },
         shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color(0xFF1F2430),
+            focusedContainerColor = Color(0xFF2A3140),
+        ),
     ) {
         Column {
             if (item.posterUrl.isBlank()) {
@@ -426,9 +441,38 @@ fun TabButton(label: String, target: Screen, active: Screen, onTab: (Screen) -> 
     }
 }
 
+/**
+ * Чип-галочка для фильтра стран: ✓ и золотая заливка если отмечено,
+ * приглушённый стиль если нет. Клик/ОК переключает.
+ */
 @Composable
-private fun GenreChip(label: String, isSelected: Boolean, onClick: () -> Unit) {
+fun CheckChip(label: String, checked: Boolean, onToggle: () -> Unit) {
     Surface(
+        onClick = onToggle,
+        modifier = Modifier.padding(4.dp).mouseClick { onToggle() },
+        shape = clickableSurfaceShape(RoundedCornerShape(20.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = if (checked) Color(0xFFF5B942) else Color(0xFF1F2430),
+            contentColor = if (checked) Color(0xFF0E1116) else Color.White.copy(alpha = 0.75f),
+            focusedContainerColor = Color(0xFFFFD07A),
+            focusedContentColor = Color(0xFF0E1116),
+            pressedContainerColor = Color(0xFFE0A82E),
+            pressedContentColor = Color(0xFF0E1116),
+            disabledContainerColor = Color(0xFF1F2430),
+            disabledContentColor = Color.White,
+        ),
+    ) {
+        Text(
+            text = if (checked) "☑ $label" else "☐ $label",
+            color = if (checked) Color(0xFF0E1116) else Color.White.copy(alpha = 0.75f),
+            fontSize = 15.sp,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+        )
+    }
+}
+
+@Composable
+private fun GenreChip(label: String, isSelected: Boolean, onClick: () -> Unit) {    Surface(
         onClick = onClick,
         modifier = Modifier.padding(4.dp).mouseClick { onClick() },
         shape = clickableSurfaceShape(RoundedCornerShape(20.dp)),

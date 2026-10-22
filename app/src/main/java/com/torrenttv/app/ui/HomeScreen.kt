@@ -50,7 +50,8 @@ fun HomeScreen(
     LaunchedEffect(Unit) {
         UpdateManager.checkForUpdate(currentVersion) { updateInfo = it }
         heroItem = withContext(Dispatchers.IO) {
-            MediaApi.trending(1).firstOrNull { it.backdropUrl.isNotBlank() && store.isAllowed(it) }
+            val trends = MediaApi.trending(1).filter { store.isAllowed(it) }
+            trends.firstOrNull { it.backdropUrl.isNotBlank() } ?: trends.firstOrNull()
         }
     }
 
@@ -63,7 +64,7 @@ fun HomeScreen(
             if (!MediaApi.isConfigured) {
                 item {
                     Text(
-                        text = "⚠ Метаданные не настроены. Получите бесплатный ключ на kinopoisk.dev (профиль → API) и укажите kpApiKey= в gradle.properties.",
+                        text = "⚠ Метаданные не настроены. Получите бесплатный ключ на kinopoiskapiunofficial.tech и укажите kpApiKey= в gradle.properties.",
                         color = Color(0xFFFFD54F),
                         fontSize = 14.sp,
                         modifier = Modifier.padding(horizontal = 32.dp),

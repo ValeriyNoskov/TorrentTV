@@ -8,17 +8,19 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 /**
- * Клиент kinopoisk.dev — открытый API по данным Кинопоиска (доступен из РФ,
- * в отличие от заблокированного TMDB). Бесплатный токен: kinopoisk.dev → профиль → API.
+ * Клиент Kinopoisk API Unofficial (kinopoiskapiunofficial.tech) — неофициальный API
+ * с данными Кинопоиска, доступен из РФ (в отличие от заблокированного TMDB).
+ * Бесплатный ключ: регистрация на kinopoiskapiunofficial.tech (500 запросов/сутки).
  * Задаётся в gradle.properties: kpApiKey=...
  *
- * Каталоги — через /v1.4/movie (сортировка по рейтингу/голосам),
- * жанры — /v1/movie/possible-values-by-field, похожее — /v1.3/movie/{id}.
+ * Каталоги — /api/v2.2/films/collections (TOP_250, популярное) и /api/v2.2/films
+ * (жанры, тип), поиск — /api/v2.1/films/search-by-keyword, похожее — /similars,
+ * жанры с числовыми id — /api/v2.2/films/filters.
  * Все методы блокирующие — вызывать из фонового потока.
  */
 object KinopoiskClient {
 
-    private const val BASE = "https://api.kinopoisk.dev"
+    private const val BASE = "https://kinopoiskapiunofficial.tech"
 
     val isConfigured: Boolean get() = BuildConfig.KP_API_KEY.isNotBlank()
 
@@ -27,17 +29,20 @@ object KinopoiskClient {
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    // Кэш списков жанров (имя жанра → числовой id = индекс в списке)
-    @Volatile private var movieGenreNames: List<String>? = null
-    @Volatile private var tvGenreNames: List<String>? = null
+    // Кэш жанров: имя → числовой id (эндпоинт filters). Жанры в выдачах идут
+    // только именами, а фильтры и стоп-слова в приложении работают по числовым id.
+    @Volatile private var genreIdByName: Map<String, Int>? = null
 
-    private fun get(path: String, params: List<Pair<String, String>> = emptyList()): JSONObject? {
+    // Кэш стран: имя → числовой id (тот же эндпоинт filters).
+    @Volatile private var countryIdByName: Map<String, Int>? = null
+
+    private fun get(path: String, params: Map<String, String> = emptyMap()): JSONObject? {
         if (!isConfigured) return null
         val url = buildString {
             append(BASE).append(path)
             if (params.isNotEmpty()) {
                 append('?')
-                append(params.joinToString("&") { (k, v) ->
+                append(params.entries.joinToString("&") { (k, v) ->
                     Uri.encode(k) + "=" + Uri.encode(v)
                 })
             }
@@ -56,185 +61,149 @@ object KinopoiskClient {
         }
     }
 
-    private val SELECT_FIELDS = listOf(
-        "id", "name", "alternativeName", "year", "poster", "backdrop",
-        "rating", "genres", "type", "description",
-    )
+    private fun mapType(kpType: String): String =
+        if (kpType == "FILM" || kpType == "VIDEO") "movie" else "tv"
 
-    /** Документ v1.4 → MediaItem. Возвращает null для записей без названия/постера. */
-    private fun parseMovie(o: JSONObject, isTv: Boolean? = null): MediaItem? {
-        val title = o.optString("name", "").ifBlank { o.optString("alternativeName", "") }
-        if (title.isBlank()) return null
+    /** Элемент любой выдачи (collections/films/search) → MediaItem. */
+    private fun parseItem(o: JSONObject): MediaItem? {
+        val title = sequenceOf("nameRu", "nameOriginal", "nameEn")
+            .map { o.optString(it, "") }.firstOrNull { it.isNotBlank() } ?: return null
 
-        val kpType = o.optString("type")
-        val type = when {
-            isTv != null -> if (isTv) "tv" else "movie"
-            kpType == "movie" -> "movie"
-            kpType.isBlank() -> "movie"
-            else -> "tv" // tv-series, cartoon-series, anime-series и т.п.
-        }
+        val id = o.optInt("kinopoiskId", 0).takeIf { it > 0 }
+            ?: o.optInt("filmId", 0)
+        if (id <= 0) return null
 
-        val yearVal = o.optInt("year", 0)
-        val posterUrl = o.optJSONObject("poster")?.optString("url", "").orEmpty()
-        val backdropUrl = o.optJSONObject("backdrop")?.optString("url", "").orEmpty()
-        val rating = o.optJSONObject("rating")?.optDouble("imdb", 0.0)?.takeIf { it > 0 }
-            ?: o.optJSONObject("rating")?.optDouble("kp", 0.0)?.takeIf { it > 0 }
+        val yearRaw = o.optString("year", "").filter { it.isDigit() }
+
+        val rating = o.optDouble("ratingKinopoisk", 0.0).takeIf { it > 0 }
+            ?: o.optDouble("ratingImdb", 0.0).takeIf { it > 0 }
             ?: 0.0
 
         val genreNames = mutableListOf<String>()
         o.optJSONArray("genres")?.let { garr ->
             for (g in 0 until garr.length()) {
-                genreNames += garr.getJSONObject(g).optString("name")
+                genreNames += garr.getJSONObject(g).optString("genre", "")
             }
         }
-        val names = if (type == "tv") tvGenreNames ?: emptyList() else movieGenreNames ?: emptyList()
-        val genreIds = genreNames.mapNotNull { n -> names.indexOf(n).takeIf { it >= 0 } }
+        val ids = genreIdByName
+        val genreIds = if (ids != null) genreNames.mapNotNull { ids[it] } else emptyList()
+
+        val countryNames = mutableListOf<String>()
+        o.optJSONArray("countries")?.let { carr ->
+            for (c in 0 until carr.length()) {
+                countryNames += carr.getJSONObject(c).optString("country", "")
+            }
+        }
+        val cids = countryIdByName
+        val countryIds = if (cids != null) countryNames.mapNotNull { cids[it] } else emptyList()
 
         return MediaItem(
-            id = o.optInt("id", 0),
-            type = type,
+            id = id,
+            type = mapType(o.optString("type", "FILM")),
             title = title,
-            year = if (yearVal > 0) yearVal.toString() else "",
-            posterUrl = posterUrl,
-            backdropUrl = backdropUrl,
+            year = yearRaw,
+            posterUrl = o.optString("posterUrl", "")
+                .ifBlank { o.optString("posterUrlPreview", "") },
+            backdropUrl = o.optString("coverUrl", ""),
             rating = rating,
             genreIds = genreIds,
+            countryIds = countryIds,
             overview = o.optString("description", ""),
         )
     }
 
-    private fun parseDocs(json: JSONObject?, isTv: Boolean? = null): List<MediaItem> {
+    private fun parseItems(json: JSONObject?, key: String): List<MediaItem> {
         if (json == null) return emptyList()
-        val arr = json.optJSONArray("docs") ?: return emptyList()
-        return (0 until arr.length()).mapNotNull { i -> parseMovie(arr.getJSONObject(i), isTv) }
+        val arr = json.optJSONArray(key) ?: return emptyList()
+        return (0 until arr.length()).mapNotNull { parseItem(arr.getJSONObject(it)) }
     }
+
+    private fun collection(type: String, page: Int): List<MediaItem> =
+        parseItems(
+            get(
+                "/api/v2.2/films/collections",
+                mapOf("type" to type, "page" to page.toString()),
+            ),
+            "items",
+        )
 
     // ---------- Поиск ----------
 
-    fun search(query: String): List<MediaItem> =
-        parseDocs(
-            get(
-                "/v1.4/movie/search",
-                listOf("query" to query, "page" to "1", "limit" to "30"),
-            ),
-        )
+    fun search(query: String): List<MediaItem> = parseItems(
+        get(
+            "/api/v2.1/films/search-by-keyword",
+            mapOf("keyword" to query, "page" to "1"),
+        ),
+        "films",
+    )
 
     // ---------- Каталоги ----------
 
-    fun trending(page: Int = 1): List<MediaItem> {
-        val y = java.time.Year.now().value
-        return parseDocs(
-            get(
-                "/v1.4/movie",
-                listOf(
-                    "page" to page.toString(), "limit" to "20",
-                    "notNullFields[]" to "name", "notNullFields[]" to "poster.url",
-                    "year" to "${y - 1}-$y",
-                    "sortField" to "rating.kp", "sortType" to "-1",
-                ) + selectParams(),
-            ),
+    /** Популярное сейчас: фильмы и сериалы вперемешку. */
+    fun trending(page: Int = 1): List<MediaItem> = collection("TOP_POPULAR_ALL", page)
+
+    fun popularMovies(page: Int = 1): List<MediaItem> = collection("TOP_POPULAR_MOVIES", page)
+
+    fun popularTv(page: Int = 1): List<MediaItem> = byType(page, type = "TV_SERIES", order = "NUM_VOTE")
+
+    fun topRatedMovies(page: Int = 1): List<MediaItem> = collection("TOP_250_MOVIES", page)
+
+    fun topRatedTv(page: Int = 1): List<MediaItem> = collection("TOP_250_TV_SHOWS", page)
+
+    fun moviesByGenre(genreId: Int, page: Int = 1): List<MediaItem> =
+        byType(page, type = "FILM", order = "RATING", genreId = genreId)
+
+    fun tvByGenre(genreId: Int, page: Int = 1): List<MediaItem> =
+        byType(page, type = "TV_SERIES", order = "RATING", genreId = genreId)
+
+    private fun byType(page: Int, type: String, order: String, genreId: Int? = null): List<MediaItem> {
+        val params = mutableMapOf(
+            "type" to type,
+            "order" to order,
+            "page" to page.toString(),
         )
+        genreId?.let { params["genres"] = it.toString() }
+        return parseItems(get("/api/v2.2/films", params), "items")
     }
 
-    fun popularMovies(page: Int = 1): List<MediaItem> =
-        parseDocs(catalog(page, typeNumber = 1, sort = "votes.kp"), isTv = false)
+    /** Похожее для карточки-углубления. */
+    fun similar(item: MediaItem): List<MediaItem> =
+        parseItems(get("/api/v2.2/films/${item.id}/similars"), "items")
 
-    fun popularTv(page: Int = 1): List<MediaItem> =
-        parseDocs(catalog(page, typeNumber = 2, sort = "votes.kp"), isTv = true)
+    // ---------- Жанры и страны ----------
 
-    fun topRatedMovies(page: Int = 1): List<MediaItem> =
-        parseDocs(catalog(page, typeNumber = 1, sort = "rating.imdb"), isTv = false)
+    fun movieGenres(): List<Genre> = filters().genres
 
-    fun topRatedTv(page: Int = 1): List<MediaItem> =
-        parseDocs(catalog(page, typeNumber = 2, sort = "rating.imdb"), isTv = true)
+    fun tvGenres(): List<Genre> = filters().genres
 
-    private fun catalog(page: Int, typeNumber: Int, sort: String): JSONObject? =
-        get(
-            "/v1.4/movie",
-            listOf(
-                "page" to page.toString(), "limit" to "20",
-                "typeNumber" to typeNumber.toString(),
-                "notNullFields[]" to "name", "notNullFields[]" to "poster.url",
-                "sortField" to sort, "sortType" to "-1",
-            ) + selectParams(),
-        )
+    fun countries(): List<Genre> = filters().countries
 
-    private fun selectParams(): List<Pair<String, String>> =
-        SELECT_FIELDS.map { "selectFields[]" to it }
+    private data class Filters(val genres: List<Genre>, val countries: List<Genre>)
 
-    fun moviesByGenre(genreId: Int, page: Int = 1): List<MediaItem> {
-        val name = movieGenres().getOrNull(genreId)?.name ?: return emptyList()
-        return parseDocs(byGenre(page, name, typeNumber = 1), isTv = false)
-    }
+    @Volatile private var cachedFilters: Filters? = null
 
-    fun tvByGenre(genreId: Int, page: Int = 1): List<MediaItem> {
-        val name = tvGenres().getOrNull(genreId)?.name ?: return emptyList()
-        return parseDocs(byGenre(page, name, typeNumber = 2), isTv = true)
-    }
+    /** Жанры и страны одним запросом /api/v2.2/films/filters (+ кэши имя→id). */
+    private fun filters(): Filters {
+        cachedFilters?.let { return it }
+        val json = get("/api/v2.2/films/filters")
+            ?: return Filters(emptyList(), emptyList())
 
-    private fun byGenre(page: Int, genreName: String, typeNumber: Int): JSONObject? =
-        get(
-            "/v1.4/movie",
-            listOf(
-                "page" to page.toString(), "limit" to "20",
-                "typeNumber" to typeNumber.toString(),
-                "genres.name" to genreName,
-                "notNullFields[]" to "name", "notNullFields[]" to "poster.url",
-                "sortField" to "votes.kp", "sortType" to "-1",
-            ) + selectParams(),
-        )
-
-    /** Похожее для карточки-углубления (v1.3, поле similar). */
-    fun similar(item: MediaItem): List<MediaItem> {
-        val json = get(
-            "/v1.3/movie/${item.id}",
-            listOf("selectFields[]" to "similar"),
-        ) ?: return emptyList()
-        val arr = json.optJSONArray("similar") ?: return emptyList()
-        return (0 until arr.length()).mapNotNull { i ->
-            val o = arr.getJSONObject(i)
-            val title = o.optString("name", "").ifBlank { o.optString("alternativeName", "") }
-            if (title.isBlank()) return@mapNotNull null
-            MediaItem(
-                id = o.optInt("id", 0),
-                type = if (o.optString("type") == "movie") "movie" else "tv",
-                title = title,
-                year = "",
-                posterUrl = o.optJSONObject("poster")?.optString("url", "").orEmpty(),
-                backdropUrl = "",
-                rating = 0.0,
-                genreIds = emptyList(),
-                overview = "",
-            )
+        fun readList(key: String, nameField: String): List<Genre> {
+            val arr = json.optJSONArray(key) ?: return emptyList()
+            return (0 until arr.length()).mapNotNull { i ->
+                val o = arr.getJSONObject(i)
+                val id = o.optInt("id", -1)
+                val name = o.optString(nameField, "")
+                if (id >= 0 && name.isNotBlank()) Genre(id = id, name = name) else null
+            }
         }
-    }
 
-    // ---------- Жанры ----------
-
-    fun movieGenres(): List<Genre> {
-        val loaded = loadGenreNames()
-        if (loaded.isNotEmpty()) movieGenreNames = loaded
-        val names = loaded.ifEmpty { movieGenreNames ?: emptyList() }
-        return names.mapIndexed { i, n -> Genre(id = i, name = n) }
-    }
-
-    fun tvGenres(): List<Genre> {
-        val loaded = loadGenreNames()
-        if (loaded.isNotEmpty()) tvGenreNames = loaded
-        val names = loaded.ifEmpty { tvGenreNames ?: emptyList() }
-        return names.mapIndexed { i, n -> Genre(id = i, name = n) }
-    }
-
-    /** Список возможных значений жанров (строковые имена). */
-    private fun loadGenreNames(): List<String> {
-        val json = get("/v1/movie/possible-values-by-field", listOf("field" to "genres.name"))
-            ?: return emptyList()
-        val arr = json.optJSONArray("docs")
-            ?: json.optJSONArray("values")
-            ?: return emptyList()
-        return (0 until arr.length()).mapNotNull { i ->
-            val v = arr.get(i)
-            (v as? String) ?: ((v as? JSONObject)?.optString("value", "")?.ifBlank { null })
-        }
+        val genres = readList("genres", "genre")
+        val countries = readList("countries", "country")
+        if (genres.isNotEmpty()) genreIdByName = genres.associate { it.name to it.id }
+        if (countries.isNotEmpty()) countryIdByName = countries.associate { it.name to it.id }
+        val f = Filters(genres, countries)
+        cachedFilters = f
+        return f
     }
 }
