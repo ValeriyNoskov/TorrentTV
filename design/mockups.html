@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>TorrentTV — дизайн-мокапы</title>
+<style>
+  :root {
+    --bg: #0E1116; --panel: #1B2A38; --accent: #4FC3F7;
+    --warn: #FFD54F; --txt: #ffffff; --dim: rgba(255,255,255,.6);
+  }
+  body { background: #05070a; color: var(--txt); font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; margin: 20px; }
+  h1 { font-size: 22px; color: var(--accent); }
+  h2 { font-size: 15px; color: var(--dim); font-weight: normal; margin: 24px 0 8px; }
+  .screen { width: 920px; height: 518px; background: var(--bg); border-radius: 10px; overflow: hidden;
+            border: 1px solid #223; box-shadow: 0 8px 40px rgba(0,0,0,.6); position: relative; margin-bottom: 8px; }
+  .screen label { position: absolute; top: 8px; right: 12px; font-size: 11px; color: #556; z-index: 9; }
+
+  .top { display: flex; align-items: center; gap: 18px; padding: 18px 28px 10px; }
+  .btn { background: var(--panel); border-radius: 6px; padding: 8px 16px; font-size: 14px; display: inline-flex; align-items: center; gap: 8px; }
+  .btn.accent { background: var(--accent); color: #04141c; font-weight: 600; }
+  .logo { color: var(--accent); font-weight: 700; font-size: 20px; }
+  .ver { margin-left: auto; color: rgba(255,255,255,.35); font-size: 12px; }
+
+  .hero { position: relative; height: 240px; margin: 0 28px; border-radius: 12px; overflow: hidden;
+          background: linear-gradient(100deg, #123 0%, #274b63 45%, #7fb2d0 100%); }
+  .hero .shade { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(14,17,22,.92) 20%, transparent 70%); }
+  .hero .info { position: absolute; left: 28px; top: 50%; transform: translateY(-50%); width: 46%; }
+  .hero .info .t { font-size: 30px; font-weight: 800; }
+  .hero .info .m { font-size: 13px; color: var(--dim); margin: 6px 0 12px; }
+  .badge { display: inline-block; background: rgba(255,255,255,.14); border-radius: 4px; padding: 1px 7px; font-size: 11px; margin-right: 6px; }
+  .badge.rate { color: var(--warn); font-weight: 700; }
+
+  .row { padding: 10px 28px 2px; }
+  .row .rt { font-size: 15px; font-weight: 600; margin-bottom: 7px; }
+  .cards { display: flex; gap: 10px; }
+  .card { width: 108px; border-radius: 8px; background: var(--panel); overflow: hidden; flex-shrink: 0; }
+  .card.focus { outline: 3px solid var(--accent); transform: scale(1.08); box-shadow: 0 0 24px rgba(79,195,247,.35); z-index: 2; position: relative; }
+  .poster { height: 150px; }
+  .card .n { font-size: 11px; padding: 5px 7px 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .y { font-size: 10px; color: var(--dim); padding: 0 7px 6px; }
+  .p1 { background: linear-gradient(160deg,#2a4a5e,#16324a); } .p2 { background: linear-gradient(160deg,#5e2a3a,#3a1622); }
+  .p3 { background: linear-gradient(160deg,#4a5e2a,#243a16); } .p4 { background: linear-gradient(160deg,#423a5e,#221a3a); }
+  .p5 { background: linear-gradient(160deg,#5e542a,#3a3416); } .p6 { background: linear-gradient(160deg,#2a5e54,#163a34); }
+  .p7 { background: linear-gradient(160deg,#5e442a,#3a2a16); } .p8 { background: linear-gradient(160deg,#3a5e46,#1a3a2a); }
+
+  .chips { display: flex; gap: 8px; padding: 6px 28px 0; flex-wrap: nowrap; }
+  .chip { background: var(--panel); border-radius: 20px; padding: 5px 14px; font-size: 12px; color: var(--txt); flex-shrink: 0; }
+  .chip.sel { background: var(--accent); color: #04141c; font-weight: 700; }
+
+  /* details */
+  .d { display: flex; gap: 24px; padding: 26px 32px; height: 400px; }
+  .d .poster2 { width: 210px; height: 100%; border-radius: 12px; background: linear-gradient(160deg,#2a4a5e,#16324a); flex-shrink: 0; }
+  .d h3 { font-size: 30px; margin: 4px 0 2px; }
+  .d .meta { color: var(--accent); font-size: 15px; margin-bottom: 12px; }
+  .d p { font-size: 13.5px; line-height: 1.55; color: rgba(255,255,255,.78); max-width: 540px; }
+  .d .actions { display: flex; gap: 12px; margin-top: 18px; }
+
+  /* search */
+  .kbd { padding: 8px 28px; }
+  .krow { display: flex; gap: 6px; margin-bottom: 6px; }
+  .key { width: 44px; height: 40px; background: var(--panel); border-radius: 7px; display: flex; align-items: center;
+         justify-content: center; font-size: 15px; }
+  .key.focus { outline: 3px solid var(--accent); background: #24435c; }
+  .key.w { width: 108px; font-size: 12px; }
+
+  /* player */
+  .player { position: absolute; inset: 0; background: radial-gradient(ellipse at center, #1a2530 0%, #000 75%); }
+  .player .ctl { position: absolute; bottom: 0; left: 0; right: 0; padding: 16px 28px 20px;
+                 background: linear-gradient(transparent, rgba(0,0,0,.85)); }
+  .player .bar { height: 5px; background: rgba(255,255,255,.2); border-radius: 3px; }
+  .player .bar div { width: 42%; height: 5px; background: var(--accent); border-radius: 3px; }
+  .player .ctl .t { font-size: 12px; color: var(--dim); margin-top: 6px; display: flex; justify-content: space-between; }
+
+  .load { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 14px; }
+  .load .bar2 { width: 46%; height: 9px; background: var(--panel); border-radius: 5px; overflow: hidden; }
+  .load .bar2 div { width: 63%; height: 100%; background: var(--accent); }
+  .cap { font-size: 12px; color: #556; margin-bottom: 26px; }
+</style>
+</head>
+<body>
+<h1>TorrentTV — концепция интерфейса (Android TV, пульт)</h1>
+
+<h2>1. Главный экран — hero-баннер + полки каталога</h2>
+<div class="screen"><label>Главный</label>
+  <div class="top">
+    <span class="btn">🔍 Поиск</span><span class="logo">TorrentTV</span><span class="ver">v0.4.0</span>
+  </div>
+  <div class="hero">
+    <div class="shade"></div>
+    <div class="info">
+      <div class="t">Интерстеллар</div>
+      <div class="m"><span class="badge rate">★ 8.4</span><span class="badge">2014</span><span class="badge">Фильм</span><span class="badge">Фантастика</span></div>
+      <span class="btn accent">▶ Смотреть</span>
+      <span class="btn">ⓘ Подробнее</span>
+    </div>
+  </div>
+  <div class="row"><div class="rt">Продолжить просмотр</div>
+    <div class="cards">
+      <div class="card"><div class="poster p6"></div><div class="n">Дюна</div><div class="y">2021 · Фильм</div></div>
+      <div class="card focus"><div class="poster p1"></div><div class="n">Настоящий детектив</div><div class="y">2014 · Сериал</div></div>
+      <div class="card"><div class="poster p4"></div><div class="n">Оппенгеймер</div><div class="y">2023 · Фильм</div></div>
+      <div class="card"><div class="poster p3"></div><div class="n">Тед Лассо</div><div class="y">2020 · Сериал</div></div>
+    </div>
+  </div>
+  <div class="row"><div class="rt">🔥 Сейчас в тренде</div>
+    <div class="cards">
+      <div class="card"><div class="poster p2"></div><div class="n">Последние из нас</div><div class="y">2023 · Сериал</div></div>
+      <div class="card"><div class="poster p5"></div><div class="n">Барби</div><div class="y">2023 · Фильм</div></div>
+      <div class="card"><div class="poster p8"></div><div class="n">Оставленные</div><div class="y">2014 · Сериал</div></div>
+      <div class="card"><div class="poster p7"></div><div class="n">Бегущий по лезвию</div><div class="y">2017 · Фильм</div></div>
+      <div class="card"><div class="poster p6"></div><div class="n">Мандарин</div><div class="y">2022</div></div>
+    </div>
+  </div>
+</div>
+<div class="cap">Фокусная карточка подсвечивается и увеличивается; полки бесконечные (подгрузка страниц)</div>
+
+<h2>2. Главный экран — фильтр жанров (выбран «Фантастика»)</h2>
+<div class="screen"><label>Жанры</label>
+  <div class="top"><span class="logo">TorrentTV</span><span class="ver">— полоса жанров сворачивается в фильтр</span></div>
+  <div class="chips">
+    <span class="chip">Все жанры</span><span class="chip">Драма</span><span class="chip sel">Фантастика</span>
+    <span class="chip">Комедия</span><span class="chip">Боевик</span><span class="chip">Триллер</span><span class="chip">Ужасы</span>
+    <span class="chip">Документальный</span><span class="chip">Мультфильм</span>
+  </div>
+  <div class="row"><div class="rt">Фильмы · Фантастика</div>
+    <div class="cards">
+      <div class="card focus"><div class="poster p1"></div><div class="n">Дюна: Часть вторая</div><div class="y">2024 · ★ 8.1</div></div>
+      <div class="card"><div class="poster p4"></div><div class="n">Бегущий по лезвию 2049</div><div class="y">2017 · ★ 7.6</div></div>
+      <div class="card"><div class="poster p6"></div><div class="n">Прибытие</div><div class="y">2016 · ★ 7.9</div></div>
+      <div class="card"><div class="poster p3"></div><div class="n">Гравитация</div><div class="y">2013 · ★ 7.7</div></div>
+      <div class="card"><div class="poster p5"></div><div class="n">Марсианин</div><div class="y">2015 · ★ 8.0</div></div>
+    </div>
+  </div>
+</div>
+
+<h2>3. Карточка фильма</h2>
+<div class="screen"><label>Детали</label>
+  <div class="d">
+    <div class="poster2"></div>
+    <div>
+      <h3>Интерстеллар</h3>
+      <div class="meta">Фильм · 2014 · ★ 8.4 · Фантастика, Драма, Приключения</div>
+      <p>Земля погибает, и группа исследователей использует обнаруженную вблизи Сатурна червоточину,
+ чтобы отправиться к далёким планетам и выяснить — может ли человечество найти себе новый дом.</p>
+      <div class="actions">
+        <span class="btn accent">▶ Смотреть</span>
+        <span class="btn">🔗 magnet сохранён</span>
+        <span class="btn">★ В избранном</span>
+      </div>
+    </div>
+  </div>
+  <div class="row"><div class="rt">Похожее</div>
+    <div class="cards">
+      <div class="card"><div class="poster p1"></div><div class="n">Прибытие</div></div>
+      <div class="card"><div class="poster p7"></div><div class="n">Марсианин</div></div>
+      <div class="card"><div class="poster p2"></div><div class="n">Гравитация</div></div>
+      <div class="card"><div class="poster p8"></div><div class="n">Дюна</div></div>
+    </div>
+  </div>
+</div>
+
+<h2>4. Поиск: клавиатура + голос</h2>
+<div class="screen"><label>Поиск</label>
+  <div class="top">
+    <span class="btn">← Назад</span>
+    <span style="font-size:22px;color:var(--accent);font-weight:600;">интерст</span>
+    <span class="btn" style="margin-left:auto;">🎤 Голос</span>
+  </div>
+  <div class="row"><div class="rt" style="color:var(--dim);font-weight:normal;">Найдено: 6</div>
+    <div class="cards">
+      <div class="card focus"><div class="poster p1"></div><div class="n">Интерстеллар</div><div class="y">2014 · Фильм</div></div>
+      <div class="card"><div class="poster p2"></div><div class="n">Интервью</div><div class="y">2014 · Фильм</div></div>
+      <div class="card"><div class="poster p6"></div><div class="n">Интерстеллар 2</div><div class="y">—</div></div>
+    </div>
+  </div>
+  <div class="kbd">
+    <div class="krow"><span class="key">Й</span><span class="key">Ц</span><span class="key focus">У</span><span class="key">К</span><span class="key">Е</span><span class="key">Н</span><span class="key">Г</span><span class="key">Ш</span><span class="key">Щ</span><span class="key">З</span><span class="key">Х</span><span class="key">Ъ</span></div>
+    <div class="krow"><span class="key">Ф</span><span class="key">Ы</span><span class="key">В</span><span class="key">А</span><span class="key">П</span><span class="key">Р</span><span class="key">О</span><span class="key">Л</span><span class="key">Д</span><span class="key">Ж</span><span class="key">Э</span></div>
+    <div class="krow"><span class="key">Я</span><span class="key">Ч</span><span class="key">С</span><span class="key">М</span><span class="key">И</span><span class="key">Т</span><span class="key">Ь</span><span class="key">Б</span><span class="key">Ю</span></div>
+    <div class="krow"><span class="key w">Пробел</span><span class="key">1</span><span class="key">2</span><span class="key">3</span><span class="key">4</span><span class="key">5</span><span class="key">6</span><span class="key">7</span><span class="key">8</span><span class="key">9</span><span class="key">0</span><span class="key w">⌫</span></div>
+  </div>
+</div>
+
+<h2>5. Плеер и экран загрузки торрента</h2>
+<div style="display:flex; gap:20px;">
+<div class="screen" style="width:440px;height:247px;"><label>Плеер</label>
+  <div class="player">
+    <div class="ctl">
+      <div class="bar"><div></div></div>
+      <div class="t"><span>1:12:36</span><span>Интерстеллар · 1080p · 2:49:12</span></div>
+    </div>
+  </div>
+</div>
+<div class="screen" style="width:440px;height:247px;"><label>Загрузка</label>
+  <div class="load">
+    <div style="font-size:18px;font-weight:700;">Интерстеллар</div>
+    <div style="color:var(--accent);font-size:13px;">Загрузка… (8 412 МБ)</div>
+    <div class="bar2"><div></div></div>
+    <div style="color:var(--dim);font-size:12px;">63% · 4.2 МБ/с · сидов: 37</div>
+  </div>
+</div>
+</div>
+</body>
+</html>

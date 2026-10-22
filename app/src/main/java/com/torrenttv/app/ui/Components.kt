@@ -39,6 +39,83 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
 
+/** Hero-баннер: бэкдроп первой карточки трендов + быстрый переход. */
+@Composable
+fun HeroBanner(item: MediaItem, onOpenDetails: (MediaItem) -> Unit) {
+    Surface(
+        onClick = { onOpenDetails(item) },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 28.dp, vertical = 8.dp)
+            .height(340.dp),
+        shape = RoundedCornerShape(14.dp),
+    ) {
+        Box {
+            if (item.backdropUrl.isNotBlank()) {
+                AsyncImage(
+                    model = item.backdropUrl,
+                    contentDescription = item.title,
+                    modifier = Modifier.fillMaxWidth().height(340.dp),
+                    contentScale = ContentScale.Crop,
+                )
+            } else {
+                Box(Modifier.fillMaxWidth().height(340.dp).background(Color(0xFF274B63)))
+            }
+            // Градиент затемнения слева, чтобы текст читался
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(340.dp)
+                    .background(
+                        androidx.compose.ui.graphics.Brush.horizontalGradient(
+                            0f to Color(0xE60E1116),
+                            0.6f to Color(0x550E1116),
+                            1f to Color(0x000E1116),
+                        ),
+                    ),
+            )
+            Column(
+                Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(start = 40.dp)
+                    .width(460.dp),
+            ) {
+                Text(
+                    text = item.title,
+                    color = Color.White,
+                    fontSize = 40.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = buildString {
+                        if (item.rating > 0.0) append("★ ${"%.1f".format(item.rating)}  ·  ")
+                        if (item.year.isNotBlank()) append("${item.year}  ·  ")
+                        append(item.typeLabel)
+                    },
+                    color = Color(0xFF4FC3F7),
+                    fontSize = 17.sp,
+                    modifier = Modifier.padding(top = 6.dp, bottom = 16.dp),
+                )
+                Surface(
+                    onClick = { onOpenDetails(item) },
+                    color = Color(0xFF4FC3F7),
+                    shape = RoundedCornerShape(8.dp),
+                ) {
+                    Text(
+                        text = "▶  Подробнее",
+                        color = Color(0xFF04141C),
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 22.dp, vertical = 10.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
 /** Карточка с постером — фокус берётся с пульта, по ОК открывается карточка. */
 @Composable
 fun PosterCard(item: MediaItem, onClick: () -> Unit) {
@@ -78,9 +155,15 @@ fun PosterCard(item: MediaItem, onClick: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(8.dp, 6.dp, 8.dp, 0.dp),
             )
-            if (item.year.isNotBlank()) {
+            if (item.year.isNotBlank() || item.rating > 0.0) {
                 Text(
-                    text = "${item.year} · ${item.typeLabel}",
+                    text = buildString {
+                        if (item.rating > 0.0) append("★ ${"%.1f".format(item.rating)}")
+                        if (item.year.isNotBlank()) {
+                            if (isNotEmpty()) append(" · ")
+                            append(item.year)
+                        }
+                    },
                     color = Color.White.copy(alpha = 0.5f),
                     fontSize = 12.sp,
                     modifier = Modifier.padding(8.dp, 2.dp, 8.dp, 8.dp),

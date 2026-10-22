@@ -9,6 +9,8 @@ data class MediaItem(
     val title: String,
     val year: String = "",
     val posterUrl: String = "",
+    val backdropUrl: String = "",
+    val rating: Double = 0.0,
     val overview: String = "",
 ) {
     /** Ключ для локального хранения (прогресс/избранное). */
@@ -22,6 +24,8 @@ data class MediaItem(
         .put("title", title)
         .put("year", year)
         .put("poster", posterUrl)
+        .put("backdrop", backdropUrl)
+        .put("rating", rating)
         .put("overview", overview)
 
     companion object {
@@ -31,6 +35,8 @@ data class MediaItem(
             title = o.optString("title", ""),
             year = o.optString("year", ""),
             posterUrl = o.optString("poster", ""),
+            backdropUrl = o.optString("backdrop", ""),
+            rating = o.optDouble("rating", 0.0),
             overview = o.optString("overview", ""),
         )
     }

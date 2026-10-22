@@ -57,6 +57,7 @@ fun HomeScreen(
     var tvGenres by remember { mutableStateOf<List<Genre>>(emptyList()) }
     var selectedMovieGenre by remember { mutableStateOf<Genre?>(null) }
     var selectedTvGenre by remember { mutableStateOf<Genre?>(null) }
+    var heroItem by remember { mutableStateOf<MediaItem?>(null) }
     var updateInfo by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
     var updateStatus by remember { mutableStateOf("") }
 
@@ -67,6 +68,9 @@ fun HomeScreen(
         }
         movieGenres = mg
         tvGenres = tg
+        heroItem = withContext(Dispatchers.IO) {
+            TmdbClient.trending(1).firstOrNull { it.backdropUrl.isNotBlank() }
+        }
     }
 
     Box(
@@ -115,6 +119,9 @@ fun HomeScreen(
 
             // ---------- Каталоги ----------
             LazyColumn(Modifier.fillMaxSize()) {
+                heroItem?.let { hero ->
+                    item { HeroBanner(hero, onOpenDetails) }
+                }
                 if (progress.isNotEmpty()) {
                     item {
                         MediaRow(

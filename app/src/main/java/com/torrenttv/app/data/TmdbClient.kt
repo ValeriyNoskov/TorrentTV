@@ -19,6 +19,7 @@ object TmdbClient {
 
     private const val BASE = "https://api.themoviedb.org/3"
     private const val IMAGE = "https://image.tmdb.org/t/p/w500"
+    private const val IMAGE_BACKDROP = "https://image.tmdb.org/t/p/w1280"
 
     private val apiKey: String get() = BuildConfig.TMDB_API_KEY
 
@@ -69,6 +70,9 @@ object TmdbClient {
                 year = date.take(4),
                 posterUrl = o.optString("poster_path", "").removePrefix("/")
                     .let { if (it.isBlank()) "" else "$IMAGE/$it" },
+                backdropUrl = o.optString("backdrop_path", "").removePrefix("/")
+                    .let { if (it.isBlank()) "" else "$IMAGE_BACKDROP/$it" },
+                rating = o.optDouble("vote_average", 0.0),
                 overview = o.optString("overview", ""),
             )
         }
