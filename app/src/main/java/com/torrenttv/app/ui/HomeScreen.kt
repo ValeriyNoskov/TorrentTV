@@ -95,7 +95,7 @@ fun HomeScreen(
                     }
                     Spacer(Modifier.width(24.dp))
                     Text(
-                        text = "TorrentTV",
+                        text = "ВНосКино",
                         color = Color(0xFF4FC3F7),
                         fontSize = 28.sp,
                         fontWeight = FontWeight.Bold,

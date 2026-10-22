@@ -39,13 +39,13 @@ jobs:
       - name: Переименовать APK
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/debug/*.apk dist/TorrentTV-${{ steps.version.outputs.version }}.apk
+          cp app/build/outputs/apk/debug/*.apk dist/VNosKino-${{ steps.version.outputs.version }}.apk
 
       - name: Опубликовать GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
-          name: TorrentTV v${{ steps.version.outputs.version }}
-          files: dist/TorrentTV-*.apk
+          name: Release VNosKino v${{ steps.version.outputs.version }}
+          files: dist/VNosKino-*.apk
           generate_release_notes: true
           fail_on_unmatched_files: true
