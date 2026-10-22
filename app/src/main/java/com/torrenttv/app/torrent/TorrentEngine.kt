@@ -40,7 +40,7 @@ object TorrentEngine {
         onStatus("Получение метаданных…")
         val bytes: ByteArray? = try {
             when {
-                source.startsWith("magnet:") -> session.fetchMagnet(source, 60)
+                source.startsWith("magnet:") -> session.fetchMagnet(source, 60, saveDir)
                 source.startsWith("http") -> URL(source).readBytes()
                 else -> File(source).readBytes()
             }

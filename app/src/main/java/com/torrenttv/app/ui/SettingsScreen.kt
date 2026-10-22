@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Button
+import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.torrenttv.app.data.Genre
@@ -106,8 +107,17 @@ fun SettingsScreen(onBack: () -> Unit) {
                             store.setExcludedKeywords(keywords)
                         },
                         modifier = Modifier.padding(4.dp),
-                        shape = RoundedCornerShape(20.dp),
-                        color = Color(0xFFF5B942),
+                        shape = clickableSurfaceShape(RoundedCornerShape(20.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFFF5B942),
+                            contentColor = Color(0xFF0E1116),
+                            focusedContainerColor = Color(0xFFFFD07A),
+                            focusedContentColor = Color(0xFF0E1116),
+                            pressedContainerColor = Color(0xFFE0A82E),
+                            pressedContentColor = Color(0xFF0E1116),
+                            disabledContainerColor = Color(0xFF1F2430),
+                            disabledContentColor = Color.White,
+                        ),
                     ) {
                         Text(
                             text = "✕  $word",

@@ -123,15 +123,17 @@ private fun VideoPlayer(file: File, item: MediaItem, store: LocalStore, onBack: 
     }
 
     val player = remember {
-        ExoPlayer.Builder(context).build().apply {
-            setMediaItem(ExoMediaItem.fromUri(Uri.fromFile(file)))
-            prepare()
-            playWhenReady = true
-            if (resumeSec > 5) seekTo(resumeSec * 1000L)
+        ExoPlayer.Builder(context)
             // Перемотка стрелками пульта: ±10 секунд
-            setSeekBackIncrementMs(10_000L)
-            setSeekForwardIncrementMs(10_000L)
-        }
+            .setSeekBackIncrementMs(10_000L)
+            .setSeekForwardIncrementMs(10_000L)
+            .build()
+            .apply {
+                setMediaItem(ExoMediaItem.fromUri(Uri.fromFile(file)))
+                prepare()
+                playWhenReady = true
+                if (resumeSec > 5) seekTo(resumeSec * 1000L)
+            }
     }
 
     // Конец фильма: автозакрытие плеера (файл удалится при выходе)
@@ -180,9 +182,6 @@ private fun VideoPlayer(file: File, item: MediaItem, store: LocalStore, onBack: 
                     useController = true
                     // Контролы скрываются через 10 секунд бездействия пульта
                     controllerShowTimeoutMs = 10_000
-                    // Кнопки «предыдущий/следующий трек» не нужны в одиночном фильме
-                    setShowPreviousButtonDelegate(null)
-                    setShowNextButtonDelegate(null)
                 }
             },
             modifier = Modifier.fillMaxSize(),

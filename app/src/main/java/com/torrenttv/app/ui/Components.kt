@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -23,12 +25,15 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.ClickableSurfaceShape
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
@@ -41,6 +46,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
 
+/** Единая форма для всех состояний кликабельного Surface (tv-material 1.0.0 требует обёртку). */
+@Composable
+fun clickableSurfaceShape(shape: Shape): ClickableSurfaceShape =
+    ClickableSurfaceDefaults.shape(shape, shape, shape, shape)
+
 /** Hero-баннер: бэкдроп первой карточки трендов + быстрый переход. */
 @Composable
 fun HeroBanner(item: MediaItem, onOpenDetails: (MediaItem) -> Unit) {
@@ -50,7 +60,7 @@ fun HeroBanner(item: MediaItem, onOpenDetails: (MediaItem) -> Unit) {
             .fillMaxWidth()
             .padding(horizontal = 28.dp, vertical = 8.dp)
             .height(340.dp),
-        shape = RoundedCornerShape(14.dp),
+        shape = clickableSurfaceShape(RoundedCornerShape(14.dp)),
     ) {
         Box {
             if (item.backdropUrl.isNotBlank()) {
@@ -102,8 +112,17 @@ fun HeroBanner(item: MediaItem, onOpenDetails: (MediaItem) -> Unit) {
                 )
                 Surface(
                     onClick = { onOpenDetails(item) },
-                    color = Color(0xFFF5B942),
-                    shape = RoundedCornerShape(8.dp),
+                    shape = clickableSurfaceShape(RoundedCornerShape(8.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color(0xFFF5B942),
+                        contentColor = Color(0xFF04141C),
+                        focusedContainerColor = Color(0xFFFFD07A),
+                        focusedContentColor = Color(0xFF04141C),
+                        pressedContainerColor = Color(0xFFE0A82E),
+                        pressedContentColor = Color(0xFF04141C),
+                        disabledContainerColor = Color(0xFFF5B942),
+                        disabledContentColor = Color(0xFF04141C),
+                    ),
                 ) {
                     Text(
                         text = "▶  Подробнее",
@@ -126,7 +145,7 @@ fun PosterCard(item: MediaItem, onClick: () -> Unit) {
         modifier = Modifier
             .width(170.dp)
             .padding(6.dp),
-        shape = RoundedCornerShape(10.dp),
+        shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
     ) {
         Column {
             if (item.posterUrl.isBlank()) {
@@ -372,8 +391,17 @@ fun TabButton(label: String, target: Screen, active: Screen, onTab: (Screen) -> 
     Surface(
         onClick = { onTab(target) },
         modifier = Modifier.padding(4.dp),
-        shape = RoundedCornerShape(10.dp),
-        color = if (isActive) Color(0xFFF5B942) else Color(0xFF1F2430),
+        shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = if (isActive) Color(0xFFF5B942) else Color(0xFF1F2430),
+            contentColor = if (isActive) Color(0xFF0E1116) else Color.White,
+            focusedContainerColor = Color(0xFFFFD07A),
+            focusedContentColor = Color(0xFF0E1116),
+            pressedContainerColor = Color(0xFFE0A82E),
+            pressedContentColor = Color(0xFF0E1116),
+            disabledContainerColor = Color(0xFF1F2430),
+            disabledContentColor = Color.White,
+        ),
     ) {
         Text(
             text = label,
@@ -390,8 +418,17 @@ private fun GenreChip(label: String, isSelected: Boolean, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         modifier = Modifier.padding(4.dp),
-        shape = RoundedCornerShape(20.dp),
-        color = if (isSelected) Color(0xFFF5B942) else Color(0xFF1F2430),
+        shape = clickableSurfaceShape(RoundedCornerShape(20.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = if (isSelected) Color(0xFFF5B942) else Color(0xFF1F2430),
+            contentColor = if (isSelected) Color(0xFF0E1116) else Color.White,
+            focusedContainerColor = Color(0xFFFFD07A),
+            focusedContentColor = Color(0xFF0E1116),
+            pressedContainerColor = Color(0xFFE0A82E),
+            pressedContentColor = Color(0xFF0E1116),
+            disabledContainerColor = Color(0xFF1F2430),
+            disabledContentColor = Color.White,
+        ),
     ) {
         Text(
             text = label,

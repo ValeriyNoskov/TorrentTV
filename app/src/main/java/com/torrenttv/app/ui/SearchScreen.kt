@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -34,8 +35,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Button
+import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
 import com.torrenttv.app.data.TmdbClient
 import kotlinx.coroutines.delay
@@ -205,8 +208,17 @@ private fun KeyboardKey(
             .width(if (wide) 140.dp else 58.dp)
             .height(52.dp)
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
-        shape = RoundedCornerShape(8.dp),
-        color = Color(0xFF1F2430),
+        shape = clickableSurfaceShape(RoundedCornerShape(8.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color(0xFF1F2430),
+            contentColor = Color.White,
+            focusedContainerColor = Color(0xFF31435A),
+            focusedContentColor = Color.White,
+            pressedContainerColor = Color(0xFF273548),
+            pressedContentColor = Color.White,
+            disabledContainerColor = Color(0xFF1F2430),
+            disabledContentColor = Color.White,
+        ),
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(

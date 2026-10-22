@@ -117,7 +117,10 @@ fun HomeScreen(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 24.dp),
-                color = Color(0xFF1F2430),
+                colors = androidx.tv.material3.SurfaceDefaults.colors(
+                    containerColor = Color(0xFF1F2430),
+                    contentColor = Color.White,
+                ),
             ) {
                 Row(
                     modifier = Modifier.padding(20.dp, 16.dp),
