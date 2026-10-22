@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Тема для ТВ: полноэкранная, без системных панелей -->
+    <style name="Theme.TorrentTV" parent="@android:style/Theme.Material.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">#0E1116</item>
+    </style>
+</resources>
