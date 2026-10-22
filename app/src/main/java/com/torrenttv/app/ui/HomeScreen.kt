@@ -27,7 +27,7 @@ import androidx.tv.material3.Text
 import com.torrenttv.app.BuildConfig
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
-import com.torrenttv.app.data.TmdbClient
+import com.torrenttv.app.data.MediaApi
 import com.torrenttv.app.update.UpdateManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -50,7 +50,7 @@ fun HomeScreen(
     LaunchedEffect(Unit) {
         UpdateManager.checkForUpdate(currentVersion) { updateInfo = it }
         heroItem = withContext(Dispatchers.IO) {
-            TmdbClient.trending(1).firstOrNull { it.backdropUrl.isNotBlank() && store.isAllowed(it) }
+            MediaApi.trending(1).firstOrNull { it.backdropUrl.isNotBlank() && store.isAllowed(it) }
         }
     }
 
@@ -60,10 +60,10 @@ fun HomeScreen(
             .background(Color(0xFF0E1116)),
     ) {
         LazyColumn(Modifier.fillMaxSize()) {
-            if (!TmdbClient.isConfigured) {
+            if (!MediaApi.isConfigured) {
                 item {
                     Text(
-                        text = "⚠ Ключ TMDB не задан: каталоги пусты. Добавьте tmdbApiKey в gradle.properties.",
+                        text = "⚠ Метаданные не настроены. Получите бесплатный ключ на kinopoisk.dev (профиль → API) и укажите kpApiKey= в gradle.properties.",
                         color = Color(0xFFFFD54F),
                         fontSize = 14.sp,
                         modifier = Modifier.padding(horizontal = 32.dp),
@@ -93,7 +93,7 @@ fun HomeScreen(
             item {
                 PagedMediaRow(
                     title = "🔥 Сейчас в тренде",
-                    loader = { page -> TmdbClient.trending(page) },
+                    loader = { page -> MediaApi.trending(page) },
                     onOpen = onOpenDetails,
                     filterFn = { store.isAllowed(it) },
                 )

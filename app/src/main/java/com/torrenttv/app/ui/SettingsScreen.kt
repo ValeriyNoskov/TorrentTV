@@ -30,7 +30,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.torrenttv.app.data.Genre
 import com.torrenttv.app.data.LocalStore
-import com.torrenttv.app.data.TmdbClient
+import com.torrenttv.app.data.MediaApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -53,8 +53,8 @@ fun SettingsScreen(onBack: () -> Unit) {
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
-            movieGenres = TmdbClient.movieGenres()
-            tvGenres = TmdbClient.tvGenres()
+            movieGenres = MediaApi.movieGenres()
+            tvGenres = MediaApi.tvGenres()
         }
     }
 
@@ -106,7 +106,10 @@ fun SettingsScreen(onBack: () -> Unit) {
                             keywords = keywords - word
                             store.setExcludedKeywords(keywords)
                         },
-                        modifier = Modifier.padding(4.dp),
+                        modifier = Modifier.padding(4.dp).mouseClick {
+                            keywords = keywords - word
+                            store.setExcludedKeywords(keywords)
+                        },
                         shape = clickableSurfaceShape(RoundedCornerShape(20.dp)),
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color(0xFFF5B942),

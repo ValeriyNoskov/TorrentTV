@@ -23,7 +23,7 @@ import androidx.tv.material3.Text
 import com.torrenttv.app.data.Genre
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
-import com.torrenttv.app.data.TmdbClient
+import com.torrenttv.app.data.MediaApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -43,7 +43,7 @@ fun CatalogScreen(isMovies: Boolean, onOpenDetails: (MediaItem) -> Unit) {
 
     LaunchedEffect(isMovies) {
         genres = withContext(Dispatchers.IO) {
-            if (isMovies) TmdbClient.movieGenres() else TmdbClient.tvGenres()
+            if (isMovies) MediaApi.movieGenres() else MediaApi.tvGenres()
         }
     }
 
@@ -61,10 +61,10 @@ fun CatalogScreen(isMovies: Boolean, onOpenDetails: (MediaItem) -> Unit) {
                 modifier = Modifier.padding(horizontal = 32.dp, vertical = 6.dp),
             )
         }
-        if (!TmdbClient.isConfigured) {
+        if (!MediaApi.isConfigured) {
             item {
                 Text(
-                    text = "⚠ Ключ TMDB не задан: каталог пуст. Добавьте tmdbApiKey в gradle.properties.",
+                    text = "⚠ Метаданные не настроены. Получите бесплатный ключ на kinopoisk.dev и укажите kpApiKey= в gradle.properties.",
                     color = Color(0xFFFFD54F),
                     fontSize = 14.sp,
                     modifier = Modifier.padding(horizontal = 32.dp),
@@ -79,8 +79,8 @@ fun CatalogScreen(isMovies: Boolean, onOpenDetails: (MediaItem) -> Unit) {
                 PagedMediaRow(
                     title = "$title · ${g.name}",
                     loader = { page ->
-                        if (isMovies) TmdbClient.moviesByGenre(g.id, page)
-                        else TmdbClient.tvByGenre(g.id, page)
+                        if (isMovies) MediaApi.moviesByGenre(g.id, page)
+                        else MediaApi.tvByGenre(g.id, page)
                     },
                     onOpen = onOpenDetails,
                     keyTag = g.id,
@@ -92,7 +92,7 @@ fun CatalogScreen(isMovies: Boolean, onOpenDetails: (MediaItem) -> Unit) {
             PagedMediaRow(
                 title = "Популярные $noun",
                 loader = { page ->
-                    if (isMovies) TmdbClient.popularMovies(page) else TmdbClient.popularTv(page)
+                    if (isMovies) MediaApi.popularMovies(page) else MediaApi.popularTv(page)
                 },
                 onOpen = onOpenDetails,
                 filterFn = { store.isAllowed(it) },
@@ -102,7 +102,7 @@ fun CatalogScreen(isMovies: Boolean, onOpenDetails: (MediaItem) -> Unit) {
             PagedMediaRow(
                 title = "Топ $noun",
                 loader = { page ->
-                    if (isMovies) TmdbClient.topRatedMovies(page) else TmdbClient.topRatedTv(page)
+                    if (isMovies) MediaApi.topRatedMovies(page) else MediaApi.topRatedTv(page)
                 },
                 onOpen = onOpenDetails,
                 filterFn = { store.isAllowed(it) },

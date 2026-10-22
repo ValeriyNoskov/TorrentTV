@@ -30,7 +30,7 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
-import com.torrenttv.app.data.TmdbClient
+import com.torrenttv.app.data.MediaApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -52,7 +52,7 @@ fun DetailsScreen(
     var similar by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
 
     LaunchedEffect(item) {
-        similar = withContext(Dispatchers.IO) { TmdbClient.similar(item) }
+        similar = withContext(Dispatchers.IO) { MediaApi.similar(item) }
     }
 
     Column(

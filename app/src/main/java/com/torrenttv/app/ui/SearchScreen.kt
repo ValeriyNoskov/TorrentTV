@@ -40,7 +40,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
-import com.torrenttv.app.data.TmdbClient
+import com.torrenttv.app.data.MediaApi
 import kotlinx.coroutines.delay
 
 // Раскладка экранной клавиатуры (ЙЦУКЕН)
@@ -100,7 +100,7 @@ fun SearchScreen(onBack: () -> Unit, onOpenDetails: (MediaItem) -> Unit) {
         if (query.length >= 2) {
             loading = true
             delay(500)
-            results = TmdbClient.search(query).filter { store.isAllowed(it) }
+            results = MediaApi.search(query).filter { store.isAllowed(it) }
             loading = false
         } else {
             results = emptyList()
@@ -207,7 +207,8 @@ private fun KeyboardKey(
         modifier = Modifier
             .width(if (wide) 140.dp else 58.dp)
             .height(52.dp)
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .mouseClick { onClick() },
         shape = clickableSurfaceShape(RoundedCornerShape(8.dp)),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color(0xFF1F2430),

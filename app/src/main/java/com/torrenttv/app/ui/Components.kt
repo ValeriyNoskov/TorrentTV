@@ -1,6 +1,7 @@
 package com.torrenttv.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -26,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -51,6 +53,14 @@ import java.util.concurrent.atomic.AtomicBoolean
 fun clickableSurfaceShape(shape: Shape): ClickableSurfaceShape =
     ClickableSurfaceDefaults.shape(shape, shape, shape, shape)
 
+/**
+ * Touch-обработка для tv-material Surface: тот кликается только с пульта (D-pad),
+ * мышь в TV-режиме он игнорирует. Модификатор добавляет обработку клика мышью —
+ * удобно для проверки интерфейса в эмуляторе.
+ */
+fun Modifier.mouseClick(onClick: () -> Unit): Modifier =
+    pointerInput(onClick) { detectTapGestures(onTap = { onClick() }) }
+
 /** Hero-баннер: бэкдроп первой карточки трендов + быстрый переход. */
 @Composable
 fun HeroBanner(item: MediaItem, onOpenDetails: (MediaItem) -> Unit) {
@@ -59,7 +69,8 @@ fun HeroBanner(item: MediaItem, onOpenDetails: (MediaItem) -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 28.dp, vertical = 8.dp)
-            .height(340.dp),
+            .height(340.dp)
+            .mouseClick { onOpenDetails(item) },
         shape = clickableSurfaceShape(RoundedCornerShape(14.dp)),
     ) {
         Box {
@@ -112,6 +123,7 @@ fun HeroBanner(item: MediaItem, onOpenDetails: (MediaItem) -> Unit) {
                 )
                 Surface(
                     onClick = { onOpenDetails(item) },
+                    modifier = Modifier.mouseClick { onOpenDetails(item) },
                     shape = clickableSurfaceShape(RoundedCornerShape(8.dp)),
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = Color(0xFFF5B942),
@@ -144,7 +156,8 @@ fun PosterCard(item: MediaItem, onClick: () -> Unit) {
         onClick = onClick,
         modifier = Modifier
             .width(170.dp)
-            .padding(6.dp),
+            .padding(6.dp)
+            .mouseClick { onClick() },
         shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
     ) {
         Column {
@@ -390,7 +403,7 @@ fun TabButton(label: String, target: Screen, active: Screen, onTab: (Screen) -> 
     val isActive = active == target
     Surface(
         onClick = { onTab(target) },
-        modifier = Modifier.padding(4.dp),
+        modifier = Modifier.padding(4.dp).mouseClick { onTab(target) },
         shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (isActive) Color(0xFFF5B942) else Color(0xFF1F2430),
@@ -417,7 +430,7 @@ fun TabButton(label: String, target: Screen, active: Screen, onTab: (Screen) -> 
 private fun GenreChip(label: String, isSelected: Boolean, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        modifier = Modifier.padding(4.dp),
+        modifier = Modifier.padding(4.dp).mouseClick { onClick() },
         shape = clickableSurfaceShape(RoundedCornerShape(20.dp)),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (isSelected) Color(0xFFF5B942) else Color(0xFF1F2430),

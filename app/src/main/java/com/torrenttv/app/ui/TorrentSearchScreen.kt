@@ -87,7 +87,11 @@ fun TorrentSearchScreen(item: MediaItem, onDone: () -> Unit, onBack: () -> Unit)
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 4.dp),
+                        .padding(vertical = 4.dp)
+                        .mouseClick {
+                            store.saveMagnet(item, TorrentSearch.toMagnet(r))
+                            onDone()
+                        },
                     shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = Color(0xFF1F2430),
