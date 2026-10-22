@@ -128,7 +128,24 @@ private fun VideoPlayer(file: File, item: MediaItem, store: LocalStore, onBack: 
             prepare()
             playWhenReady = true
             if (resumeSec > 5) seekTo(resumeSec * 1000L)
+            // Перемотка стрелками пульта: ±10 секунд
+            setSeekBackIncrementMs(10_000L)
+            setSeekForwardIncrementMs(10_000L)
         }
+    }
+
+    // Конец фильма: автозакрытие плеера (файл удалится при выходе)
+    DisposableEffect(player) {
+        val listener = object : androidx.media3.common.Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == androidx.media3.common.Player.STATE_ENDED) {
+                    player.seekTo(player.duration)
+                    onBack()
+                }
+            }
+        }
+        player.addListener(listener)
+        onDispose { player.removeListener(listener) }
     }
 
     // Автосохранение позиции каждые 5 секунд
@@ -161,7 +178,11 @@ private fun VideoPlayer(file: File, item: MediaItem, store: LocalStore, onBack: 
                 PlayerView(ctx).apply {
                     this.player = player
                     useController = true
-                    controllerShowTimeoutMs = 3000
+                    // Контролы скрываются через 10 секунд бездействия пульта
+                    controllerShowTimeoutMs = 10_000
+                    // Кнопки «предыдущий/следующий трек» не нужны в одиночном фильме
+                    setShowPreviousButtonDelegate(null)
+                    setShowNextButtonDelegate(null)
                 }
             },
             modifier = Modifier.fillMaxSize(),
