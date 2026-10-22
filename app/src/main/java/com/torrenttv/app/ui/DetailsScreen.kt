@@ -41,6 +41,7 @@ fun DetailsScreen(
     onBack: () -> Unit,
     onWatch: () -> Unit = {},
     onEnterMagnet: () -> Unit = {},
+    onAutoSearch: () -> Unit = {},
     onOpenDetails: (MediaItem) -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -117,6 +118,8 @@ fun DetailsScreen(
                             status = "Сначала укажите magnet-ссылку торрента"
                         }
                     }) { Text("▶ Смотреть") }
+                    Spacer(Modifier.width(16.dp))
+                    Button(onClick = onAutoSearch) { Text("🔍 Автопоиск") }
                     Spacer(Modifier.width(16.dp))
                     Button(onClick = onEnterMagnet) {
                         Text(if (magnet) "🔗 Заменить magnet" else "🔗 Указать magnet")

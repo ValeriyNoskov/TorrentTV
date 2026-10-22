@@ -23,6 +23,7 @@ import com.torrenttv.app.ui.PlayerScreen
 import com.torrenttv.app.ui.SearchScreen
 import com.torrenttv.app.ui.SettingsScreen
 import com.torrenttv.app.ui.TopTabBar
+import com.torrenttv.app.ui.TorrentSearchScreen
 
 /** Экраны приложения. Пять верхних — вкладки с общей панелью табов. */
 sealed interface Screen {
@@ -35,6 +36,7 @@ sealed interface Screen {
     // Полноэкранные (без таб-панели)
     data class Details(val item: MediaItem) : Screen
     data class MagnetEntry(val item: MediaItem) : Screen
+    data class TorrentSearch(val item: MediaItem) : Screen
     data class Player(val item: MediaItem) : Screen
 
     companion object {
@@ -91,12 +93,19 @@ private fun App() {
                 onBack = { screen = Screen.Home },
                 onWatch = { screen = Screen.Player(s.item) },
                 onEnterMagnet = { screen = Screen.MagnetEntry(s.item) },
+                onAutoSearch = { screen = Screen.TorrentSearch(s.item) },
                 onOpenDetails = { screen = Screen.Details(it) },
             )
 
             is Screen.MagnetEntry -> MagnetEntryScreen(
                 item = s.item,
                 onDone = { screen = Screen.Player(s.item) },
+                onBack = { screen = Screen.Details(s.item) },
+            )
+
+            is Screen.TorrentSearch -> TorrentSearchScreen(
+                item = s.item,
+                onDone = { screen = Screen.Details(s.item) },
                 onBack = { screen = Screen.Details(s.item) },
             )
 
