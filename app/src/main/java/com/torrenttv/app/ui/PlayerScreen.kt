@@ -146,7 +146,11 @@ private fun VideoPlayer(file: File, item: MediaItem, store: LocalStore, onBack: 
     }
 
     DisposableEffect(player) {
-        onDispose { player.release() }
+        onDispose {
+            player.release()
+            // Политика хранения: удаляем скачанное после просмотра
+            runCatching { file.parentFile?.deleteRecursively() }
+        }
     }
 
     BackHandler { onBack() }
