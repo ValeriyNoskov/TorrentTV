@@ -96,7 +96,7 @@ fun HomeScreen(
                     Spacer(Modifier.width(24.dp))
                     Text(
                         text = "ВНосКино",
-                        color = Color(0xFF4FC3F7),
+                        color = Color(0xFFF5B942),
                         fontSize = 28.sp,
                         fontWeight = FontWeight.Bold,
                     )
@@ -222,7 +222,7 @@ fun HomeScreen(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 24.dp),
-                color = Color(0xFF1B2A38),
+                color = Color(0xFF1F2430),
             ) {
                 Row(
                     modifier = Modifier.padding(20.dp, 16.dp),

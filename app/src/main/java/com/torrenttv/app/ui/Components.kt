@@ -94,13 +94,13 @@ fun HeroBanner(item: MediaItem, onOpenDetails: (MediaItem) -> Unit) {
                         if (item.year.isNotBlank()) append("${item.year}  ·  ")
                         append(item.typeLabel)
                     },
-                    color = Color(0xFF4FC3F7),
+                    color = Color(0xFFF5B942),
                     fontSize = 17.sp,
                     modifier = Modifier.padding(top = 6.dp, bottom = 16.dp),
                 )
                 Surface(
                     onClick = { onOpenDetails(item) },
-                    color = Color(0xFF4FC3F7),
+                    color = Color(0xFFF5B942),
                     shape = RoundedCornerShape(8.dp),
                 ) {
                     Text(
@@ -132,7 +132,7 @@ fun PosterCard(item: MediaItem, onClick: () -> Unit) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(250.dp)
-                        .background(Color(0xFF1B2A38)),
+                        .background(Color(0xFF1F2430)),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text("нет\nпостера", color = Color.White.copy(alpha = 0.4f), textAlign = TextAlign.Center)
@@ -320,7 +320,7 @@ private fun GenreChip(label: String, isSelected: Boolean, onClick: () -> Unit) {
         onClick = onClick,
         modifier = Modifier.padding(4.dp),
         shape = RoundedCornerShape(20.dp),
-        color = if (isSelected) Color(0xFF4FC3F7) else Color(0xFF1B2A38),
+        color = if (isSelected) Color(0xFFF5B942) else Color(0xFF1F2430),
     ) {
         Text(
             text = label,

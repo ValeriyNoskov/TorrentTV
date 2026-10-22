@@ -53,7 +53,7 @@ fun MagnetEntryScreen(item: MediaItem, onDone: () -> Unit, onBack: () -> Unit) {
 
         Text(
             text = if (magnet.isBlank()) "magnet:?xt=…" else magnet,
-            color = if (magnet.isBlank()) Color.White.copy(alpha = 0.35f) else Color(0xFF4FC3F7),
+            color = if (magnet.isBlank()) Color.White.copy(alpha = 0.35f) else Color(0xFFF5B942),
             fontSize = 18.sp,
             maxLines = 3,
             modifier = Modifier.padding(top = 10.dp),

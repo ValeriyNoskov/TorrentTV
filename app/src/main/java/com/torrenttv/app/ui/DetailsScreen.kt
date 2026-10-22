@@ -67,7 +67,7 @@ fun DetailsScreen(
                     Modifier
                         .width(220.dp)
                         .fillMaxHeight()
-                        .background(Color(0xFF1B2A38), RoundedCornerShape(12.dp)),
+                        .background(Color(0xFF1F2430), RoundedCornerShape(12.dp)),
                     contentAlignment = Alignment.Center,
                 ) { Text("нет постера", color = Color.White.copy(alpha = 0.4f)) }
             } else {
@@ -90,7 +90,7 @@ fun DetailsScreen(
                         append(item.typeLabel)
                         if (item.year.isNotBlank()) append(" · ${item.year}")
                     },
-                    color = Color(0xFF4FC3F7),
+                    color = Color(0xFFF5B942),
                     fontSize = 18.sp,
                     modifier = Modifier.padding(top = 4.dp),
                 )

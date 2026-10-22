@@ -86,7 +86,7 @@ fun PlayerScreen(item: MediaItem, onBack: () -> Unit) {
         ) {
             Text(item.title, color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(16.dp))
-            Text(status, color = Color(0xFF4FC3F7), fontSize = 18.sp)
+            Text(status, color = Color(0xFFF5B942), fontSize = 18.sp)
 
             if (progress > 0 && progress < 100) {
                 Spacer(Modifier.height(16.dp))
@@ -95,13 +95,13 @@ fun PlayerScreen(item: MediaItem, onBack: () -> Unit) {
                     Modifier
                         .fillMaxWidth(0.6f)
                         .height(10.dp)
-                        .background(Color(0xFF1B2A38)),
+                        .background(Color(0xFF1F2430)),
                 ) {
                     Box(
                         Modifier
                             .fillMaxWidth(progress / 100f)
                             .height(10.dp)
-                            .background(Color(0xFF4FC3F7)),
+                            .background(Color(0xFFF5B942)),
                     )
                 }
                 Spacer(Modifier.height(8.dp))

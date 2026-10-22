@@ -116,7 +116,7 @@ fun SearchScreen(onBack: () -> Unit, onOpenDetails: (MediaItem) -> Unit) {
             Spacer(Modifier.width(16.dp))
             Text(
                 text = if (query.isBlank()) "Введите название…" else query,
-                color = if (query.isBlank()) Color.White.copy(alpha = 0.4f) else Color(0xFF4FC3F7),
+                color = if (query.isBlank()) Color.White.copy(alpha = 0.4f) else Color(0xFFF5B942),
                 fontSize = 26.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f),
@@ -205,7 +205,7 @@ private fun KeyboardKey(
             .height(52.dp)
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
         shape = RoundedCornerShape(8.dp),
-        color = Color(0xFF1B2A38),
+        color = Color(0xFF1F2430),
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(

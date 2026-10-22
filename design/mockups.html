@@ -2,10 +2,10 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>TorrentTV — дизайн-мокапы</title>
+<title>ВНосКино — дизайн-мокапы</title>
 <style>
   :root {
-    --bg: #0E1116; --panel: #1B2A38; --accent: #4FC3F7;
+    --bg: #0E1116; --panel: #1F2430; --accent: #F5B942;
     --warn: #FFD54F; --txt: #ffffff; --dim: rgba(255,255,255,.6);
   }
   body { background: #05070a; color: var(--txt); font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; margin: 20px; }
@@ -22,7 +22,7 @@
   .ver { margin-left: auto; color: rgba(255,255,255,.35); font-size: 12px; }
 
   .hero { position: relative; height: 240px; margin: 0 28px; border-radius: 12px; overflow: hidden;
-          background: linear-gradient(100deg, #123 0%, #274b63 45%, #7fb2d0 100%); }
+          background: linear-gradient(100deg, #1a1030 0%, #4a2a52 45%, #c98f4a 100%); }
   .hero .shade { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(14,17,22,.92) 20%, transparent 70%); }
   .hero .info { position: absolute; left: 28px; top: 50%; transform: translateY(-50%); width: 46%; }
   .hero .info .t { font-size: 30px; font-weight: 800; }
@@ -38,9 +38,9 @@
   .poster { height: 150px; }
   .card .n { font-size: 11px; padding: 5px 7px 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .card .y { font-size: 10px; color: var(--dim); padding: 0 7px 6px; }
-  .p1 { background: linear-gradient(160deg,#2a4a5e,#16324a); } .p2 { background: linear-gradient(160deg,#5e2a3a,#3a1622); }
-  .p3 { background: linear-gradient(160deg,#4a5e2a,#243a16); } .p4 { background: linear-gradient(160deg,#423a5e,#221a3a); }
-  .p5 { background: linear-gradient(160deg,#5e542a,#3a3416); } .p6 { background: linear-gradient(160deg,#2a5e54,#163a34); }
+  .p1 { background: linear-gradient(160deg,#5e4a2a,#3a2c16); } .p2 { background: linear-gradient(160deg,#5e2a3a,#3a1622); }
+  .p3 { background: linear-gradient(160deg,#2a4a5e,#16324a); } .p4 { background: linear-gradient(160deg,#423a5e,#221a3a); }
+  .p5 { background: linear-gradient(160deg,#2a5e54,#163a34); } .p6 { background: linear-gradient(160deg,#4a5e2a,#243a16); }
   .p7 { background: linear-gradient(160deg,#5e442a,#3a2a16); } .p8 { background: linear-gradient(160deg,#3a5e46,#1a3a2a); }
 
   .chips { display: flex; gap: 8px; padding: 6px 28px 0; flex-wrap: nowrap; }
@@ -60,7 +60,7 @@
   .krow { display: flex; gap: 6px; margin-bottom: 6px; }
   .key { width: 44px; height: 40px; background: var(--panel); border-radius: 7px; display: flex; align-items: center;
          justify-content: center; font-size: 15px; }
-  .key.focus { outline: 3px solid var(--accent); background: #24435c; }
+  .key.focus { outline: 3px solid var(--accent); background: #4a3d1f; }
   .key.w { width: 108px; font-size: 12px; }
 
   /* player */
@@ -78,12 +78,12 @@
 </style>
 </head>
 <body>
-<h1>TorrentTV — концепция интерфейса (Android TV, пульт)</h1>
+<h1>ВНосКино — концепция интерфейса (Android TV, пульт)</h1>
 
 <h2>1. Главный экран — hero-баннер + полки каталога</h2>
 <div class="screen"><label>Главный</label>
   <div class="top">
-    <span class="btn">🔍 Поиск</span><span class="logo">TorrentTV</span><span class="ver">v0.4.0</span>
+    <span class="btn">🔍 Поиск</span><span class="logo">ВНосКино</span><span class="ver">v0.4.0</span>
   </div>
   <div class="hero">
     <div class="shade"></div>
@@ -116,7 +116,7 @@
 
 <h2>2. Главный экран — фильтр жанров (выбран «Фантастика»)</h2>
 <div class="screen"><label>Жанры</label>
-  <div class="top"><span class="logo">TorrentTV</span><span class="ver">— полоса жанров сворачивается в фильтр</span></div>
+  <div class="top"><span class="logo">ВНосКино</span><span class="ver">— полоса жанров сворачивается в фильтр</span></div>
   <div class="chips">
     <span class="chip">Все жанры</span><span class="chip">Драма</span><span class="chip sel">Фантастика</span>
     <span class="chip">Комедия</span><span class="chip">Боевик</span><span class="chip">Триллер</span><span class="chip">Ужасы</span>
