@@ -1,19 +1,14 @@
 package com.torrenttv.app.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,12 +23,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Button
-import androidx.tv.material3.Icon
-import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.torrenttv.app.BuildConfig
-import com.torrenttv.app.data.Genre
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
 import com.torrenttv.app.data.TmdbClient
@@ -41,34 +32,23 @@ import com.torrenttv.app.update.UpdateManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** Домашний экран: поиск, «Продолжить», «Избранное» и каталоги с жанрами и подгрузкой. */
+/** Вкладка «Главная»: hero-баннер, «Продолжить», «Избранное», тренды. */
 @Composable
 fun HomeScreen(
     currentVersion: String,
-    onOpenSearch: () -> Unit,
     onOpenDetails: (MediaItem) -> Unit,
-    onOpenSettings: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
 
     var favorites by remember { mutableStateOf(store.favorites()) }
     var progress by remember { mutableStateOf(store.continueWatching()) }
-    var movieGenres by remember { mutableStateOf<List<Genre>>(emptyList()) }
-    var tvGenres by remember { mutableStateOf<List<Genre>>(emptyList()) }
-    var selectedMovieGenre by remember { mutableStateOf<Genre?>(null) }
-    var selectedTvGenre by remember { mutableStateOf<Genre?>(null) }
     var heroItem by remember { mutableStateOf<MediaItem?>(null) }
     var updateInfo by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
     var updateStatus by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         UpdateManager.checkForUpdate(currentVersion) { updateInfo = it }
-        val (mg, tg) = withContext(Dispatchers.IO) {
-            TmdbClient.movieGenres() to TmdbClient.tvGenres()
-        }
-        movieGenres = mg
-        tvGenres = tg
         heroItem = withContext(Dispatchers.IO) {
             TmdbClient.trending(1).firstOrNull { it.backdropUrl.isNotBlank() && store.isAllowed(it) }
         }
@@ -79,156 +59,61 @@ fun HomeScreen(
             .fillMaxSize()
             .background(Color(0xFF0E1116)),
     ) {
-        Column {
-            // ---------- Верхняя панель ----------
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 32.dp, vertical = 20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Button(onClick = onOpenSearch) {
-                        Icon(Icons.Filled.Search, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Поиск")
-                    }
-                    Spacer(Modifier.width(16.dp))
-                    Button(onClick = onOpenSettings) { Text("⚙ Настройки") }
-                    Spacer(Modifier.width(24.dp))
+        LazyColumn(Modifier.fillMaxSize()) {
+            if (!TmdbClient.isConfigured) {
+                item {
                     Text(
-                        text = "ВНосКино",
-                        color = Color(0xFFF5B942),
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Bold,
+                        text = "⚠ Ключ TMDB не задан: каталоги пусты. Добавьте tmdbApiKey в gradle.properties.",
+                        color = Color(0xFFFFD54F),
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(horizontal = 32.dp),
                     )
                 }
-                Text(
-                    text = "v$currentVersion",
-                    color = Color.White.copy(alpha = 0.4f),
-                    fontSize = 14.sp,
-                )
             }
-
-            if (!TmdbClient.isConfigured) {
-                Text(
-                    text = "⚠ Ключ TMDB не задан: каталоги пусты. Добавьте tmdbApiKey в gradle.properties.",
-                    color = Color(0xFFFFD54F),
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(horizontal = 32.dp),
-                )
+            heroItem?.let { hero ->
+                item { HeroBanner(hero, onOpenDetails) }
             }
-
-            // ---------- Каталоги ----------
-            LazyColumn(Modifier.fillMaxSize()) {
-                heroItem?.let { hero ->
-                    item { HeroBanner(hero, onOpenDetails) }
-                }
-                if (progress.isNotEmpty()) {
-                    item {
-                        MediaRow(
-                            title = "Продолжить просмотр",
-                            items = progress.map { it.item },
-                            onClick = onOpenDetails,
-                        )
-                    }
-                }
+            if (progress.isNotEmpty()) {
                 item {
                     MediaRow(
-                        title = "Избранное",
-                        items = favorites,
+                        title = "Продолжить просмотр",
+                        items = progress.map { it.item },
                         onClick = onOpenDetails,
-                        emptyText = "Пока пусто — добавьте фильмы из карточки (☆)",
                     )
                 }
-                item {
-                    PagedMediaRow(
-                        title = "🔥 Сейчас в тренде",
-                        loader = { page -> TmdbClient.trending(page) },
-                        onOpen = onOpenDetails,
-                            filterFn = { store.isAllowed(it) },
-                    )
-                }
-                item {
-                    Text(
-                        text = "Фильмы по жанрам",
-                        color = Color.White.copy(alpha = 0.7f),
-                        fontSize = 17.sp,
-                        modifier = Modifier.padding(horizontal = 32.dp, vertical = 4.dp),
-                    )
-                    GenreChips(movieGenres, selectedMovieGenre) { selectedMovieGenre = it }
-                }
-                selectedMovieGenre?.let { g ->
-                    item {
-                        PagedMediaRow(
-                            title = "Фильмы · ${g.name}",
-                            loader = { page -> TmdbClient.moviesByGenre(g.id, page) },
-                            onOpen = onOpenDetails,
-                            filterFn = { store.isAllowed(it) },
-                            keyTag = g.id,
-                        )
-                    }
-                }
-                item {
-                    PagedMediaRow(
-                        title = "Популярные фильмы",
-                        loader = { page -> TmdbClient.popularMovies(page) },
-                        onOpen = onOpenDetails,
-                            filterFn = { store.isAllowed(it) },
-                    )
-                }
-                item {
-                    PagedMediaRow(
-                        title = "Топ фильмов",
-                        loader = { page -> TmdbClient.topRatedMovies(page) },
-                        onOpen = onOpenDetails,
-                            filterFn = { store.isAllowed(it) },
-                    )
-                }
-                item {
-                    Text(
-                        text = "Сериалы по жанрам",
-                        color = Color.White.copy(alpha = 0.7f),
-                        fontSize = 17.sp,
-                        modifier = Modifier.padding(horizontal = 32.dp, vertical = 4.dp),
-                    )
-                    GenreChips(tvGenres, selectedTvGenre) { selectedTvGenre = it }
-                }
-                selectedTvGenre?.let { g ->
-                    item {
-                        PagedMediaRow(
-                            title = "Сериалы · ${g.name}",
-                            loader = { page -> TmdbClient.tvByGenre(g.id, page) },
-                            onOpen = onOpenDetails,
-                            filterFn = { store.isAllowed(it) },
-                            keyTag = g.id,
-                        )
-                    }
-                }
-                item {
-                    PagedMediaRow(
-                        title = "Популярные сериалы",
-                        loader = { page -> TmdbClient.popularTv(page) },
-                        onOpen = onOpenDetails,
-                            filterFn = { store.isAllowed(it) },
-                    )
-                }
-                item {
-                    PagedMediaRow(
-                        title = "Топ сериалов",
-                        loader = { page -> TmdbClient.topRatedTv(page) },
-                        onOpen = onOpenDetails,
-                            filterFn = { store.isAllowed(it) },
-                    )
-                }
-                item { Spacer(Modifier.height(24.dp)) }
             }
+            item {
+                MediaRow(
+                    title = "Избранное",
+                    items = favorites,
+                    onClick = onOpenDetails,
+                    emptyText = "Пока пусто — добавьте фильмы из карточки (☆)",
+                )
+            }
+            item {
+                PagedMediaRow(
+                    title = "🔥 Сейчас в тренде",
+                    loader = { page -> TmdbClient.trending(page) },
+                    onOpen = onOpenDetails,
+                    filterFn = { store.isAllowed(it) },
+                )
+            }
+            item { Spacer(Modifier.height(24.dp)) }
         }
+
+        // Версия в углу
+        Text(
+            text = "v$currentVersion",
+            color = Color.White.copy(alpha = 0.35f),
+            fontSize = 13.sp,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(20.dp),
+        )
 
         // ---------- Оверлей обновления ----------
         updateInfo?.let { info ->
-            Surface(
+            androidx.tv.material3.Surface(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 24.dp),

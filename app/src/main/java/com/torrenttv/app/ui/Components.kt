@@ -34,6 +34,8 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.torrenttv.app.data.Genre
 import com.torrenttv.app.data.MediaItem
+import com.torrenttv.app.MainActivity
+import com.torrenttv.app.Screen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -337,6 +339,49 @@ fun GenreChipsMulti(
             val g = genres[i]
             GenreChip(g.name, g.id in selectedIds) { onToggle(g.id) }
         }
+    }
+}
+
+/** Верхняя панель-табы: Главная · Фильмы · Сериалы · Поиск · Настройки. */
+@Composable
+fun TopTabBar(active: Screen, onTab: (Screen) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 28.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "ВНосКино",
+            color = Color(0xFFF5B942),
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        Spacer(Modifier.width(28.dp))
+        TabButton("🏠 Главная", Screen.Home, active, onTab)
+        TabButton("🎬 Фильмы", Screen.Movies, active, onTab)
+        TabButton("📺 Сериалы", Screen.TvShows, active, onTab)
+        TabButton("🔍 Поиск", Screen.Search, active, onTab)
+        TabButton("⚙ Настройки", Screen.Settings, active, onTab)
+    }
+}
+
+@Composable
+fun TabButton(label: String, target: Screen, active: Screen, onTab: (Screen) -> Unit) {
+    val isActive = active == target
+    Surface(
+        onClick = { onTab(target) },
+        modifier = Modifier.padding(4.dp),
+        shape = RoundedCornerShape(10.dp),
+        color = if (isActive) Color(0xFFF5B942) else Color(0xFF1F2430),
+    ) {
+        Text(
+            text = label,
+            color = if (isActive) Color(0xFF0E1116) else Color.White,
+            fontSize = 16.sp,
+            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+        )
     }
 }
 
