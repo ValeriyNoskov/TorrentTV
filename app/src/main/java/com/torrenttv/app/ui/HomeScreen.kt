@@ -1,0 +1,174 @@
+package com.torrenttv.app.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.tv.material3.Button
+import androidx.tv.material3.Icon
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface
+import androidx.tv.material3.Text
+import com.torrenttv.app.BuildConfig
+import com.torrenttv.app.data.LocalStore
+import com.torrenttv.app.data.MediaItem
+import com.torrenttv.app.data.TmdbClient
+import com.torrenttv.app.update.UpdateManager
+
+/** Домашний экран: поиск, «Продолжить», «Избранное», каталоги фильмов и сериалов. */
+@Composable
+fun HomeScreen(
+    currentVersion: String,
+    onOpenSearch: () -> Unit,
+    onOpenDetails: (MediaItem) -> Unit,
+) {
+    val context = LocalContext.current
+    val store = remember { LocalStore(context) }
+
+    var favorites by remember { mutableStateOf(store.favorites()) }
+    var progress by remember { mutableStateOf(store.continueWatching()) }
+    var movies by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+    var tvShows by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+    var updateInfo by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
+    var updateStatus by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        movies = TmdbClient.popularMovies()
+        tvShows = TmdbClient.popularTv()
+        UpdateManager.checkForUpdate(currentVersion) { updateInfo = it }
+    }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0E1116)),
+    ) {
+        Column {
+            // ---------- Верхняя панель ----------
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 32.dp, vertical = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Button(onClick = onOpenSearch) {
+                        Icon(Icons.Filled.Search, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Поиск")
+                    }
+                    Spacer(Modifier.width(24.dp))
+                    Text(
+                        text = "TorrentTV",
+                        color = Color(0xFF4FC3F7),
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                Text(
+                    text = "v$currentVersion",
+                    color = Color.White.copy(alpha = 0.4f),
+                    fontSize = 14.sp,
+                )
+            }
+
+            if (!TmdbClient.isConfigured) {
+                Text(
+                    text = "⚠ Ключ TMDB не задан: каталоги пусты. Добавьте tmdbApiKey в gradle.properties.",
+                    color = Color(0xFFFFD54F),
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(horizontal = 32.dp),
+                )
+            }
+
+            // ---------- Каталоги ----------
+            LazyColumn(Modifier.fillMaxSize()) {
+                if (progress.isNotEmpty()) {
+                    item {
+                        MediaRow(
+                            title = "Продолжить просмотр",
+                            items = progress.map { it.item },
+                            onClick = onOpenDetails,
+                        )
+                    }
+                }
+                item {
+                    MediaRow(
+                        title = "Избранное",
+                        items = favorites,
+                        onClick = onOpenDetails,
+                        emptyText = "Пока пусто — добавьте фильмы из карточки (☆)",
+                    )
+                }
+                item {
+                    MediaRow("Популярные фильмы", movies, onOpenDetails)
+                }
+                item {
+                    MediaRow("Популярные сериалы", tvShows, onOpenDetails)
+                }
+                item { Spacer(Modifier.height(24.dp)) }
+            }
+        }
+
+        // ---------- Оверлей обновления ----------
+        updateInfo?.let { info ->
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 24.dp),
+                color = Color(0xFF1B2A38),
+            ) {
+                Row(
+                    modifier = Modifier.padding(20.dp, 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = "Доступно обновление v${info.version}",
+                            color = Color.White,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        if (updateStatus.isNotBlank()) {
+                            Text(updateStatus, color = Color(0xFFFFD54F), fontSize = 13.sp)
+                        }
+                    }
+                    Button(onClick = {
+                        UpdateManager.downloadAndInstall(
+                            context,
+                            info,
+                            onProgress = { updateStatus = it },
+                            onError = { updateStatus = it },
+                        )
+                    }) {
+                        Text("Обновить")
+                    }
+                }
+            }
+        }
+    }
+}

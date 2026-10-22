@@ -12,7 +12,9 @@ android {
         minSdk = 21          // Android 5.0 — покрывает почти все Android TV
         targetSdk = 34
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "0.2.0"
+        // Ключ TMDB задаётся в gradle.properties: tmdbApiKey=...
+        buildConfigField("String", "TMDB_API_KEY", "\"${findProperty("tmdbApiKey") ?: ""}\"")
     }
 
     buildTypes {
@@ -50,6 +52,10 @@ dependencies {
     implementation("androidx.compose.ui:ui:1.6.8")
     implementation("androidx.compose.ui:ui-tooling-preview:1.6.8")
     implementation("androidx.compose.foundation:foundation:1.6.8")
+    implementation("androidx.compose.material:material-icons-core:1.6.8")
+
+    // Загрузка постеров
+    implementation("io.coil-kt:coil-compose:2.6.0")
 
     // Сеть (для поиска и TMDB — пригодится на следующем шаге)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
