@@ -41,9 +41,8 @@ android {
 }
 
 dependencies {
-    // Compose for TV
-    implementation("androidx.tv:tv-foundation:1.0.0-alpha11")
-    implementation("androidx.tv:tv-material:1.0.0-alpha11")
+    // Compose for TV (стабильная версия)
+    implementation("androidx.tv:tv-material:1.0.0")
 
     // Compose базовый
     implementation("androidx.core:core-ktx:1.13.1")
