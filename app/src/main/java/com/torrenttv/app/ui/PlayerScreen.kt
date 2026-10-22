@@ -29,12 +29,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem as ExoMediaItem
+import androidx.media3.datasource.DataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Button
 import androidx.tv.material3.Text
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
+import com.torrenttv.app.torrent.TorrentDataSource
 import com.torrenttv.app.torrent.TorrentEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -42,7 +45,8 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * Экран просмотра: скачивание торрента с прогрессом, затем ExoPlayer.
+ * Экран просмотра: стриминг торрента по кускам (последовательная загрузка),
+ * буферизация первых мегабайт, затем ExoPlayer поверх недокачанного файла.
  * Позиция просмотра сохраняется каждые 5 секунд в «Продолжить просмотр».
  */
 @Composable
@@ -52,29 +56,50 @@ fun PlayerScreen(item: MediaItem, onBack: () -> Unit) {
     val magnet = remember { store.getMagnet(item) }
 
     var status by remember { mutableStateOf(if (magnet == null) "Нет magnet-ссылки" else "Подготовка…") }
-    var progress by remember { mutableStateOf(0) }
-    var videoFile by remember { mutableStateOf<File?>(null) }
+    var bufferedPct by remember { mutableStateOf(0) }
+    var stream by remember { mutableStateOf<TorrentEngine.StreamSession?>(null) }
 
     LaunchedEffect(magnet) {
-        if (magnet != null && videoFile == null) {
-            val f = withContext(Dispatchers.IO) {
-                TorrentEngine.downloadLargestVideo(
-                    source = magnet,
-                    saveDir = File(context.filesDir, "downloads/" + item.storeKey),
-                    onStatus = { status = it },
-                    onProgress = { progress = it },
-                )
-            }
-            videoFile = f
-            if (f == null) status = "Не удалось загрузить видео"
+        if (magnet == null) return@LaunchedEffect
+        val st = withContext(Dispatchers.IO) {
+            TorrentEngine.startStream(
+                source = magnet,
+                saveDir = File(context.filesDir, "downloads/" + item.storeKey),
+                onStatus = { status = it },
+            )
         }
+        if (st == null) {
+            status = "Не удалось начать стриминг"
+            return@LaunchedEffect
+        }
+        stream = st
+
+        // Перемотка в середину: поднимаем приоритет кусков вокруг позиции продолжения
+        val watching = withContext(Dispatchers.IO) {
+            store.continueWatching().firstOrNull { it.item.storeKey == item.storeKey }
+        }
+        val resumeSec = watching?.positionSec ?: 0
+        val durationSec = watching?.durationSec ?: 0
+        if (resumeSec > 30 && durationSec > 0) {
+            withContext(Dispatchers.IO) {
+                st.boostPiecesAround(st.fileOffset + st.fileSize * resumeSec / durationSec)
+            }
+        }
+
+        // Порог старта: 4 МБ или ~3% файла (чтобы плеер прочитал заголовки/индекс)
+        val threshold = maxOf(4L * 1024 * 1024, st.fileSize / 33)
+        while (st.headBytes() < threshold) {
+            bufferedPct = ((st.headBytes() * 100) / threshold).toInt().coerceIn(0, 100)
+            delay(500)
+        }
+        bufferedPct = 100
     }
 
-    val file = videoFile
-    if (file != null) {
-        VideoPlayer(file = file, item = item, store = store, onBack = onBack)
+    val st = stream
+    if (st != null && bufferedPct >= 100) {
+        VideoPlayer(stream = st, item = item, store = store, onBack = onBack)
     } else {
-        // Экран загрузки
+        // Экран буферизации
         BackHandler { onBack() }
         Column(
             Modifier
@@ -88,7 +113,7 @@ fun PlayerScreen(item: MediaItem, onBack: () -> Unit) {
             Spacer(Modifier.height(16.dp))
             Text(status, color = Color(0xFFF5B942), fontSize = 18.sp)
 
-            if (progress > 0 && progress < 100) {
+            if (bufferedPct > 0 && bufferedPct < 100) {
                 Spacer(Modifier.height(16.dp))
                 // Прогресс-бар (D-pad friendly, без Material-зависимостей)
                 Box(
@@ -99,13 +124,13 @@ fun PlayerScreen(item: MediaItem, onBack: () -> Unit) {
                 ) {
                     Box(
                         Modifier
-                            .fillMaxWidth(progress / 100f)
+                            .fillMaxWidth(bufferedPct / 100f)
                             .height(10.dp)
                             .background(Color(0xFFF5B942)),
                     )
                 }
                 Spacer(Modifier.height(8.dp))
-                Text("$progress%", color = Color.White.copy(alpha = 0.7f), fontSize = 16.sp)
+                Text("Буферизация: $bufferedPct%", color = Color.White.copy(alpha = 0.7f), fontSize = 16.sp)
             }
 
             Spacer(Modifier.height(24.dp))
@@ -115,21 +140,31 @@ fun PlayerScreen(item: MediaItem, onBack: () -> Unit) {
 }
 
 @Composable
-private fun VideoPlayer(file: File, item: MediaItem, store: LocalStore, onBack: () -> Unit) {
+private fun VideoPlayer(
+    stream: TorrentEngine.StreamSession,
+    item: MediaItem,
+    store: LocalStore,
+    onBack: () -> Unit,
+) {
     val context = LocalContext.current
 
     val resumeSec = remember {
         store.continueWatching().firstOrNull { it.item.storeKey == item.storeKey }?.positionSec ?: 0
     }
 
-    val player = remember {
+    val player = remember(stream) {
         ExoPlayer.Builder(context)
             // Перемотка стрелками пульта: ±10 секунд
             .setSeekBackIncrementMs(10_000L)
             .setSeekForwardIncrementMs(10_000L)
             .build()
             .apply {
-                setMediaItem(ExoMediaItem.fromUri(Uri.fromFile(file)))
+                // Стриминг: ExoPlayer читает недокачанный файл через TorrentDataSource,
+                // который дожидается нужных кусков последовательной загрузки
+                val dataSourceFactory = DataSource.Factory { TorrentDataSource(stream) }
+                val mediaSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                    .createMediaSource(ExoMediaItem.fromUri(Uri.parse("torrent://stream/" + item.storeKey)))
+                setMediaSource(mediaSource)
                 prepare()
                 playWhenReady = true
                 if (resumeSec > 5) seekTo(resumeSec * 1000L)
@@ -167,8 +202,9 @@ private fun VideoPlayer(file: File, item: MediaItem, store: LocalStore, onBack: 
     DisposableEffect(player) {
         onDispose {
             player.release()
-            // Политика хранения: удаляем скачанное после просмотра
-            runCatching { file.parentFile?.deleteRecursively() }
+            // Политика хранения: удаляем скачанное после просмотра и гасим торрент
+            stream.stop()
+            runCatching { stream.saveDir.deleteRecursively() }
         }
     }
 
