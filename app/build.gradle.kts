@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId = "com.torrenttv.app"
-        minSdk = 21          // Android 5.0 — покрывает почти все Android TV
+        minSdk = 29          // Android 10 — минимальная версия Android TV по требованию
         targetSdk = 34
         versionCode = 1
         versionName = "0.2.0"
