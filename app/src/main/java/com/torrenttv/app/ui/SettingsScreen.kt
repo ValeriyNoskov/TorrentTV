@@ -43,6 +43,7 @@ import com.torrenttv.app.data.OnlineService
 import com.torrenttv.app.data.PrivateTrackers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -603,6 +604,7 @@ private data class NetCheckRow(val name: String, val hint: String, val ok: Boole
 private fun NetCheckScreen(onClose: () -> Unit) {
     var rows by remember { mutableStateOf<List<NetCheckRow>>(emptyList()) }
     var running by remember { mutableStateOf(false) }
+    var done by remember { mutableStateOf(0) }
     var uploadState by remember { mutableStateOf("") }
     var uploadUrl by remember { mutableStateOf("") }
     var uploading by remember { mutableStateOf(false) }
@@ -610,6 +612,7 @@ private fun NetCheckScreen(onClose: () -> Unit) {
     suspend fun checkAll() {
         running = true
         rows = emptyList()
+        com.torrenttv.app.data.AppLog.log("netcheck", "start")
         val targets = listOf(
             "apibay (торренты)" to "https://apibay.org/q.php?q=test&cat=201",
             "Torrentio (торренты)" to "https://torrentio.strem.fun/stream/movie/tt0133093.json",
@@ -620,23 +623,34 @@ private fun NetCheckScreen(onClose: () -> Unit) {
             "IPTV-плейлист (ТВ)" to "https://iptv-org.github.io/iptv/countries/ru.m3u",
             "GitHub (обновления)" to "https://api.github.com/repos/ValeriyNoskov/TorrentTV/releases/latest",
         )
-        for ((name, url) in targets) {
-            val t0 = System.currentTimeMillis()
-            val ok = withContext(Dispatchers.IO) {
-                runCatching {
-                    com.torrenttv.app.data.TorrentHttp.client.newCall(
-                        okhttp3.Request.Builder().url(url)
-                            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+        done = 0
+        // Параллельно: каждый источник с жёстким таймаутом 8 сек, строки
+        // появляются по мере готовности — экран не «зависает»
+        coroutineScope {
+            for ((name, url) in targets) {
+                launch {
+                    val t0 = System.currentTimeMillis()
+                    val ok = withContext(Dispatchers.IO) {
+                        // Отдельный клиент: callTimeout 8 сек — не ждать блокированный хост по 30 сек
+                        val shortClient = com.torrenttv.app.data.TorrentHttp.client.newBuilder()
+                            .callTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
                             .build()
-                    ).execute().use { it.isSuccessful }
-                }.getOrDefault(false)
+                        runCatching {
+                            shortClient.newCall(
+                                okhttp3.Request.Builder().url(url)
+                                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                                    .build()
+                            ).execute().use { it.isSuccessful }
+                        }.getOrDefault(false)
+                    }
+                    val row = NetCheckRow(name, url.substringAfter("//").substringBefore("/"), ok, System.currentTimeMillis() - t0)
+                    rows = rows + row
+                    done++
+                    com.torrenttv.app.data.AppLog.log("netcheck", "$name: ${if (ok) "OK" else "FAIL"} (${row.ms} ms)")
+                }
             }
-            rows = rows + NetCheckRow(name, url.substringAfter("//").substringBefore("/"), ok, System.currentTimeMillis() - t0)
-            com.torrenttv.app.data.AppLog.log(
-                "netcheck",
-                "$name: ${if (ok) "OK" else "FAIL"} (${System.currentTimeMillis() - t0} ms)",
-            )
         }
+        com.torrenttv.app.data.AppLog.log("netcheck", "done: ok=${rows.count { it.ok == true }}/${rows.size}")
         running = false
     }
 
@@ -704,8 +718,12 @@ private fun NetCheckScreen(onClose: () -> Unit) {
         }
         Spacer(Modifier.height(10.dp))
         Text(
-            if (running) "Проверяю…" else if (rows.size < 8) "" else "Проверка завершена",
-            color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp,
+            when {
+                running -> "Проверяю… $done из 8"
+                rows.size < 8 -> ""
+                else -> "Проверка завершена: доступно ${rows.count { it.ok == true }} из ${rows.size}"
+            },
+            color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp,
         )
         Spacer(Modifier.height(14.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -808,6 +826,33 @@ private fun sendLogToPastebin(): String {
             if (resp.isSuccessful) {
                 val u = resp.body?.string()?.trim().orEmpty()
                 if (u.startsWith("http")) return u
+            }
+        }
+    }
+
+    // 4) tmpfiles.org: multipart, ответ JSON {"data":{"url":...}}
+    runCatching {
+        val body = okhttp3.MultipartBody.Builder()
+            .setType(okhttp3.MultipartBody.FORM)
+            .addFormDataPart(
+                "file", "log.txt",
+                okhttp3.RequestBody.create(null, content),
+            )
+            .build()
+        client.newCall(
+            okhttp3.Request.Builder()
+                .url("https://tmpfiles.org/api/v1/upload")
+                .post(body)
+                .build()
+        ).execute().use { resp ->
+            if (resp.isSuccessful) {
+                val u = resp.body?.string().orEmpty()
+                val match = Regex("\"url\"\\s*:\\s*\"([^\"]+)\"").find(u)
+                val direct = match?.groupValues?.get(1)
+                if (direct != null && direct.startsWith("http")) {
+                    // tmpfiles отдаёт страницу просмотра — прямой файл: dl.tmpfiles.org
+                    return direct.replace("tmpfiles.org/", "tmpfiles.org/dl/")
+                }
             }
         }
     }
