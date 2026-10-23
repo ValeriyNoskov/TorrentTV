@@ -473,6 +473,7 @@ fun OnlinePlayerScreen(link: OnlineService.OnlineLink, title: String, onBack: ()
             .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
             .apply { if (referer.isNotBlank()) setDefaultRequestProperties(mapOf("Referer" to referer)) }
             .setConnectTimeoutMs(15_000)
+            .setReadTimeoutMs(if (link.label == "torrserve") 60_000 else 15_000)
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(httpFactory))
             .build()

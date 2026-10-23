@@ -83,11 +83,18 @@ fun PlayerScreen(item: MediaItem, episode: com.torrenttv.app.data.Episode? = nul
                 else com.torrenttv.app.data.TorrServeService.bestVideo(t)
             }
             if (ts != null && file != null) {
-                com.torrenttv.app.data.AppLog.log("player", "torrserve: ok hash=${ts.hash} file=\"${file.path}\"")
-                torrLink = com.torrenttv.app.data.TorrServeService.streamUrl(tsHost, ts.hash, file)
-                return@LaunchedEffect
+                val buffered = withContext(Dispatchers.IO) {
+                    com.torrenttv.app.data.TorrServeService.preloadFile(tsHost, ts.hash, file) { s -> status = s }
+                }
+                com.torrenttv.app.data.AppLog.log("player", "torrserve: ok hash=${ts.hash} file=\"${file.path}\" buffered=$buffered")
+                if (buffered) {
+                    torrLink = com.torrenttv.app.data.TorrServeService.streamUrl(tsHost, ts.hash, file)
+                    return@LaunchedEffect
+                }
+                com.torrenttv.app.data.AppLog.log("player", "torrserve: no buffer, fallback to internal engine")
+            } else {
+                com.torrenttv.app.data.AppLog.log("player", "torrserve: failed, fallback to internal engine")
             }
-            com.torrenttv.app.data.AppLog.log("player", "torrserve: failed, fallback to internal engine")
         }
 
         com.torrenttv.app.data.AppLog.log("player", "startStream: ${magnet.take(90)}")

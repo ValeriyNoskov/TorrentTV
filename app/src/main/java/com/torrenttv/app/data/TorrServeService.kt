@@ -161,6 +161,8 @@ object TorrServeService {
             title = o.optString("title", o.optString("name", "")),
             stat = o.optInt("stat", 0),
             peers = o.optInt("total_peers", 0),
+            preloadedBytes = o.optLong("preloaded_bytes", 0),
+            preloadSize = o.optLong("preload_size", 0),
             files = files,
         )
     }
@@ -170,8 +172,52 @@ object TorrServeService {
         val title: String,
         val stat: Int = 0,
         val peers: Int = 0,
+        val preloadedBytes: Long = 0,
+        val preloadSize: Long = 0,
         val files: List<TSFile>,
     )
+
+    /**
+     * Префетч начала файла перед стримом (как родной клиент TorrServe):
+     * держим preload-соединение на нужном index и ждём, пока сервер докачает
+     * первые мегабайты — иначе плеер открывается на пустом файле (00:00).
+     */
+    fun preloadFile(
+        host: String,
+        hash: String,
+        file: TSFile,
+        timeoutMs: Long = 90_000L,
+        onStatus: (String) -> Unit = {},
+    ): Boolean {
+        val name = file.path.substringAfterLast('/')
+        Thread {
+            runCatching {
+                client().newCall(
+                    Request.Builder()
+                        .url("$host/stream/${URLEncoder.encode(name, "UTF-8")}?link=$hash&index=${file.id}&preload")
+                        .build()
+                ).execute().use { it.body?.bytes() }
+            }
+        }.apply { isDaemon = true }.start()
+
+        // Порог: 4 МБ или 5% файла (меньше нельзя — плееру нужны заголовки/индекс)
+        val threshold = minOf(4L * 1024 * 1024, maxOf(256L * 1024, file.length / 20))
+        val deadline = System.currentTimeMillis() + timeoutMs
+        var lastProgress = -1L
+        var stalled = 0
+        while (System.currentTimeMillis() < deadline) {
+            Thread.sleep(1500)
+            val t = get(host, hash) ?: continue
+            val pb = t.preloadedBytes
+            onStatus("Буферизация TorrServe… ${pb / 1024 / 1024} МБ из ~${threshold / 1024 / 1024}")
+            if (pb >= threshold) return true
+            // Нет прогресса 4 замера подряд — скорость нулевая, выходим раньше
+            stalled = if (pb > lastProgress) 0 else stalled + 1
+            lastProgress = pb
+            if (stalled >= 4 && pb > 0) return pb >= threshold
+        }
+        return false
+    }
 
     /** Лучший видеофайл: самый крупный с видео-расширением; иначе просто самый крупный. */
     fun bestVideo(t: TSTorrent): TSFile? {

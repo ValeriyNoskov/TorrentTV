@@ -180,12 +180,17 @@ fun SmartPlayScreen(
             val ts = TorrServeService.addMagnet(tsHost, magnet, item.title) { status = it }
             val file = ts?.let { TorrServeService.bestVideo(it) }
             if (ts != null && file != null) {
-                com.torrenttv.app.data.AppLog.log("smart", "torrserve: ok hash=${ts.hash} file=\"${file.path}\"")
-                done = true
-                onPlayOnline(OnlineService.OnlineLink(url = TorrServeService.streamUrl(tsHost, ts.hash, file), label = "torrserve"))
-                return@LaunchedEffect
+                val buffered = TorrServeService.preloadFile(tsHost, ts.hash, file) { status = it }
+                com.torrenttv.app.data.AppLog.log("smart", "torrserve: ok hash=${ts.hash} file=\"${file.path}\" buffered=$buffered")
+                if (buffered) {
+                    done = true
+                    onPlayOnline(OnlineService.OnlineLink(url = TorrServeService.streamUrl(tsHost, ts.hash, file), label = "torrserve"))
+                    return@LaunchedEffect
+                }
+                com.torrenttv.app.data.AppLog.log("smart", "torrserve: no buffer, fallback to internal engine")
+            } else {
+                com.torrenttv.app.data.AppLog.log("smart", "torrserve: failed, fallback to internal engine")
             }
-            com.torrenttv.app.data.AppLog.log("smart", "torrserve: failed, fallback to internal engine")
         }
 
         store.saveMagnet(item, magnet, "")
