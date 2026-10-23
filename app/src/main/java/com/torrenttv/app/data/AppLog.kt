@@ -34,6 +34,7 @@ object AppLog {
             while (buf.size > MAX_LINES) buf.removeFirst()
         }
         runCatching { file().appendText(line + "\n") }
+        runCatching { android.util.Log.i("VNosKino", "$tag: $msg") }
     }
 
     /** Полный dump: устройство + версия + лог + краши. */

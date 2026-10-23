@@ -19,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -60,6 +61,10 @@ fun DetailsScreen(
     var status by remember { mutableStateOf("") }
     var similar by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var menu by remember { mutableStateOf(false) }
+    val watchFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(Unit) {
+        runCatching { watchFocus.requestFocus() }
+    }
 
     LaunchedEffect(item) {
         similar = withContext(Dispatchers.IO) { MediaApi.similar(item) }
@@ -119,17 +124,22 @@ fun DetailsScreen(
                 Spacer(Modifier.height(20.dp))
 
                 // Zona-стиль: одна главная кнопка «Смотреть» (приложение само
-                // решает — онлайн или торрент), ручной онлайн и меню «Ещё»
+                // решает — онлайн или торрент), ручной онлайн и меню «Ещё».
+                // Фокус при входе — сразу на «Смотреть»: иначе он улетает на
+                // «Назад» внизу и ОК на пульте закрывает карточку.
                 Row {
-                    Button(onClick = {
-                        if (magnet) {
-                            // Фиксируем начало просмотра и открываем плеер
-                            store.saveProgress(item, positionSec = 0, durationSec = 0)
-                            onWatch()
-                        } else {
-                            onWatchSmart()
-                        }
-                    }) { Text("▶ Смотреть") }
+                    Button(
+                        onClick = {
+                            if (magnet) {
+                                // Фиксируем начало просмотра и открываем плеер
+                                store.saveProgress(item, positionSec = 0, durationSec = 0)
+                                onWatch()
+                            } else {
+                                onWatchSmart()
+                            }
+                        },
+                        modifier = Modifier.focusRequester(watchFocus),
+                    ) { Text("▶ Смотреть") }
                     Spacer(Modifier.width(16.dp))
                     Button(onClick = onOnline) { Text("🌐 Онлайн") }
                     Spacer(Modifier.width(16.dp))

@@ -112,6 +112,21 @@ object TorrentEngine {
      *        нужной серии в пачке сезона (S01E05); если не сработал — берётся
      *        самый большой видеофайл
      */
+    /**
+     * Дополнить magnet публичными трекерами, если своих нет: DHT при холодном
+     * старте сессии не успевает за таймаут, трекеры дают пиры напрямую.
+     */
+    private fun enrichMagnet(source: String): String {
+        if (!source.startsWith("magnet:") || source.contains("&tr=")) return source
+        return buildString {
+            append(source.trimEnd('&'))
+            for (t in com.torrenttv.app.data.TorrentSearch.TRACKERS) {
+                append("&tr=")
+                append(java.net.URLEncoder.encode(t, "UTF-8"))
+            }
+        }
+    }
+
     fun startStream(
         source: String,
         saveDir: File,
@@ -124,11 +139,35 @@ object TorrentEngine {
         onStatus("Получение метаданных…")
         val bytes: ByteArray? = try {
             when {
-                source.startsWith("magnet:") -> session.fetchMagnet(source, 60, saveDir)
+                source.startsWith("magnet:") -> {
+                    val enriched = enrichMagnet(source)
+                    com.torrenttv.app.data.AppLog.log(
+                        "player",
+                        "fetchMagnet: trackers added=${enriched != source}, timeout=90s",
+                    )
+                    // Живой статус: поиск метаданных занимает обычно 10-30 сек,
+                    // без обратной связи экран выглядит зависшим
+                    val t0 = System.currentTimeMillis()
+                    val ticker = Thread {
+                        while (System.currentTimeMillis() - t0 < 90_000) {
+                            try { Thread.sleep(5000) } catch (_: InterruptedException) { return@Thread }
+                            val sec = (System.currentTimeMillis() - t0) / 1000
+                            onStatus("Ищу источники фильма… $sec сек")
+                        }
+                    }
+                    ticker.isDaemon = true
+                    ticker.start()
+                    try {
+                        session.fetchMagnet(enriched, 90, saveDir)
+                    } finally {
+                        ticker.interrupt()
+                    }
+                }
                 source.startsWith("http") -> URL(source).readBytes()
                 else -> File(source).readBytes()
             }
         } catch (e: Exception) {
+            com.torrenttv.app.data.AppLog.log("player", "fetchMagnet error: ${e.message}")
             null
         }
         if (bytes == null) {
@@ -233,7 +272,7 @@ object TorrentEngine {
         onStatus("Получение метаданных…")
         val bytes: ByteArray? = try {
             when {
-                source.startsWith("magnet:") -> session.fetchMagnet(source, 60, saveDir)
+                source.startsWith("magnet:") -> session.fetchMagnet(enrichMagnet(source), 90, saveDir)
                 source.startsWith("http") -> URL(source).readBytes()
                 else -> File(source).readBytes()
             }
