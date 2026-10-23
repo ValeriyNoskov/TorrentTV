@@ -55,9 +55,9 @@ object MediaApi {
     fun popularTv(page: Int = 1): List<MediaItem> =
         src({ KinopoiskClient.popularTv(page) }, { TmdbClient.popularTv(page) }, { RutrackerrCatalog.popularTv(page) })
 
-    /** Шоу (реалити, ток-шоу, ТВ-передачи): КП TV_SHOW → TMDB реалити → Рутрекер сериалы. */
+    /** Шоу (реалити, ток-шоу, ТВ-передачи): КП TV_SHOW → TMDB реалити → Рутрекер (фильтр по названию). */
     fun popularShows(page: Int = 1): List<MediaItem> =
-        src({ KinopoiskClient.popularShows(page) }, { TmdbClient.popularShows(page) }, { RutrackerrCatalog.popularTv(page) })
+        src({ KinopoiskClient.popularShows(page) }, { TmdbClient.popularShows(page) }, { RutrackerrCatalog.popularShows(page) })
 
     fun topRatedMovies(page: Int = 1): List<MediaItem> =
         src({ KinopoiskClient.topRatedMovies(page) }, { TmdbClient.topRatedMovies(page) }, { RutrackerrCatalog.popularMovies(page) })

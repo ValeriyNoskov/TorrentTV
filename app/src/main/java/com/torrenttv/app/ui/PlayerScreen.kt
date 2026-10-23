@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -434,8 +435,8 @@ private fun VideoPlayer(
     var speedIdx by remember { mutableStateOf(1) }
 
     // ---------- Панель «как MX»: показывается при действии пульта ----------
-    var panelTick by remember { mutableStateOf(0) }
-    var showPanel by remember { mutableStateOf(false) }
+    var panelTick by remember { mutableStateOf(1) }   // панель видна сразу при входе
+    var showPanel by remember { mutableStateOf(true) }
     val playFocus = remember { FocusRequester() }
     LaunchedEffect(panelTick) {
         if (panelTick > 0 && !showFiles && !showGear && !showTrackMenu) {
@@ -446,37 +447,58 @@ private fun VideoPlayer(
     }
     LaunchedEffect(showPanel) { if (showPanel) playFocus.requestFocus() }
 
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    // Единый обработчик кнопок пульта — вызывается и из Compose-перехвата
+    // (onPreviewKeyEvent на Box), и из PlayerView: панель появляется при
+    // ЛЮБОЙ кнопке, независимо от того, где фокус
+    fun handleRemoteKey(keyCode: Int): Boolean = when (keyCode) {
+        KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+            val delta = if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) 10_000L else -10_000L
+            val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
+            player.seekTo((player.currentPosition + delta).coerceIn(0L, dur))
+            seekInfo = if (delta > 0) "⏩ +10 сек" else "⏪ −10 сек"
+            panelTick++
+            true
+        }
+        KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
+        KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+            if (player.isPlaying) player.pause() else player.play()
+            seekInfo = if (player.isPlaying) "▶ Продолжаем" else "⏸ Пауза"
+            panelTick++
+            true
+        }
+        KeyEvent.KEYCODE_MEDIA_PLAY -> {
+            player.play(); panelTick++; true
+        }
+        KeyEvent.KEYCODE_MEDIA_PAUSE -> {
+            player.pause(); panelTick++; true
+        }
+        KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { player.seekTo(player.currentPosition + 30_000L); seekInfo = "⏩ +30 сек"; panelTick++; true }
+        KeyEvent.KEYCODE_MEDIA_REWIND -> { player.seekTo((player.currentPosition - 30_000L).coerceAtLeast(0)); seekInfo = "⏪ −30 сек"; panelTick++; true }
+        KeyEvent.KEYCODE_MENU -> { showTrackMenu = !showTrackMenu; true }
+        else -> false
+    }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .onPreviewKeyEvent { e ->
+                // Панель «как MX» реагирует на пульт при любом фокусе
+                if (e.nativeKeyEvent.action == android.view.KeyEvent.ACTION_UP) handleRemoteKey(e.nativeKeyEvent.keyCode)
+                else false
+            },
+    ) {
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
                     this.player = player
                     // Нативные контролы выключены — своя панель «как MX»
                     useController = false
+                    isFocusable = true
+                    requestFocus()
                     setOnKeyListener { _, keyCode, event ->
                         if (event.action != KeyEvent.ACTION_UP) return@setOnKeyListener false
-                        when (keyCode) {
-                            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                                val delta = if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) 10_000L else -10_000L
-                                val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
-                                player.seekTo((player.currentPosition + delta).coerceIn(0L, dur))
-                                seekInfo = if (delta > 0) "⏩ +10 сек" else "⏪ −10 сек"
-                                panelTick++
-                                true
-                            }
-                            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
-                            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
-                                if (player.isPlaying) player.pause() else player.play()
-                                seekInfo = if (player.isPlaying) "▶ Продолжаем" else "⏸ Пауза"
-                                panelTick++
-                                true
-                            }
-                            KeyEvent.KEYCODE_MENU -> {
-                                showTrackMenu = !showTrackMenu
-                                true
-                            }
-                            else -> false
-                        }
+                        handleRemoteKey(keyCode)
                     }
                 }
             },

@@ -25,6 +25,13 @@ object RutrackerrCatalog {
     /** Сериалы. */
     fun popularTv(page: Int = 1): List<MediaItem> = category("$BASE/serialy/", page)
 
+    /** Шоу (реалити, ток-шоу): отдельного раздела на сайте нет —
+     *  отбираем по названию из сериалов; может быть узким или пустым. */
+    fun popularShows(page: Int = 1): List<MediaItem> =
+        category("$BASE/serialy/", page).filter {
+            Regex("(?i)шоу|реалити|ток-|выживани|голос|битва|маска|фабрик|звёзд|звезд|проект").containsMatchIn(it.title)
+        }
+
     /** Поиск: AJAX сайта возвращает список раздач — группируем по названиям. */
     fun search(query: String): List<MediaItem> {
         val html = TorrentHttp.postForm(
@@ -37,6 +44,7 @@ object RutrackerrCatalog {
         // только название, magnet и сиды/пиры. Группируем по названию фильма.
         val rows = html.split("<tr>")
         val seen = mutableSetOf<String>()
+        val isTvByKey = mutableMapOf<String, Boolean>()
         val items = mutableListOf<MediaItem>()
         for (r in rows) {
             val name = Regex("""<td><b>([^<]{4,})</b></td>""").find(r)?.groupValues?.get(1)?.trim() ?: continue
@@ -50,9 +58,13 @@ object RutrackerrCatalog {
             val q = query.lowercase().replace('ё', 'е').trim()
             if (title.length < 2 || !seen.add(key)) continue
             if (!key.contains(q)) continue
+            // Сериал? S01E05, 1x05, [01x01-08], «Сезон 1», «Серии» в названии
+            val tv = isTvByKey.getOrPut(key) {
+                Regex("""(?i)[sс]\d{1,2}[eеxх]\d{1,3}|\[\d{2}x\d{2}|сезон|сери[ияя]""").containsMatchIn(name)
+            }
             items += MediaItem(
                 id = kotlin.math.abs(("rt-" + key).hashCode()),
-                type = "movie",
+                type = if (tv) "tv" else "movie",
                 title = title,
                 year = year,
                 posterUrl = "",
