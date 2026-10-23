@@ -62,6 +62,7 @@ fun SmartPlayScreen(
     LaunchedEffect(item) {
         if (done) return@LaunchedEffect
         val query = item.originalTitle.ifBlank { item.title }
+        com.torrenttv.app.data.AppLog.log("smart", "start: \"${item.title}\" ($query, ${item.type}, imdb=${item.imdbId})")
 
         // ---- Шаг 1: онлайн (HDRezka) ----
         val cards = withContext(Dispatchers.IO) {
@@ -89,10 +90,12 @@ fun SmartPlayScreen(
         }
 
         if (fxCard != null) {
+            com.torrenttv.app.data.AppLog.log("smart", "filmix: card ${fxCard.filmixId} \"${fxCard.title}\"")
             status = "Нашёл в Filmix — получаю ссылки…"
             val links = withContext(Dispatchers.IO) {
                 runCatching { OnlineService.playerData(store.filmixToken(), fxCard.filmixId) }.getOrDefault(emptyList())
             }
+            com.torrenttv.app.data.AppLog.log("smart", "filmix: links=${links.size}")
             if (links.isNotEmpty()) {
                 done = true
                 onPlayOnline(OnlineService.bestOf(links) ?: links.first())
@@ -108,11 +111,13 @@ fun SmartPlayScreen(
         } ?: cards.firstOrNull()
 
         if (rzCard != null) {
+            com.torrenttv.app.data.AppLog.log("smart", "rezka: card \"${rzCard.title}\" serial=${rzCard.isSerial}")
             status = "Пробую HDRezka…"
             if (!rzCard.isSerial) {
                 val links = withContext(Dispatchers.IO) {
                     runCatching { RezkaService.streams(rzCard) }.getOrDefault(emptyList())
                 }
+                com.torrenttv.app.data.AppLog.log("smart", "rezka: links=${links.size}")
                 if (links.isNotEmpty()) {
                     done = true
                     onPlayOnline(OnlineService.bestOf(links) ?: links.first())
@@ -144,6 +149,7 @@ fun SmartPlayScreen(
         }
         detail = "Онлайн: ${if (fxCard == null && cards.isEmpty()) "не найдено" else "нет ссылок"} · " +
             stats.joinToString(" · ") { it.label() }
+        com.torrenttv.app.data.AppLog.log("smart", "torrent: found=${found.size} $detail")
 
         if (found.isEmpty()) {
             status = "Ничего не нашлось: онлайн и торренты недоступны. " +
@@ -151,6 +157,7 @@ fun SmartPlayScreen(
             return@LaunchedEffect
         }
         val best = bestTorrent(found)
+        com.torrenttv.app.data.AppLog.log("smart", "torrent best: \"${best.name}\" seeds=${best.seeds}")
         status = "Раздача: ${best.name.take(60)} (${best.seeds} сидов) — запускаю…"
         store.saveMagnet(item, TorrentSearch.toMagnet(best), "")
         done = true

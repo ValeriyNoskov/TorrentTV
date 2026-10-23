@@ -128,6 +128,10 @@ fun OnlineScreen(item: MediaItem, onBack: () -> Unit, onPlay: (OnlineService.Onl
         // Rezka: ищем по обоим запросам, дедуп по url
         val rzCards = rz.distinctBy { it.url }.map { Card("rezka", rz = it) }
         cards = fxCards + rzCards
+        com.torrenttv.app.data.AppLog.log(
+            "online",
+            "\"${item.title}\": filmix=${fxCards.size} rezka=${rzCards.size} (token=${token.isNotBlank()})",
+        )
 
         // Автовыбор: совпадение по оригинальному/русскому названию и году
         val byTitle = { c: Card ->
@@ -159,6 +163,7 @@ fun OnlineScreen(item: MediaItem, onBack: () -> Unit, onPlay: (OnlineService.Onl
                 return@LaunchedEffect
             }
             val got = withContext(Dispatchers.IO) { RezkaService.streams(m) }
+            com.torrenttv.app.data.AppLog.log("online", "rezka movie: links=${got.size}")
             if (got.isNotEmpty()) {
                 links = got
             } else {
@@ -177,6 +182,10 @@ fun OnlineScreen(item: MediaItem, onBack: () -> Unit, onPlay: (OnlineService.Onl
         for (cand in queue) {
             val id = cand.fx?.filmixId ?: continue
             val info = withContext(Dispatchers.IO) { OnlineService.playerInfo(token, id) }
+            com.torrenttv.app.data.AppLog.log(
+                "online",
+                "filmix $id: links=${info.links.size} blocked=${info.allBlocked} hasField=${info.hasPlayerLinks}",
+            )
             if (info.links.isNotEmpty()) {
                 links = info.links
                 selectedSeason = info.links.filter { it.season > 0 }.minOfOrNull { it.season } ?: 0
@@ -220,6 +229,7 @@ fun OnlineScreen(item: MediaItem, onBack: () -> Unit, onPlay: (OnlineService.Onl
             else ->
                 "Не удалось получить ссылки — проверьте сеть или используйте торренты"
         }
+        com.torrenttv.app.data.AppLog.log("online", "empty: $status")
     }
 
     BackHandler { onBack() }

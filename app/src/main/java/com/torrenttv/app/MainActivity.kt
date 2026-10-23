@@ -66,6 +66,7 @@ sealed interface Screen {
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.torrenttv.app.data.AppLog.init(this)
         setContent {
             MaterialTheme {
                 App()

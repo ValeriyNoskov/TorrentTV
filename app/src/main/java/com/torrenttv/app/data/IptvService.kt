@@ -65,8 +65,10 @@ object IptvService {
             cache = parsed
             cacheTime = System.currentTimeMillis()
         }
-        return if (allGroups) parsed
+        val shown = if (allGroups) parsed
         else parsed.filter { it.group in SHOWN_GROUPS || it.group == FEDERAL_GROUP }
+        AppLog.log("iptv", "loaded: federal=${federal.size} main=${main.size} total=${parsed.size} shown=${shown.size}")
+        return shown
     }
 
     /**

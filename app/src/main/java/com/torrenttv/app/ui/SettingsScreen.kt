@@ -41,7 +41,9 @@ import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaApi
 import com.torrenttv.app.data.OnlineService
 import com.torrenttv.app.data.PrivateTrackers
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -601,6 +603,9 @@ private data class NetCheckRow(val name: String, val hint: String, val ok: Boole
 private fun NetCheckScreen(onClose: () -> Unit) {
     var rows by remember { mutableStateOf<List<NetCheckRow>>(emptyList()) }
     var running by remember { mutableStateOf(false) }
+    var uploadState by remember { mutableStateOf("") }
+    var uploadUrl by remember { mutableStateOf("") }
+    var uploading by remember { mutableStateOf(false) }
 
     suspend fun checkAll() {
         running = true
@@ -627,6 +632,10 @@ private fun NetCheckScreen(onClose: () -> Unit) {
                 }.getOrDefault(false)
             }
             rows = rows + NetCheckRow(name, url.substringAfter("//").substringBefore("/"), ok, System.currentTimeMillis() - t0)
+            com.torrenttv.app.data.AppLog.log(
+                "netcheck",
+                "$name: ${if (ok) "OK" else "FAIL"} (${System.currentTimeMillis() - t0} ms)",
+            )
         }
         running = false
     }
@@ -698,7 +707,112 @@ private fun NetCheckScreen(onClose: () -> Unit) {
             if (running) "Проверяю…" else if (rows.size < 8) "" else "Проверка завершена",
             color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp,
         )
+        Spacer(Modifier.height(14.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Button(
+                onClick = {
+                    if (!uploading) {
+                        uploading = true
+                        uploadState = "Отправляю лог…"
+                        uploadUrl = ""
+                        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                            val url = sendLogToPastebin()
+                            com.torrenttv.app.data.AppLog.log("upload", if (url.isNotBlank()) "sent -> $url" else "send FAILED")
+                            uploadUrl = url
+                            uploadState = if (url.isNotBlank()) "" else
+                                "Не удалось отправить (нет доступа к pastebin-сайтам)"
+                            uploading = false
+                        }
+                    }
+                },
+                enabled = !uploading,
+            ) { Text(if (uploading) "⏳ Отправляю…" else "📤 Отправить лог разработчику") }
+            if (uploadState.isNotBlank()) {
+                Spacer(Modifier.width(16.dp))
+                Text(uploadState, color = Color(0xFFF5B942), fontSize = 15.sp)
+            }
+        }
+        if (uploadUrl.isNotBlank()) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "Назовите разработчику этот адрес:",
+                color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp,
+            )
+            Text(
+                uploadUrl.trim(),
+                color = Color(0xFF8AB4F8), fontSize = 20.sp, fontWeight = FontWeight.Bold,
+            )
+        }
     }
+}
+
+/**
+ * Выложить лог на pastebin и вернуть URL. Приоритет: dpaste.org → paste.rs → 0x0.st.
+ */
+private fun sendLogToPastebin(): String {
+    val content = com.torrenttv.app.data.AppLog.dump().toByteArray(Charsets.UTF_8)
+    val client = com.torrenttv.app.data.TorrentHttp.client
+
+    // 1) dpaste.org: form-encoded, ответ — URL
+    runCatching {
+        val body = okhttp3.FormBody.Builder()
+            .add("content", String(content, Charsets.UTF_8))
+            .add("lexer", "_text")
+            .add("format", "url")
+            .add("expires", "2592000")
+            .build()
+        client.newCall(
+            okhttp3.Request.Builder()
+                .url("https://dpaste.org/api/")
+                .post(body)
+                .build()
+        ).execute().use { resp ->
+            if (resp.isSuccessful) {
+                val u = resp.body?.string()?.trim().orEmpty()
+                if (u.startsWith("http")) return u
+            }
+        }
+    }
+
+    // 2) paste.rs: тело запроса = содержимое, ответ — URL
+    runCatching {
+        client.newCall(
+            okhttp3.Request.Builder()
+                .url("https://paste.rs/")
+                .post(okhttp3.RequestBody.create(null, content))
+                .build()
+        ).execute().use { resp ->
+            if (resp.isSuccessful) {
+                val u = resp.body?.string()?.trim().orEmpty()
+                if (u.startsWith("http")) return u
+            }
+        }
+    }
+
+    // 3) 0x0.st: multipart
+    runCatching {
+        val body = okhttp3.MultipartBody.Builder()
+            .setType(okhttp3.MultipartBody.FORM)
+            .addFormDataPart(
+                "file", "log.txt",
+                okhttp3.RequestBody.create(null, content),
+            )
+            .build()
+        client.newCall(
+            okhttp3.Request.Builder()
+                .url("https://0x0.st/")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                .post(body)
+                .build()
+        ).execute().use { resp ->
+            if (resp.isSuccessful) {
+                val u = resp.body?.string()?.trim().orEmpty()
+                if (u.startsWith("http")) return u
+            }
+        }
+    }
+
+    return ""
 }
 
 

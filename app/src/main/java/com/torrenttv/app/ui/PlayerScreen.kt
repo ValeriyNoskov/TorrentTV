@@ -66,11 +66,15 @@ fun PlayerScreen(item: MediaItem, episode: com.torrenttv.app.data.Episode? = nul
 
     LaunchedEffect(magnet) {
         if (magnet == null) return@LaunchedEffect
+        com.torrenttv.app.data.AppLog.log("player", "startStream: ${magnet.take(90)}")
         val st = withContext(Dispatchers.IO) {
             TorrentEngine.startStream(
                 source = magnet,
                 saveDir = File(context.filesDir, "downloads/" + item.storeKey),
-                onStatus = { status = it },
+                onStatus = {
+                    status = it
+                    com.torrenttv.app.data.AppLog.log("player", "status: $it")
+                },
                 // В пачке сезона включаем файл нужной серии
                 fileMatcher = episode?.let { ep ->
                     { name: String -> com.torrenttv.app.data.Episode.fileMatches(name, ep.season, ep.episode) }
@@ -78,9 +82,14 @@ fun PlayerScreen(item: MediaItem, episode: com.torrenttv.app.data.Episode? = nul
             )
         }
         if (st == null) {
+            com.torrenttv.app.data.AppLog.log("player", "startStream FAILED (null)")
             status = "Не удалось начать стриминг"
             return@LaunchedEffect
         }
+        com.torrenttv.app.data.AppLog.log(
+            "player",
+            "started: file=\"${st.videoFile.name}\" size=${st.fileSize}",
+        )
         stream = st
 
         // Перемотка в середину: поднимаем приоритет кусков вокруг позиции продолжения

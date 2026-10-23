@@ -148,7 +148,16 @@ object TorrentSearch {
             jobs.awaitAll()
         }
         val stats = calls.map { ProviderStat(it.name, it.res.size, it.err) }
-        merge(calls.map { it.res }, excludedKeywords).take(limit) to stats
+        val merged = merge(calls.map { it.res }, excludedKeywords).take(limit)
+        com.torrenttv.app.data.AppLog.log(
+            "search",
+            "q=\"$query\" alt=\"$altQuery\" tv=$isTvShow imdb=$imdbId -> " +
+                stats.joinToString(" ") { s ->
+                    "${s.name}:${s.count}" + (s.error?.let { e -> "($e)" } ?: "")
+                } +
+                " => ${merged.size}",
+        )
+        merged to stats
     }
 
     /** Слить выдачи провайдеров: фильтр по сидам/стоп-словам, дедуп по info_hash. */
