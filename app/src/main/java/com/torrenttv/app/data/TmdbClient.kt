@@ -136,6 +136,31 @@ object TmdbClient {
     fun similar(item: MediaItem): List<MediaItem> =
         parseList(get("/" + item.type + "/" + item.id + "/similar", mapOf("page" to "1")))
 
+    /** Сезоны сериала: /tv/{id} (seasons[].episodes с названиями). */
+    fun seasons(item: MediaItem): List<Season> {
+        val json = get("/tv/${item.id}") ?: return emptyList()
+        val arr = json.optJSONArray("seasons") ?: return emptyList()
+        return (0 until arr.length()).mapNotNull { i ->
+            val s = arr.optJSONObject(i) ?: return@mapNotNull null
+            val num = s.optInt("season_number", 0)
+            if (num <= 0) return@mapNotNull null
+            val eps = mutableListOf<Episode>()
+            s.optJSONArray("episodes")?.let { earr ->
+                for (j in 0 until earr.length()) {
+                    val e = earr.optJSONObject(j) ?: continue
+                    val en = e.optInt("episode_number", 0)
+                    if (en <= 0) continue
+                    eps += Episode(
+                        season = num,
+                        episode = en,
+                        title = e.optString("name", "").removePrefix("Эпизод "),
+                    )
+                }
+            }
+            Season(number = num, episodes = eps.sortedBy { it.episode })
+        }.sortedBy { it.number }
+    }
+
     // ---------- Жанры ----------
 
     fun movieGenres(): List<Genre> = genres("/genre/movie/list")

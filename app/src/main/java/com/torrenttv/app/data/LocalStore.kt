@@ -11,20 +11,31 @@ data class WatchEntry(
     val positionSec: Int,
     val durationSec: Int,
     val updatedAt: Long,
+    /** Ключ источника: storeKey или storeKey + суффикс эпизода. */
+    val sourceKey: String = "",
+    /** Метка эпизода («S01E05») для подсказки в интерфейсе. */
+    val episodeLabel: String = "",
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("item", item.toJson())
         .put("pos", positionSec)
         .put("dur", durationSec)
         .put("ts", updatedAt)
+        .put("skey", sourceKey)
+        .put("ep", episodeLabel)
 
     companion object {
-        fun fromJson(o: JSONObject): WatchEntry = WatchEntry(
-            item = MediaItem.fromJson(o.getJSONObject("item")),
-            positionSec = o.optInt("pos"),
-            durationSec = o.optInt("dur"),
-            updatedAt = o.optLong("ts"),
-        )
+        fun fromJson(o: JSONObject): WatchEntry {
+            val item = MediaItem.fromJson(o.getJSONObject("item"))
+            return WatchEntry(
+                item = item,
+                positionSec = o.optInt("pos"),
+                durationSec = o.optInt("dur"),
+                updatedAt = o.optLong("ts"),
+                sourceKey = o.optString("skey", "").ifBlank { item.storeKey },
+                episodeLabel = o.optString("ep", ""),
+            )
+        }
     }
 }
 
@@ -66,11 +77,17 @@ class LocalStore(context: Context) {
     }
 
     /** Сохранить/обновить позицию просмотра. */
-    fun saveProgress(item: MediaItem, positionSec: Int, durationSec: Int) {
+    fun saveProgress(
+        item: MediaItem,
+        positionSec: Int,
+        durationSec: Int,
+        sourceKey: String = item.storeKey,
+        episodeLabel: String = "",
+    ) {
         val entries = continueWatching()
-            .filter { it.item.storeKey != item.storeKey }
+            .filter { it.sourceKey != sourceKey }
             .toMutableList()
-        entries.add(0, WatchEntry(item, positionSec, durationSec, System.currentTimeMillis()))
+        entries.add(0, WatchEntry(item, positionSec, durationSec, System.currentTimeMillis(), sourceKey, episodeLabel))
         prefs.edit()
             .putString("progress", JSONArray(entries.take(20).map { it.toJson() }).toString())
             .apply()
@@ -85,12 +102,17 @@ class LocalStore(context: Context) {
 
     // ---------- Magnet-ссылки (источник видео для карточки) ----------
 
-    fun saveMagnet(item: MediaItem, magnet: String) {
-        prefs.edit().putString("magnet:" + item.storeKey, magnet).apply()
+    /**
+     * Источник видео: magnet или путь к .torrent.
+     * @param suffix суффикс ключа для эпизодов (":s01e05") — у сериала
+     *               может быть свой источник на каждый эпизод
+     */
+    fun saveMagnet(item: MediaItem, magnet: String, suffix: String = "") {
+        prefs.edit().putString("magnet:" + item.storeKey + suffix, magnet).apply()
     }
 
-    fun getMagnet(item: MediaItem): String? =
-        prefs.getString("magnet:" + item.storeKey, null)
+    fun getMagnet(item: MediaItem, suffix: String = ""): String? =
+        prefs.getString("magnet:" + item.storeKey + suffix, null)
 
     // ---------- Настройки фильтрации поиска ----------
 

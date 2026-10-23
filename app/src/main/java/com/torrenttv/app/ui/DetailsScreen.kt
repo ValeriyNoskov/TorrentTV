@@ -43,6 +43,7 @@ fun DetailsScreen(
     onEnterMagnet: () -> Unit = {},
     onAutoSearch: () -> Unit = {},
     onOpenDetails: (MediaItem) -> Unit = {},
+    onEpisodes: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
@@ -120,6 +121,10 @@ fun DetailsScreen(
                     }) { Text("▶ Смотреть") }
                     Spacer(Modifier.width(16.dp))
                     Button(onClick = onAutoSearch) { Text("🔍 Автопоиск") }
+                    if (item.type == "tv") {
+                        Spacer(Modifier.width(16.dp))
+                        Button(onClick = onEpisodes) { Text("🎬 Эпизоды") }
+                    }
                     Spacer(Modifier.width(16.dp))
                     Button(onClick = onEnterMagnet) {
                         Text(if (magnet) "🔗 Заменить magnet" else "🔗 Указать magnet")

@@ -46,7 +46,12 @@ import java.net.URLEncoder
  * Выбор результата привязывает magnet к карточке.
  */
 @Composable
-fun TorrentSearchScreen(item: MediaItem, onDone: () -> Unit, onBack: () -> Unit) {
+fun TorrentSearchScreen(
+    item: MediaItem,
+    episode: com.torrenttv.app.data.Episode? = null,
+    onDone: () -> Unit,
+    onBack: () -> Unit,
+) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
 
@@ -56,14 +61,21 @@ fun TorrentSearchScreen(item: MediaItem, onDone: () -> Unit, onBack: () -> Unit)
     // Выбранная частная раздача: идёт скачивание .torrent
     var selecting by remember { mutableStateOf<TorrentResult?>(null) }
 
-    // Запросы: оригинальное (основной) и русское название (альтернативный)
-    val query = remember(item) {
+    // Запросы: оригинальное (основной) и русское название (альтернативный);
+    // для эпизода сериала — суффикс S01E05 вместо года
+    val epCode = episode?.code ?: ""
+    val query = remember(item, episode) {
         val base = item.originalTitle.ifBlank { item.title }
-        if (item.year.isNotBlank()) "$base ${item.year}" else base
+        when {
+            episode != null -> "$base $epCode"
+            item.year.isNotBlank() -> "$base ${item.year}"
+            else -> base
+        }
     }
-    val altQuery = remember(item) {
+    val altQuery = remember(item, episode) {
         val ru = item.title
-        if (ru.isNotBlank() && !ru.equals(item.originalTitle, ignoreCase = true)) ru else null
+        if (ru.isBlank() || ru.equals(item.originalTitle, ignoreCase = true)) null
+        else if (episode != null) "$ru $epCode" else ru
     }
 
     LaunchedEffect(item) {
@@ -103,7 +115,7 @@ fun TorrentSearchScreen(item: MediaItem, onDone: () -> Unit, onBack: () -> Unit)
             )
         }
         if (path != null) {
-            store.saveMagnet(item, path)
+            store.saveMagnet(item, path, episode?.sourceSuffix ?: "")
             onDone()
         } else {
             status = "Не удалось скачать .torrent — проверьте Cookie в настройках"
@@ -112,10 +124,11 @@ fun TorrentSearchScreen(item: MediaItem, onDone: () -> Unit, onBack: () -> Unit)
     }
 
     fun select(r: TorrentResult) {
+        val suffix = episode?.sourceSuffix ?: ""
         if (r.isPrivate) {
             selecting = r
         } else {
-            store.saveMagnet(item, TorrentSearch.toMagnet(r))
+            store.saveMagnet(item, TorrentSearch.toMagnet(r), suffix)
             onDone()
         }
     }
@@ -129,7 +142,11 @@ fun TorrentSearchScreen(item: MediaItem, onDone: () -> Unit, onBack: () -> Unit)
             .padding(32.dp),
     ) {
         Text("🔍 Автопоиск", color = Color(0xFFF5B942), fontSize = 16.sp)
-        Text(item.title, color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+        Text(
+            if (episode != null) "${item.title} · ${episode.code}"
+            else item.title,
+            color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold,
+        )
         Text(status, color = Color.White.copy(alpha = 0.6f), fontSize = 15.sp, modifier = Modifier.padding(top = 6.dp))
 
         // ---------- Чипы качества (скраббер) ----------

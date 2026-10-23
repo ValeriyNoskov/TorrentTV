@@ -76,9 +76,11 @@ fun HomeScreen(
             }
             if (progress.isNotEmpty()) {
                 item {
+                    // Эпизоды одного сериала — отдельные карточки с меткой S01E05
                     MediaRow(
                         title = "Продолжить просмотр",
-                        items = progress.map { it.item },
+                        // разные эпизоды одного сериала — разные карточки
+                        items = progress.distinctBy { it.sourceKey }.map { it.item },
                         onClick = onOpenDetails,
                     )
                 }

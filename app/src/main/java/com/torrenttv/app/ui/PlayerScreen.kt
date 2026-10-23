@@ -51,10 +51,13 @@ import java.io.File
  * Позиция просмотра сохраняется каждые 5 секунд в «Продолжить просмотр».
  */
 @Composable
-fun PlayerScreen(item: MediaItem, onBack: () -> Unit) {
+fun PlayerScreen(item: MediaItem, episode: com.torrenttv.app.data.Episode? = null, onBack: () -> Unit) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
-    val magnet = remember { store.getMagnet(item) }
+    // Источник эпизода хранится с суффиксом (":s01e05") — у каждой серии свой
+    val sourceSuffix = episode?.sourceSuffix ?: ""
+    val sourceKey = item.storeKey + sourceSuffix
+    val magnet = remember(episode) { store.getMagnet(item, sourceSuffix) }
 
     var status by remember { mutableStateOf(if (magnet == null) "Нет magnet-ссылки" else "Подготовка…") }
     var bufferedPct by remember { mutableStateOf(0) }
@@ -67,6 +70,10 @@ fun PlayerScreen(item: MediaItem, onBack: () -> Unit) {
                 source = magnet,
                 saveDir = File(context.filesDir, "downloads/" + item.storeKey),
                 onStatus = { status = it },
+                // В пачке сезона включаем файл нужной серии
+                fileMatcher = episode?.let { ep ->
+                    { name: String -> com.torrenttv.app.data.Episode.fileMatches(name, ep.season, ep.episode) }
+                },
             )
         }
         if (st == null) {
@@ -77,7 +84,7 @@ fun PlayerScreen(item: MediaItem, onBack: () -> Unit) {
 
         // Перемотка в середину: поднимаем приоритет кусков вокруг позиции продолжения
         val watching = withContext(Dispatchers.IO) {
-            store.continueWatching().firstOrNull { it.item.storeKey == item.storeKey }
+            store.continueWatching().firstOrNull { it.sourceKey == sourceKey }
         }
         val resumeSec = watching?.positionSec ?: 0
         val durationSec = watching?.durationSec ?: 0
@@ -98,7 +105,7 @@ fun PlayerScreen(item: MediaItem, onBack: () -> Unit) {
 
     val st = stream
     if (st != null && bufferedPct >= 100) {
-        VideoPlayer(stream = st, item = item, store = store, onBack = onBack)
+        VideoPlayer(stream = st, item = item, episode = episode, store = store, onBack = onBack)
     } else {
         // Экран буферизации
         BackHandler { onBack() }
@@ -111,6 +118,10 @@ fun PlayerScreen(item: MediaItem, onBack: () -> Unit) {
             verticalArrangement = Arrangement.Center,
         ) {
             Text(item.title, color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+            if (episode != null) {
+                Spacer(Modifier.height(6.dp))
+                Text(episode.code, color = Color(0xFFF5B942), fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+            }
             Spacer(Modifier.height(16.dp))
             Text(status, color = Color(0xFFF5B942), fontSize = 18.sp)
 
@@ -144,13 +155,15 @@ fun PlayerScreen(item: MediaItem, onBack: () -> Unit) {
 private fun VideoPlayer(
     stream: TorrentEngine.StreamSession,
     item: MediaItem,
+    episode: com.torrenttv.app.data.Episode?,
     store: LocalStore,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
+    val sourceKey = item.storeKey + (episode?.sourceSuffix ?: "")
 
     val resumeSec = remember {
-        store.continueWatching().firstOrNull { it.item.storeKey == item.storeKey }?.positionSec ?: 0
+        store.continueWatching().firstOrNull { it.sourceKey == sourceKey }?.positionSec ?: 0
     }
 
     val player = remember(stream) {
@@ -195,6 +208,8 @@ private fun VideoPlayer(
                     item,
                     positionSec = (player.currentPosition / 1000).toInt(),
                     durationSec = (player.duration / 1000).toInt(),
+                    sourceKey = sourceKey,
+                    episodeLabel = episode?.code ?: "",
                 )
             }
         }

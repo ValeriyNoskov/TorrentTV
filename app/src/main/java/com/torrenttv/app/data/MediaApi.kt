@@ -41,6 +41,10 @@ object MediaApi {
     fun similar(item: MediaItem): List<MediaItem> =
         if (kp) KinopoiskClient.similar(item) else TmdbClient.similar(item)
 
+    /** Сезоны и эпизоды сериала. */
+    fun seasons(item: MediaItem): List<Season> =
+        if (kp) KinopoiskClient.seasons(item) else TmdbClient.seasons(item)
+
     fun movieGenres(): List<Genre> =
         if (kp) KinopoiskClient.movieGenres() else TmdbClient.movieGenres()
 

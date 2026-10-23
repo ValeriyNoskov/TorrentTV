@@ -87,8 +87,16 @@ object TorrentEngine {
      * Блокирующий вызов (метаданные до 60 с) — запускать из фонового потока.
      *
      * @param source magnet-ссылка, URL .torrent или локальный путь к .torrent
+     * @param fileMatcher необязательный предикат по имени файла — для выбора
+     *        нужной серии в пачке сезона (S01E05); если не сработал — берётся
+     *        самый большой видеофайл
      */
-    fun startStream(source: String, saveDir: File, onStatus: (String) -> Unit): StreamSession? {
+    fun startStream(
+        source: String,
+        saveDir: File,
+        onStatus: (String) -> Unit,
+        fileMatcher: ((String) -> Boolean)? = null,
+    ): StreamSession? {
         start()
         saveDir.mkdirs()
 
@@ -110,29 +118,12 @@ object TorrentEngine {
         val ti = TorrentInfo.bdecode(bytes)
         val fs = ti.files()
         val numFiles = fs.numFiles()
-
-        // Самый большой видеофайл (fallback — просто самый большой файл)
-        var best = -1
-        var bestSize = -1L
-        for (i in 0 until numFiles) {
-            val ext = fs.fileName(i).substringAfterLast('.', "").lowercase()
-            if (ext in VIDEO_EXT && fs.fileSize(i) > bestSize) {
-                best = i
-                bestSize = fs.fileSize(i)
-            }
-        }
-        if (best == -1) {
-            for (i in 0 until numFiles) {
-                if (fs.fileSize(i) > bestSize) {
-                    best = i
-                    bestSize = fs.fileSize(i)
-                }
-            }
-        }
+        val best = bestFileIndex(fs, fileMatcher)
         if (best == -1) {
             onStatus("В раздаче нет файлов")
             return null
         }
+        val bestSize = fs.fileSize(best)
 
         var fileOffset = 0L
         for (i in 0 until best) fileOffset += fs.fileSize(i)
@@ -172,6 +163,37 @@ object TorrentEngine {
         }
 
         return StreamSession(h, ti, best, fileOffset, bestSize, saveDir)
+    }
+
+    /**
+     * Выбор файла: 1) совпавший с fileMatcher среди видео (самый большой),
+     * 2) совпавший без учёта расширения, 3) самый большой видеофайл,
+     * 4) просто самый большой. -1, если файлов нет.
+     */
+    private fun bestFileIndex(
+        fs: com.frostwire.jlibtorrent.FileStorage,
+        fileMatcher: ((String) -> Boolean)?,
+    ): Int {
+        val numFiles = fs.numFiles()
+        val largest = { predicate: (Int) -> Boolean ->
+            var best = -1
+            var bestSize = -1L
+            for (i in 0 until numFiles) {
+                if (predicate(i) && fs.fileSize(i) > bestSize) {
+                    best = i
+                    bestSize = fs.fileSize(i)
+                }
+            }
+            best
+        }
+        val isVideo = { i: Int -> fs.fileName(i).substringAfterLast('.', "").lowercase() in VIDEO_EXT }
+
+        if (fileMatcher != null) {
+            largest { i -> isVideo(i) && fileMatcher(fs.fileName(i)) }.let { if (it != -1) return it }
+            largest { i -> fileMatcher(fs.fileName(i)) }.let { if (it != -1) return it }
+        }
+        largest(isVideo).let { if (it != -1) return it }
+        return largest { true }
     }
 
     /**

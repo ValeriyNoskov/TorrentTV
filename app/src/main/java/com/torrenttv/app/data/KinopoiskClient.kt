@@ -174,6 +174,32 @@ object KinopoiskClient {
     fun similar(item: MediaItem): List<MediaItem> =
         parseItems(get("/api/v2.2/films/${item.id}/similars"), "items")
 
+    /** Сезоны сериала: /api/v2.2/serials/{id}/seasons. */
+    fun seasons(item: MediaItem): List<Season> {
+        val json = get("/api/v2.2/serials/${item.id}/seasons") ?: return emptyList()
+        val arr = json.optJSONArray("items") ?: return emptyList()
+        return (0 until arr.length()).mapNotNull { i ->
+            val s = arr.optJSONObject(i) ?: return@mapNotNull null
+            val num = s.optInt("number", 0)
+            if (num <= 0) return@mapNotNull null
+            val eps = mutableListOf<Episode>()
+            s.optJSONArray("episodes")?.let { earr ->
+                for (j in 0 until earr.length()) {
+                    val e = earr.optJSONObject(j) ?: continue
+                    val en = e.optInt("episodeNumber", 0)
+                    if (en <= 0) continue
+                    eps += Episode(
+                        season = num,
+                        episode = en,
+                        title = sequenceOf("nameRu", "nameEn")
+                            .map { e.optString(it, "") }.firstOrNull { it.isNotBlank() } ?: "",
+                    )
+                }
+            }
+            Season(number = num, episodes = eps.sortedBy { it.episode })
+        }.sortedBy { it.number }
+    }
+
     // ---------- Жанры и страны ----------
 
     fun movieGenres(): List<Genre> = filters().genres

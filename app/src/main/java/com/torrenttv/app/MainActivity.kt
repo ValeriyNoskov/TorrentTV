@@ -19,6 +19,7 @@ import com.torrenttv.app.data.IptvChannel
 import com.torrenttv.app.data.MediaItem
 import com.torrenttv.app.ui.CatalogScreen
 import com.torrenttv.app.ui.DetailsScreen
+import com.torrenttv.app.ui.EpisodesScreen
 import com.torrenttv.app.ui.HomeScreen
 import com.torrenttv.app.ui.IptvPlayerScreen
 import com.torrenttv.app.ui.IptvScreen
@@ -40,9 +41,10 @@ sealed interface Screen {
 
     // Полноэкранные (без таб-панели)
     data class Details(val item: MediaItem) : Screen
+    data class Episodes(val item: MediaItem) : Screen
     data class MagnetEntry(val item: MediaItem) : Screen
-    data class TorrentSearch(val item: MediaItem) : Screen
-    data class Player(val item: MediaItem) : Screen
+    data class TorrentSearch(val item: MediaItem, val episode: com.torrenttv.app.data.Episode? = null) : Screen
+    data class Player(val item: MediaItem, val episode: com.torrenttv.app.data.Episode? = null) : Screen
     data class IptvPlayer(val channel: IptvChannel) : Screen
 
     companion object {
@@ -69,7 +71,8 @@ private fun App() {
     // плеер/magnet/автопоиск → карточка, карточка и вкладки → «Главная».
     BackHandler(screen != Screen.Home) {
         screen = when (val s = screen) {
-            is Screen.Player -> Screen.Details(s.item)
+            is Screen.Player ->
+                if (s.episode != null) Screen.Episodes(s.item) else Screen.Details(s.item)
             is Screen.MagnetEntry -> Screen.Details(s.item)
             is Screen.IptvPlayer -> Screen.Iptv
             else -> Screen.Home
@@ -115,6 +118,14 @@ private fun App() {
                 onEnterMagnet = { screen = Screen.MagnetEntry(s.item) },
                 onAutoSearch = { screen = Screen.TorrentSearch(s.item) },
                 onOpenDetails = { screen = Screen.Details(it) },
+                onEpisodes = { screen = Screen.Episodes(s.item) },
+            )
+
+            is Screen.Episodes -> EpisodesScreen(
+                item = s.item,
+                onPlay = { ep -> screen = Screen.Player(s.item, ep) },
+                onFind = { ep -> screen = Screen.TorrentSearch(s.item, ep) },
+                onBack = { screen = Screen.Details(s.item) },
             )
 
             is Screen.MagnetEntry -> MagnetEntryScreen(
@@ -125,13 +136,24 @@ private fun App() {
 
             is Screen.TorrentSearch -> TorrentSearchScreen(
                 item = s.item,
-                onDone = { screen = Screen.Details(s.item) },
-                onBack = { screen = Screen.Details(s.item) },
+                episode = s.episode,
+                onDone = {
+                    screen = if (s.episode != null) Screen.Player(s.item, s.episode)
+                    else Screen.Details(s.item)
+                },
+                onBack = {
+                    screen = if (s.episode != null) Screen.Episodes(s.item)
+                    else Screen.Details(s.item)
+                },
             )
 
             is Screen.Player -> PlayerScreen(
                 item = s.item,
-                onBack = { screen = Screen.Details(s.item) },
+                episode = s.episode,
+                onBack = {
+                    screen = if (s.episode != null) Screen.Episodes(s.item)
+                    else Screen.Details(s.item)
+                },
             )
 
             is Screen.IptvPlayer -> IptvPlayerScreen(
