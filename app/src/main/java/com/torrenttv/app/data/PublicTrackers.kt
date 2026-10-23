@@ -219,7 +219,10 @@ object RutrackerrProvider {
             val name = Regex("""<td><b>([^<]{4,})</b></td>""").find(r)?.groupValues?.get(1)?.trim() ?: continue
             val pageUrl = Regex("""href="((?:https://rutrackerr\.ru)?/\d+[^"]*tor\.html)"""")
                 .find(r)?.groupValues?.get(1)?.let { if (it.startsWith("http")) it else "https://rutrackerr.ru" + it } ?: ""
-            val seeds = Regex("""&nbsp;(\d+)""").find(r)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+            // Числа в таблице: первое — сиды, второе — пиры
+            val nums = Regex("""&nbsp;(\d+)""").findAll(r).mapNotNull { it.groupValues[1].toIntOrNull() }.toList()
+            val seeds = nums.getOrNull(0) ?: 0
+            val peers = nums.getOrNull(1) ?: 0
             val size = Regex("([0-9.]+)\\s*(ТБ|TB|ГБ|GB|МБ|MB|КБ|KB)").find(r)?.let { m ->
                 val v = m.groupValues[1].toDoubleOrNull() ?: 0.0
                 val u = m.groupValues[2]
@@ -239,6 +242,7 @@ object RutrackerrProvider {
                 provider = NAME,
                 resolution = ReleaseQuality.parse(name),
                 pageUrl = pageUrl,
+                peers = peers,
             )
         }
         return out

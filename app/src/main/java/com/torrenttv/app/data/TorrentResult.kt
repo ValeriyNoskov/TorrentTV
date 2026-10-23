@@ -16,6 +16,8 @@ data class TorrentResult(
     val torrentUrl: String = "",
     /** Страница раздачи (Рутрекер) — для постера/описания в поиске. */
     val pageUrl: String = "",
+    /** Скачивающие (leechers) — если трекер отдаёт. */
+    val peers: Int = 0,
 ) {
     /** Частный трекер: hash станет известен только после скачивания .torrent. */
     val isPrivate: Boolean get() = torrentUrl.isNotBlank()

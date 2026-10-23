@@ -38,10 +38,129 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * Экран файлов раздачи: показывает все видеофайлы (серии) с размерами
- * ДО запуска плеера — видно, сколько серий в раздаче. Клик — в плеер.
+ * Экран списка раздач по запросу: все раздачи, отсортированы «лучшая
+ * сверху» (качество → сиды → пиры), полная инфа в каждой строке.
  */
 @Composable
+fun TorrentResultsScreen(
+    item: MediaItem,
+    query: String,
+    results: List<com.torrenttv.app.data.TorrentResult>,
+    poster: String,
+    onPickTorrent: (com.torrenttv.app.data.TorrentResult) -> Unit,
+    onBack: () -> Unit,
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    androidx.activity.compose.BackHandler { onBack() }
+
+    // Лучшая раздача сверху: качество → сиды → пиры
+    val qOrder = mapOf("2160p" to 4, "1080p" to 3, "720p" to 2, "SD" to 1)
+    val sorted = remember(results) {
+        results.sortedWith(
+            compareByDescending<com.torrenttv.app.data.TorrentResult> { qOrder[it.resolution] ?: 0 }
+                .thenByDescending { it.seeds }
+                .thenByDescending { it.peers },
+        )
+    }
+    val best = sorted.firstOrNull { it.seeds > 0 }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0E1116))
+            .padding(28.dp),
+    ) {
+        Text("🧲 Раздачи: $query", color = Color(0xFFF5B942), fontSize = 15.sp)
+        Text(
+            item.title,
+            color = Color.White,
+            fontSize = 26.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+        )
+        Text(
+            "Всего раздач: ${sorted.size} · лучшая сверху: ${best?.let { "${it.resolution.ifBlank { "auto" }}, ${it.seeds} сидов" } ?: "—"}",
+            color = Color.White.copy(alpha = 0.55f),
+            fontSize = 13.sp,
+        )
+        Spacer(Modifier.height(10.dp))
+
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.weight(1f),
+        ) {
+            itemsIndexed(sorted) { i, r ->
+                Surface(
+                    onClick = { onPickTorrent(r) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp),
+                    shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color(0xFF161C26),
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContentColor = Color(0xFF0E1116),
+                    ),
+                ) {
+                    Row(
+                        Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (poster.isNotBlank()) {
+                            coil.compose.AsyncImage(
+                                model = poster,
+                                contentDescription = null,
+                                modifier = Modifier.width(64.dp).height(92.dp),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                            )
+                            Spacer(Modifier.width(12.dp))
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (i == 0) {
+                                    Text(
+                                        "★ ЛУЧШАЯ  ",
+                                        color = Color(0xFFF5B942),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
+                                Text(
+                                    r.resolution.ifBlank { "auto" },
+                                    color = Color(0xFF8BD17C),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                            Text(
+                                r.name,
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                maxLines = 2,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = 2.dp),
+                            )
+                            Text(
+                                "🧲 ${r.seeds} сидов · 👥 ${r.peers} пиров · ${r.sizeLabel()} · ${r.provider}",
+                                color = Color.White.copy(alpha = 0.6f),
+                                fontSize = 13.sp,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Button(onClick = onBack) { Text("← Назад") }
+    }
+}
+
+/**
+ * Экран файлов раздачи: показывает все видеофайлы (серии) с размерами
+ * ДО запуска плеера — видно, сколько серий в раздаче. Клик — в плеер.
+ */@Composable
 fun TorrentFilesScreen(
     item: MediaItem,
     magnet: String,

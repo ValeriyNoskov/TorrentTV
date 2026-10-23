@@ -35,6 +35,7 @@ import com.torrenttv.app.ui.SettingsScreen
 import com.torrenttv.app.ui.SideNav
 import com.torrenttv.app.ui.SmartPlayScreen
 import com.torrenttv.app.ui.TorrentFilesScreen
+import com.torrenttv.app.ui.TorrentResultsScreen
 import com.torrenttv.app.ui.TorrentSearchScreen
 
 /** Экраны приложения. Верхние — вкладки с общей панелью табов. */
@@ -63,6 +64,12 @@ sealed interface Screen {
     data class OnlinePlayer(val item: MediaItem, val link: com.torrenttv.app.data.OnlineService.OnlineLink) : Screen
     data class Player(val item: MediaItem, val episode: com.torrenttv.app.data.Episode? = null, val fileIndex: Int = -1) : Screen
     data class TorrentFiles(val item: MediaItem, val magnet: String) : Screen
+    data class TorrentResults(
+        val item: MediaItem,
+        val query: String,
+        val results: List<com.torrenttv.app.data.TorrentResult>,
+        val poster: String = "",
+    ) : Screen
     data class IptvPlayer(val channel: IptvChannel) : Screen
 
     companion object {
@@ -132,8 +139,8 @@ private fun App() {
                 Screen.Search -> SearchScreen(
                     onBack = { screen = Screen.Home },
                     onOpenDetails = { screen = Screen.Details(it) },
-                    onOpenTorrentFiles = { card, magnet ->
-                        screen = Screen.TorrentFiles(card, magnet)
+                    onOpenResults = { card, q, list ->
+                        screen = Screen.TorrentResults(card, q, list, poster = card.posterUrl)
                     },
                     onTorrentSearch = { q ->
                         // Прямой торрент-поиск по запросу: фиктивная карточка
@@ -198,7 +205,18 @@ private fun App() {
                     appStore.saveMagnet(s.item, s.magnet)
                     screen = Screen.Player(s.item, fileIndex = idx)
                 },
-                onBack = { screen = Screen.Details(s.item) },
+                onBack = { screen = Screen.Search },
+            )
+
+            is Screen.TorrentResults -> TorrentResultsScreen(
+                item = s.item,
+                query = s.query,
+                results = s.results,
+                poster = s.poster,
+                onPickTorrent = { r ->
+                    screen = Screen.TorrentFiles(s.item, com.torrenttv.app.data.TorrentSearch.toMagnet(r))
+                },
+                onBack = { screen = Screen.Search },
             )
 
             is Screen.TorrentSearch -> TorrentSearchScreen(
