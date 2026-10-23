@@ -31,6 +31,10 @@ object TmdbClient {
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
 
+    /** true, если последний запрос к API не удался (сеть/ошибка HTTP). */
+    @Volatile var lastFailed: Boolean = false
+        private set
+
     private fun get(path: String, params: Map<String, String> = emptyMap()): JSONObject? {
         if (!isConfigured) return null
         val url = buildString {
@@ -42,9 +46,11 @@ object TmdbClient {
         }
         return try {
             http.newCall(Request.Builder().url(url).build()).execute().use { resp ->
+                lastFailed = !resp.isSuccessful
                 if (!resp.isSuccessful) null else JSONObject(resp.body!!.string())
             }
         } catch (e: Exception) {
+            lastFailed = true
             null
         }
     }

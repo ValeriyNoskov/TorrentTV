@@ -54,24 +54,41 @@ object OnlineService {
 
     private var activeMirror: String? = null
 
+    // Пул для параллельного опроса зеркал Filmix
+    private val racePool = java.util.concurrent.Executors.newFixedThreadPool(6)
+
     /** Ответ похож на API (JSON), а не на заглушку/HTML-ошибку. */
     private fun looksLikeApi(body: String): Boolean {
         val t = body.trimStart()
         return t.startsWith("{") || t.startsWith("[")
     }
 
-    /** GET к API с перебором зеркал: рабочее запоминаем. Вернёт (зеркало, тело) или null. */
+    /** GET к API. Рабочее зеркало кэшируется; при переборе зеркала опрашиваются
+     *  ПАРАЛЛЕЛЬНО — возвращаем первое ответившее (иначе до 30с на каждое
+     *  молчащее зеркало и минуты ожидания ссылки). */
     private fun apiGet(path: String): Pair<String, String>? {
         activeMirror?.let { m ->
             val body = TorrentHttp.get(m + path, headers())
             if (body != null && looksLikeApi(body)) return m to body
             activeMirror = null // кэш протух — перебираем заново
         }
-        for (m in MIRRORS) {
-            val body = TorrentHttp.get(m + path, headers()) ?: continue
-            if (looksLikeApi(body)) {
-                activeMirror = m
-                return m to body
+        val ecs = java.util.concurrent.ExecutorCompletionService<Pair<String, String>?>(racePool)
+        val futures = MIRRORS.map { m ->
+            ecs.submit(java.util.concurrent.Callable<Pair<String, String>?> {
+                val body = TorrentHttp.get(m + path, headers())
+                if (body != null && looksLikeApi(body)) m to body else null
+            })
+        }
+        var received = 0
+        while (received < futures.size) {
+            val f = ecs.poll(22, java.util.concurrent.TimeUnit.SECONDS) ?: break
+            received++
+            val r = try { f.get() } catch (_: Exception) { null }
+            if (r != null) {
+                activeMirror = r.first
+                // остальные зеркала больше не нужны
+                futures.forEach { it.cancel(true) }
+                return r
             }
         }
         return null

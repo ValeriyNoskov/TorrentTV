@@ -17,6 +17,10 @@ object MediaApi {
     fun search(query: String): List<MediaItem> =
         if (kp) KinopoiskClient.search(query) else TmdbClient.search(query)
 
+    /** Последний запрос метаданных завершился ошибкой (для показа «Повторить»). */
+    val lastSearchFailed: Boolean
+        get() = if (kp) KinopoiskClient.lastFailed else TmdbClient.lastFailed
+
     fun trending(page: Int = 1): List<MediaItem> =
         if (kp) KinopoiskClient.trending(page) else TmdbClient.trending(page)
 

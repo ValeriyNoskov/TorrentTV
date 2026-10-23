@@ -113,6 +113,13 @@ private fun App() {
                 Screen.Search -> SearchScreen(
                     onBack = { screen = Screen.Home },
                     onOpenDetails = { screen = Screen.Details(it) },
+                    onTorrentSearch = { q ->
+                        // Прямой торрент-поиск по запросу: фиктивная карточка
+                        screen = Screen.TorrentSearch(
+                            MediaItem(id = q.hashCode(), type = "movie", title = q),
+                            autoStart = false,
+                        )
+                    },
                 )
                 Screen.Settings -> SettingsScreen(
                     onBack = { screen = Screen.Home },

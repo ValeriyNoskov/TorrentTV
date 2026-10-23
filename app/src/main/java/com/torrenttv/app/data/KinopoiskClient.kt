@@ -36,6 +36,10 @@ object KinopoiskClient {
     // Кэш стран: имя → числовой id (тот же эндпоинт filters).
     @Volatile private var countryIdByName: Map<String, Int>? = null
 
+    /** true, если последний запрос к API не удался (сеть/лимит/ошибка HTTP). */
+    @Volatile var lastFailed: Boolean = false
+        private set
+
     private fun get(path: String, params: Map<String, String> = emptyMap()): JSONObject? {
         if (!isConfigured) return null
         val url = buildString {
@@ -54,9 +58,11 @@ object KinopoiskClient {
                     .header("X-API-KEY", BuildConfig.KP_API_KEY)
                     .build()
             ).execute().use { resp ->
+                lastFailed = !resp.isSuccessful
                 if (!resp.isSuccessful) null else JSONObject(resp.body!!.string())
             }
         } catch (e: Exception) {
+            lastFailed = true
             null
         }
     }

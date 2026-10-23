@@ -57,13 +57,15 @@ private val KEY_ROWS = listOf(
  * Результаты ищутся в TMDB (фильмы + сериалы) с дебаунсом 500 мс.
  */
 @Composable
-fun SearchScreen(onBack: () -> Unit, onOpenDetails: (MediaItem) -> Unit) {
+fun SearchScreen(onBack: () -> Unit, onOpenDetails: (MediaItem) -> Unit, onTorrentSearch: (String) -> Unit = {}) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
+    var searchTick by remember { mutableStateOf(0) } // форс-повтор
     val firstKeyFocus = remember { FocusRequester() }
 
     // Голосовой ввод: системный распознаватель речи
@@ -96,15 +98,19 @@ fun SearchScreen(onBack: () -> Unit, onOpenDetails: (MediaItem) -> Unit) {
     }
 
     // Поиск с дебаунсом; searchTick — немедленный поиск по кнопке «Найти»
-    var searchTick by remember { mutableStateOf(0) }
-    LaunchedEffect(query, searchTick) {
+    var searchTickForce by remember { mutableStateOf(0) }
+    LaunchedEffect(query, searchTickForce) {
         if (query.length >= 2) {
             loading = true
+            failed = false
             delay(500)
             results = MediaApi.search(query).filter { store.isAllowed(it) }
+            // пустой ответ при ошибке API (сеть/лимит) — показываем «Повторить»
+            failed = results.isEmpty() && MediaApi.lastSearchFailed
             loading = false
         } else {
             results = emptyList()
+            failed = false
             loading = false
         }
     }
@@ -135,7 +141,7 @@ fun SearchScreen(onBack: () -> Unit, onOpenDetails: (MediaItem) -> Unit) {
                 if (!showKb) findFocus.requestFocus()
             }) { Text(if (showKb) "⌨ Скрыть клавиатуру" else "⌨ Клавиатура") }
             Spacer(Modifier.width(10.dp))
-            Button(onClick = { searchTick++ }, modifier = Modifier.focusRequester(findFocus)) {
+            Button(onClick = { searchTickForce++ }, modifier = Modifier.focusRequester(findFocus)) {
                 Text("🔍 Найти")
             }
         }
@@ -156,6 +162,24 @@ fun SearchScreen(onBack: () -> Unit, onOpenDetails: (MediaItem) -> Unit) {
             }
         } else if (loading) {
             Text("Ищем…", color = Color.White.copy(alpha = 0.5f), fontSize = 15.sp, modifier = Modifier.padding(top = 10.dp))
+        } else if (failed) {
+            Text(
+                "Не удалось получить данные — источник фильмов недоступен или исчерпан лимит API.",
+                color = Color(0xFFFFD54F),
+                fontSize = 15.sp,
+                modifier = Modifier.padding(top = 10.dp),
+            )
+            Row(Modifier.padding(top = 8.dp)) {
+                Button(onClick = { searchTickForce++ }) { Text("🔄 Повторить") }
+                Spacer(Modifier.width(12.dp))
+                Button(onClick = { onTorrentSearch(query) }) { Text("🧲 Искать в торрентах") }
+            }
+        } else if (query.length >= 2) {
+            // Ничего не найдено по фильму — всегда предложим торренты напрямую
+            Text("Фильмов не найдено.", color = Color.White.copy(alpha = 0.5f), fontSize = 15.sp, modifier = Modifier.padding(top = 10.dp))
+            Button(onClick = { onTorrentSearch(query) }, modifier = Modifier.padding(top = 8.dp)) {
+                Text("🧲 Искать «$query» в торрентах")
+            }
         }
 
         Spacer(Modifier.height(8.dp))
