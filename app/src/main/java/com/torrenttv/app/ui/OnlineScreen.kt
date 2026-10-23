@@ -463,7 +463,9 @@ private fun SeasonChipLite(label: String, selected: Boolean, onClick: () -> Unit
 fun OnlinePlayerScreen(link: OnlineService.OnlineLink, title: String, onBack: () -> Unit) {
     val context = LocalContext.current
     var showQuality by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
     var maxQuality by remember { mutableStateOf<Int?>(null) } // null = авто
+    var seekInfo by remember { mutableStateOf("") }           // «⏩ +10 сек» при перемотке пультом
 
     val player = remember(link.url) {
         // CDN проверяет Referer: у Filmix — filmix.ac, у HDRezka — её зеркало.
@@ -510,6 +512,7 @@ fun OnlinePlayerScreen(link: OnlineService.OnlineLink, title: String, onBack: ()
     DisposableEffect(player) { onDispose { player.release() } }
 
     BackHandler(enabled = showQuality) { showQuality = false }
+    BackHandler(enabled = showSettings) { showSettings = false }
     BackHandler { onBack() }
 
     // Галочка «Всегда внешний плеер»: сразу открываем во внешнем плеере и выходим
@@ -544,6 +547,32 @@ fun OnlinePlayerScreen(link: OnlineService.OnlineLink, title: String, onBack: ()
                     this.player = player
                     useController = true
                     controllerShowTimeoutMs = 10_000
+                    // Пульт: влево/вправо — перемотка ±10 сек (с индикатором),
+                    // обычное поведение контроллера (фокус-навигация) не подходит ТВ
+                    setOnKeyListener { _, keyCode, event ->
+                        // Влево/вправо — перемотка ±10 сек
+                        if (event.action == android.view.KeyEvent.ACTION_UP &&
+                            (keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT ||
+                                keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT)
+                        ) {
+                            val delta = if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT) 10_000L else -10_000L
+                            val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
+                            player.seekTo((player.currentPosition + delta).coerceIn(0L, dur))
+                            seekInfo = if (delta > 0) "⏩ +10 сек" else "⏪ −10 сек"
+                            true
+                        } else if (event.action == android.view.KeyEvent.ACTION_UP &&
+                            (keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER ||
+                                keyCode == android.view.KeyEvent.KEYCODE_ENTER ||
+                                keyCode == android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+                        ) {
+                            // ОК на пульте — пауза/продолжить
+                            if (player.isPlaying) player.pause() else player.play()
+                            seekInfo = if (player.isPlaying) "▶ Продолжаем" else "⏸ Пауза"
+                            true
+                        } else {
+                            false
+                        }
+                    }
                 }
             },
             modifier = Modifier.fillMaxSize(),
@@ -557,16 +586,54 @@ fun OnlinePlayerScreen(link: OnlineService.OnlineLink, title: String, onBack: ()
                 .padding(16.dp),
         )
 
-        // Кнопки поверх видео
+        // Индикатор перемотки пультом
+        if (seekInfo.isNotBlank()) {
+            LaunchedEffect(seekInfo) {
+                kotlinx.coroutines.delay(900)
+                seekInfo = ""
+            }
+            Text(
+                seekInfo,
+                color = Color(0xFFF5B942),
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .background(Color(0xE0151B26), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 22.dp, vertical = 10.dp),
+            )
+        }
+
+        // Шестерёнка: качество и внешний плеер — внутри меню
         Column(
             Modifier
                 .align(Alignment.TopEnd)
                 .padding(16.dp),
             horizontalAlignment = Alignment.End,
         ) {
-            PlayerChip("⚙ Качество: ${maxQuality?.let { "${it}p" } ?: "авто"}") { showQuality = true }
-            Spacer(Modifier.height(8.dp))
-            PlayerChip("⤴ Внешний плеер") { openExternal() }
+            PlayerChip(if (showSettings) "✕" else "⚙") { showSettings = !showSettings }
+        }
+
+        // Меню шестерёнки
+        if (showSettings) {
+            Column(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 64.dp, end = 16.dp)
+                    .background(Color(0xF0151B26), RoundedCornerShape(14.dp))
+                    .padding(12.dp),
+                horizontalAlignment = Alignment.End,
+            ) {
+                PlayerChip("Качество: ${maxQuality?.let { "${it}p" } ?: "авто"}") {
+                    showSettings = false
+                    showQuality = true
+                }
+                Spacer(Modifier.height(6.dp))
+                PlayerChip("⤴ Внешний плеер") {
+                    showSettings = false
+                    openExternal()
+                }
+            }
         }
 
         if (extMsg.isNotBlank()) {

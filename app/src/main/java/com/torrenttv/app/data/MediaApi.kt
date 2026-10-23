@@ -20,37 +20,48 @@ object MediaApi {
         get() = if (kp) KinopoiskClient.lastFailed else TmdbClient.lastFailed
 
     /**
-     * Выбрать источник: KP основной; при его ошибке — TMDB, если настроен.
+     * Выбрать источник: KP основной → TMDB при его ошибке → каталог
+     * «Рутрекер» (без ключей и лимитов), если и TMDB недоступен.
      */
-    private fun <T> src(kpCall: () -> T, tmdbCall: () -> T): T {
-        if (!kp) return tmdbCall()
+    private fun <T> src(kpCall: () -> T, tmdbCall: () -> T, rtCall: () -> T? = { null }): T {
+        if (!kp) {
+            val t = tmdbCall()
+            val tmdbDead = TmdbClient.lastFailed || (t is List<*> && t.isEmpty())
+            return if (tmdbDead) (rtCall() ?: t) else t
+        }
         val r = kpCall()
-        return if (KinopoiskClient.lastFailed && TmdbClient.isConfigured) tmdbCall() else r
+        if (!KinopoiskClient.lastFailed) return r
+        if (TmdbClient.isConfigured) {
+            val t = tmdbCall()
+            val tmdbDead = TmdbClient.lastFailed || (t is List<*> && t.isEmpty())
+            if (!tmdbDead) return t
+        }
+        return rtCall() ?: r
     }
 
     fun search(query: String): List<MediaItem> =
-        src({ KinopoiskClient.search(query) }, { TmdbClient.search(query) })
+        src({ KinopoiskClient.search(query) }, { TmdbClient.search(query) }, { RutrackerrCatalog.search(query) })
 
     fun trending(page: Int = 1): List<MediaItem> =
-        src({ KinopoiskClient.trending(page) }, { TmdbClient.trending(page) })
+        src({ KinopoiskClient.trending(page) }, { TmdbClient.trending(page) }, { RutrackerrCatalog.trending(page) })
 
     fun popularMovies(page: Int = 1): List<MediaItem> =
-        src({ KinopoiskClient.popularMovies(page) }, { TmdbClient.popularMovies(page) })
+        src({ KinopoiskClient.popularMovies(page) }, { TmdbClient.popularMovies(page) }, { RutrackerrCatalog.popularMovies(page) })
 
     fun popularTv(page: Int = 1): List<MediaItem> =
-        src({ KinopoiskClient.popularTv(page) }, { TmdbClient.popularTv(page) })
+        src({ KinopoiskClient.popularTv(page) }, { TmdbClient.popularTv(page) }, { RutrackerrCatalog.popularTv(page) })
 
     fun topRatedMovies(page: Int = 1): List<MediaItem> =
-        src({ KinopoiskClient.topRatedMovies(page) }, { TmdbClient.topRatedMovies(page) })
+        src({ KinopoiskClient.topRatedMovies(page) }, { TmdbClient.topRatedMovies(page) }, { RutrackerrCatalog.popularMovies(page) })
 
     fun topRatedTv(page: Int = 1): List<MediaItem> =
-        src({ KinopoiskClient.topRatedTv(page) }, { TmdbClient.topRatedTv(page) })
+        src({ KinopoiskClient.topRatedTv(page) }, { TmdbClient.topRatedTv(page) }, { RutrackerrCatalog.popularTv(page) })
 
     fun moviesByGenre(genreId: Int, page: Int = 1): List<MediaItem> =
-        src({ KinopoiskClient.moviesByGenre(genreId, page) }, { TmdbClient.moviesByGenre(genreId, page) })
+        src({ KinopoiskClient.moviesByGenre(genreId, page) }, { TmdbClient.moviesByGenre(genreId, page) }, { RutrackerrCatalog.popularMovies(page) })
 
     fun tvByGenre(genreId: Int, page: Int = 1): List<MediaItem> =
-        src({ KinopoiskClient.tvByGenre(genreId, page) }, { TmdbClient.tvByGenre(genreId, page) })
+        src({ KinopoiskClient.tvByGenre(genreId, page) }, { TmdbClient.tvByGenre(genreId, page) }, { RutrackerrCatalog.popularTv(page) })
 
     fun similar(item: MediaItem): List<MediaItem> =
         src({ KinopoiskClient.similar(item) }, { TmdbClient.similar(item) })

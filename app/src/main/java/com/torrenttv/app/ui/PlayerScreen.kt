@@ -304,6 +304,7 @@ private fun VideoPlayer(
 
     // Конец видео: обработчик снаружи (автозакрытие фильма / следующая серия)
     var showSkip by remember { mutableStateOf(false) } // «Пропустить титры» доступна
+    var seekInfo by remember { mutableStateOf("") }    // «⏩ +10 сек» при перемотке пультом
     DisposableEffect(player) {
         val listener = object : androidx.media3.common.Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
@@ -358,7 +359,25 @@ private fun VideoPlayer(
                     // MENU пульта — оверлей выбора аудиодорожек/субтитров
                     // (встроенный контроллер Media3 аудио выбирать не умеет)
                     setOnKeyListener { _, keyCode, event ->
-                        if (event.action == KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_MENU) {
+                        // Влево/вправо — перемотка ±10 сек пультом
+                        if (event.action == KeyEvent.ACTION_UP &&
+                            (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)
+                        ) {
+                            val delta = if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) 10_000L else -10_000L
+                            val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
+                            player.seekTo((player.currentPosition + delta).coerceIn(0L, dur))
+                            seekInfo = if (delta > 0) "⏩ +10 сек" else "⏪ −10 сек"
+                            true
+                        } else if (event.action == KeyEvent.ACTION_UP &&
+                            (keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
+                                keyCode == KeyEvent.KEYCODE_ENTER ||
+                                keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+                        ) {
+                            // ОК на пульте — пауза/продолжить
+                            if (player.isPlaying) player.pause() else player.play()
+                            seekInfo = if (player.isPlaying) "▶ Продолжаем" else "⏸ Пауза"
+                            true
+                        } else if (event.action == KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_MENU) {
                             showTrackMenu = !showTrackMenu
                             true
                         } else {
@@ -397,6 +416,24 @@ private fun VideoPlayer(
                     )
                 }
             }
+        }
+
+        // Индикатор перемотки пультом
+        if (seekInfo.isNotBlank()) {
+            LaunchedEffect(seekInfo) {
+                kotlinx.coroutines.delay(900)
+                seekInfo = ""
+            }
+            androidx.tv.material3.Text(
+                seekInfo,
+                color = Color(0xFFF5B942),
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .background(Color(0xE0151B26), androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                    .padding(horizontal = 22.dp, vertical = 10.dp),
+            )
         }
 
         if (showTrackMenu) {
