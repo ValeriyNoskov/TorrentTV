@@ -2,6 +2,7 @@ package com.torrenttv.app
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
@@ -58,6 +59,16 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun App() {
     var screen by remember { mutableStateOf<Screen>(Screen.Home) }
+
+    // Системная «Назад» не должна закрывать приложение, пока мы не на «Главной»:
+    // плеер/magnet/автопоиск → карточка, карточка и вкладки → «Главная».
+    BackHandler(screen != Screen.Home) {
+        screen = when (val s = screen) {
+            is Screen.Player -> Screen.Details(s.item)
+            is Screen.MagnetEntry -> Screen.Details(s.item)
+            else -> Screen.Home
+        }
+    }
 
     if (screen in Screen.TABS) {
         // Вкладки: общая панель сверху + содержимое вкладки

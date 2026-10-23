@@ -78,6 +78,9 @@ object TmdbClient {
                 rating = o.optDouble("vote_average", 0.0),
                 genreIds = genreIds,
                 overview = o.optString("overview", ""),
+                imdbId = o.optString("imdb_id", ""),
+                originalTitle = o.optString("original_title", "")
+                    .ifBlank { o.optString("original_name") },
             )
         }
     }

@@ -50,13 +50,20 @@ fun TorrentSearchScreen(item: MediaItem, onDone: () -> Unit, onBack: () -> Unit)
     var results by remember { mutableStateOf<List<TorrentResult>>(emptyList()) }
     var quality by remember { mutableStateOf<String?>(null) } // null = все
 
+    // Запросы: оригинальное (основной) и русское название (альтернативный)
     val query = remember(item) {
-        if (item.year.isNotBlank()) "${item.title} ${item.year}" else item.title
+        val base = item.originalTitle.ifBlank { item.title }
+        if (item.year.isNotBlank()) "$base ${item.year}" else base
+    }
+    val altQuery = remember(item) {
+        val ru = item.title
+        if (ru.isNotBlank() && !ru.equals(item.originalTitle, ignoreCase = true)) ru else null
     }
 
     LaunchedEffect(item) {
         val found = TorrentSearch.searchAll(
             query = query,
+            altQuery = altQuery,
             isTvShow = item.type != "movie",
             imdbId = item.imdbId,
             jackett = store.jackettConfig(),

@@ -30,12 +30,15 @@ object TorrentSearch {
 
     /**
      * Найти раздачи у всех доступных провайдеров параллельно.
-     * @param imdbId  IMDb id карточки (для Torrentio), может быть пустым
-     * @param jackett конфигурация Jackett из настроек, null если выключена
+     * @param query    основной запрос (оригинальное название + год)
+     * @param altQuery альтернативный запрос (русское название) — тоже отдаётся apibay
+     * @param imdbId   IMDb id карточки (для Torrentio), может быть пустым
+     * @param jackett  конфигурация Jackett из настроек, null если выключена
      * @param excludedKeywords стоп-слова из настроек (блокируют раздачу по названию)
      */
     suspend fun searchAll(
         query: String,
+        altQuery: String? = null,
         isTvShow: Boolean,
         imdbId: String = "",
         jackett: JackettProvider.Config? = null,
@@ -45,6 +48,9 @@ object TorrentSearch {
         val partial = coroutineScope {
             val jobs = buildList {
                 add(async { ApibayProvider.search(query, isTvShow) })
+                if (!altQuery.isNullOrBlank() && !altQuery.equals(query, ignoreCase = true)) {
+                    add(async { ApibayProvider.search(altQuery, isTvShow) })
+                }
                 if (!isTvShow && imdbId.isNotBlank()) {
                     add(async { TorrentioProvider.search(imdbId) })
                 }
