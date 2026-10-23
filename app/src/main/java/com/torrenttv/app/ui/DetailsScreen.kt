@@ -44,9 +44,11 @@ fun DetailsScreen(
     onAutoSearch: () -> Unit = {},
     onOpenDetails: (MediaItem) -> Unit = {},
     onEpisodes: () -> Unit = {},
+    onOnline: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
+    val onlineAvailable = remember { store.filmixToken().isNotBlank() }
     var fav by remember { mutableStateOf(store.isFavorite(item)) }
     var magnet by remember { mutableStateOf(store.getMagnet(item) != null) }
     var status by remember { mutableStateOf("") }
@@ -124,6 +126,10 @@ fun DetailsScreen(
                     if (item.type == "tv") {
                         Spacer(Modifier.width(16.dp))
                         Button(onClick = onEpisodes) { Text("🎬 Эпизоды") }
+                    }
+                    if (onlineAvailable) {
+                        Spacer(Modifier.width(16.dp))
+                        Button(onClick = onOnline) { Text("🌐 Онлайн") }
                     }
                     Spacer(Modifier.width(16.dp))
                     Button(onClick = onEnterMagnet) {

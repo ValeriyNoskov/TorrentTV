@@ -24,6 +24,8 @@ import com.torrenttv.app.ui.HomeScreen
 import com.torrenttv.app.ui.IptvPlayerScreen
 import com.torrenttv.app.ui.IptvScreen
 import com.torrenttv.app.ui.MagnetEntryScreen
+import com.torrenttv.app.ui.OnlinePlayerScreen
+import com.torrenttv.app.ui.OnlineScreen
 import com.torrenttv.app.ui.PlayerScreen
 import com.torrenttv.app.ui.SearchScreen
 import com.torrenttv.app.ui.SettingsScreen
@@ -44,6 +46,8 @@ sealed interface Screen {
     data class Episodes(val item: MediaItem) : Screen
     data class MagnetEntry(val item: MediaItem) : Screen
     data class TorrentSearch(val item: MediaItem, val episode: com.torrenttv.app.data.Episode? = null) : Screen
+    data class Online(val item: MediaItem) : Screen
+    data class OnlinePlayer(val item: MediaItem, val link: com.torrenttv.app.data.OnlineService.OnlineLink) : Screen
     data class Player(val item: MediaItem, val episode: com.torrenttv.app.data.Episode? = null) : Screen
     data class IptvPlayer(val channel: IptvChannel) : Screen
 
@@ -119,6 +123,7 @@ private fun App() {
                 onAutoSearch = { screen = Screen.TorrentSearch(s.item) },
                 onOpenDetails = { screen = Screen.Details(it) },
                 onEpisodes = { screen = Screen.Episodes(s.item) },
+                onOnline = { screen = Screen.Online(s.item) },
             )
 
             is Screen.Episodes -> EpisodesScreen(
@@ -154,6 +159,18 @@ private fun App() {
                     screen = if (s.episode != null) Screen.Episodes(s.item)
                     else Screen.Details(s.item)
                 },
+            )
+
+            is Screen.Online -> OnlineScreen(
+                item = s.item,
+                onBack = { screen = Screen.Details(s.item) },
+                onPlay = { link -> screen = Screen.OnlinePlayer(s.item, link) },
+            )
+
+            is Screen.OnlinePlayer -> OnlinePlayerScreen(
+                link = s.link,
+                title = s.item.title,
+                onBack = { screen = Screen.Online(s.item) },
             )
 
             is Screen.IptvPlayer -> IptvPlayerScreen(

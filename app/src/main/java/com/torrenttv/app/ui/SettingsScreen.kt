@@ -60,7 +60,8 @@ fun SettingsScreen(onBack: () -> Unit) {
     var rtCookie by remember { mutableStateOf(store.trackerCookie(PrivateTrackers.RUTRACKER)) }
     var kzCookie by remember { mutableStateOf(store.trackerCookie(PrivateTrackers.KINOZAL)) }
     var nnmCookie by remember { mutableStateOf(store.trackerCookie(PrivateTrackers.NNMCLUB)) }
-    // Активное поле для экранной клавиатуры: "kw" | "jurl" | "jkey" | "rt" | "kz" | "nnm"
+    var fxToken by remember { mutableStateOf(store.filmixToken()) }
+    // Активное поле для экранной клавиатуры: "kw" | "jurl" | "jkey" | "rt" | "kz" | "nnm" | "fx"
     var editTarget by remember { mutableStateOf("kw") }
     val kbFocus = remember { FocusRequester() }
 
@@ -70,6 +71,7 @@ fun SettingsScreen(onBack: () -> Unit) {
         "rt" -> rtCookie
         "kz" -> kzCookie
         "nnm" -> nnmCookie
+        "fx" -> fxToken
         else -> kw
     }
 
@@ -79,6 +81,7 @@ fun SettingsScreen(onBack: () -> Unit) {
         "rt" -> "Cookie для rutracker.org, напр. bb_data=1%7C…"
         "kz" -> "Cookie для kinozal.tv, напр. uid=…; pass=…"
         "nnm" -> "Cookie для nnmclub.to"
+        "fx" -> "Токен Filmix (профиль → Устройства)"
         else -> "Новое стоп-слово…"
     }
 
@@ -91,6 +94,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             "rt" -> store.setTrackerCookie(PrivateTrackers.RUTRACKER, v)
             "kz" -> store.setTrackerCookie(PrivateTrackers.KINOZAL, v)
             "nnm" -> store.setTrackerCookie(PrivateTrackers.NNMCLUB, v)
+            "fx" -> store.setFilmixToken(v)
         }
         editTarget = "kw"
     }
@@ -275,6 +279,10 @@ fun SettingsScreen(onBack: () -> Unit) {
                 }
                 Spacer(Modifier.width(12.dp))
             }
+            // Filmix (онлайн-просмотр)
+            Button(onClick = { editTarget = "fx"; kw = ""; kbFocus.requestFocus() }) {
+                Text(if (fxToken.isNotBlank()) "✓ 🌐 Filmix" else "🌐 Filmix")
+            }
         }
         Text(
             text = "Подключено трекеров: " +
@@ -326,6 +334,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                     "rt" -> rtCookie += ch
                     "kz" -> kzCookie += ch
                     "nnm" -> nnmCookie += ch
+                    "fx" -> fxToken += ch
                     else -> kw += ch
                 }
             },
@@ -336,6 +345,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                     "rt" -> if (rtCookie.isNotEmpty()) rtCookie = rtCookie.dropLast(1)
                     "kz" -> if (kzCookie.isNotEmpty()) kzCookie = kzCookie.dropLast(1)
                     "nnm" -> if (nnmCookie.isNotEmpty()) nnmCookie = nnmCookie.dropLast(1)
+                    "fx" -> if (fxToken.isNotEmpty()) fxToken = fxToken.dropLast(1)
                     else -> if (kw.isNotEmpty()) kw = kw.dropLast(1)
                 }
             },
@@ -346,6 +356,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                     "rt" -> rtCookie = ""
                     "kz" -> kzCookie = ""
                     "nnm" -> nnmCookie = ""
+                    "fx" -> fxToken = ""
                     else -> kw = ""
                 }
             },

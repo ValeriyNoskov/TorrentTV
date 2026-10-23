@@ -227,6 +227,14 @@ class LocalStore(context: Context) {
         return PrivateTrackers.TrackerAuth(trackerId, title, trackerCookie(trackerId))
     }
 
+    // ---------- Filmix (онлайн-просмотр) ----------
+
+    fun filmixToken(): String = prefs.getString("filmix_token", "") ?: ""
+
+    fun setFilmixToken(v: String) {
+        prefs.edit().putString("filmix_token", v.trim()).apply()
+    }
+
     // ---------- Внутреннее ----------
 
     private fun readList(key: String): List<MediaItem> {
