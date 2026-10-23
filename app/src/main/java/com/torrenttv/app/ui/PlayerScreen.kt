@@ -74,6 +74,9 @@ fun PlayerScreen(
     var netInfo by remember { mutableStateOf("") }
     var stream by remember { mutableStateOf<TorrentEngine.StreamSession?>(null) }
     var torrLink by remember { mutableStateOf<String?>(null) }
+    // Серии внутри торрента: (файл, имя) + выбор другой серии
+    var torrentFiles by remember { mutableStateOf<List<Pair<Int, String>>>(emptyList()) }
+    var restartFileIndex by remember { mutableStateOf<Int?>(null) }
 
     // Приоритет движков: 1) TorrServe (внешний), 2) внутренний jlibtorrent
     LaunchedEffect(magnet) {
@@ -111,6 +114,30 @@ fun PlayerScreen(
         }
 
         com.torrenttv.app.data.AppLog.log("player", "startStream: ${magnet.take(90)}")
+
+        // Перезапуск выбранной серии: гасим текущий стрим, стартуем с выбранного файла
+        if (restartFileIndex != null) {
+            stream?.stop()
+            stream = null
+            bufferedPct = 0
+            val st2 = withContext(Dispatchers.IO) {
+                TorrentEngine.startStream(
+                    source = magnet,
+                    saveDir = File(context.filesDir, "downloads/" + item.storeKey),
+                    onStatus = { status = it },
+                    fileIndex = restartFileIndex!!,
+                )
+            }
+            restartFileIndex = null
+            if (st2 == null) {
+                status = "Не удалось переключить серию — нажмите «Назад» и зайдите снова"
+                return@LaunchedEffect
+            }
+            torrentFiles = st2.videoFiles()
+            stream = st2
+            return@LaunchedEffect
+        }
+
         val st = withContext(Dispatchers.IO) {
             TorrentEngine.startStream(
                 source = magnet,
@@ -134,6 +161,7 @@ fun PlayerScreen(
             "player",
             "started: file=\"${st.videoFile.name}\" size=${st.fileSize}",
         )
+        torrentFiles = st.videoFiles()
         stream = st
 
         // Перемотка в середину: поднимаем приоритет кусков вокруг позиции продолжения
@@ -211,6 +239,10 @@ fun PlayerScreen(
                     onBack()
                 }
             },
+            files = torrentFiles,
+            onSelectFile = { idx ->
+                if (idx != stream?.fileIndex) restartFileIndex = idx
+            },
         )
     } else {
         // Экран буферизации
@@ -270,6 +302,10 @@ private fun VideoPlayer(
     onBack: () -> Unit,
     /** Видео дочитано до конца (титры прошёл или «Пропустить титры»). */
     onEnded: () -> Unit,
+    /** Видеофайлы торрента (индекс → имя) для выбора серии. */
+    files: List<Pair<Int, String>> = emptyList(),
+    /** Выбрана другая серия (файл) — перезапуск стрима. */
+    onSelectFile: (Int) -> Unit = {},
 ) {
     val context = LocalContext.current
     val sourceKey = item.storeKey + (episode?.sourceSuffix ?: "")
@@ -416,6 +452,64 @@ private fun VideoPlayer(
                         if (episode != null) "⏭ Пропустить титры → следующая серия" else "⏭ Пропустить титры",
                         fontSize = 15.sp,
                     )
+                }
+            }
+        }
+
+        // «☰ Серии» — выбор другой серии/файла внутри торрента
+        var showFiles by remember { mutableStateOf(false) }
+        if (files.size > 1) {
+            androidx.tv.material3.Button(
+                onClick = { showFiles = !showFiles },
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(24.dp),
+                colors = androidx.tv.material3.ButtonDefaults.colors(
+                    containerColor = Color(0xCC1F2430),
+                    contentColor = Color.White,
+                    focusedContainerColor = Color(0xFFF5B942),
+                    focusedContentColor = Color.Black,
+                ),
+            ) {
+                Text(if (showFiles) "✕ Серии" else "☰ Серии (${files.size})", fontSize = 15.sp)
+            }
+        }
+        if (showFiles) {
+            androidx.compose.foundation.lazy.LazyColumn(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .width(560.dp)
+                    .height(420.dp)
+                    .background(Color(0xF0151B26), androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+                    .padding(14.dp),
+            ) {
+                items(files.size) { n ->
+                    val (idx, name) = files[n]
+                    val current = idx == stream.fileIndex
+                    androidx.tv.material3.Surface(
+                        onClick = {
+                            showFiles = false
+                            if (!current) onSelectFile(idx)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 2.dp),
+                        shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                        ),
+                        colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                            containerColor = if (current) Color(0xFF3A5A2E) else Color(0xFF1F2430),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContentColor = Color.Black,
+                        ),
+                    ) {
+                        androidx.tv.material3.Text(
+                            (if (current) "▶ " else "") + name.substringAfterLast('/'),
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        )
+                    }
                 }
             }
         }

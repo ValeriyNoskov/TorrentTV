@@ -50,6 +50,18 @@ object TorrentEngine {
     ) {
         val videoFile: File by lazy { File(saveDir, ti.files().filePath(fileIndex)) }
 
+        /** Все видеофайлы торрента: (индекс, имя) — для выбора серии. */
+        fun videoFiles(): List<Pair<Int, String>> {
+            val fs = ti.files()
+            val out = mutableListOf<Pair<Int, String>>()
+            for (i in 0 until fs.numFiles()) {
+                if (fs.fileName(i).substringAfterLast('.', "").lowercase() in VIDEO_EXT) {
+                    out += i to fs.fileName(i)
+                }
+            }
+            return out
+        }
+
         /** Сколько байт выбранного файла скачано; при sequential это непрерывная «голова» файла. */
         fun headBytes(): Long = try {
             handle.fileProgress().getOrNull(fileIndex) ?: 0L
@@ -132,6 +144,8 @@ object TorrentEngine {
         saveDir: File,
         onStatus: (String) -> Unit,
         fileMatcher: ((String) -> Boolean)? = null,
+        /** Прямой выбор файла (для «☰ Серии»): перекрывает matcher. */
+        fileIndex: Int = -1,
     ): StreamSession? {
         start()
         saveDir.mkdirs()
@@ -178,7 +192,7 @@ object TorrentEngine {
         val ti = TorrentInfo.bdecode(bytes)
         val fs = ti.files()
         val numFiles = fs.numFiles()
-        val best = bestFileIndex(fs, fileMatcher)
+        val best = if (fileIndex in 0 until numFiles) fileIndex else bestFileIndex(fs, fileMatcher)
         if (best == -1) {
             onStatus("В раздаче нет файлов")
             return null
