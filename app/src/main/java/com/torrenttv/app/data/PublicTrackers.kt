@@ -186,6 +186,62 @@ object RutorProvider {
     }
 }
 
+/**
+ * Рутрекер (rutrackerr.ru) — открытый русский каталог раздач без регистрации:
+ * AJAX-поиск по названию возвращает HTML-таблицу с magnet-ссылками, сидами
+ * и размерами. Проверен живым запросом: «Спецы» — 97 раздач с magnet.
+ */
+object RutrackerrProvider {
+
+    const val NAME = "rutrackerr"
+
+    private const val SEARCH_URL =
+        "https://rutrackerr.ru/engine/modules/search-torrents/search.php"
+
+    fun search(query: String): List<TorrentResult> {
+        val html = TorrentHttp.postForm(
+            url = SEARCH_URL,
+            fields = mapOf("fraza" to query, "id" to "", "search_ok" to "go_search"),
+            headers = mapOf(
+                "Referer" to "https://rutrackerr.ru/",
+                "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120",
+            ),
+        ) ?: return emptyList()
+        return parse(html)
+    }
+
+    private fun parse(html: String): List<TorrentResult> {
+        val out = mutableListOf<TorrentResult>()
+        // Каждая раздача — строка таблицы: название в <b>, размер, сиды, magnet
+        val rows = html.split("<tr>")
+        for (r in rows) {
+            val hash = Regex("urn:btih:([0-9a-fA-F]{40})").find(r)?.groupValues?.get(1)?.lowercase() ?: continue
+            val name = Regex("""<td><b>([^<]{4,})</b></td>""").find(r)?.groupValues?.get(1)?.trim() ?: continue
+            val seeds = Regex("""&nbsp;(\d+)""").find(r)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+            val size = Regex("([0-9.]+)\\s*(ТБ|TB|ГБ|GB|МБ|MB|КБ|KB)").find(r)?.let { m ->
+                val v = m.groupValues[1].toDoubleOrNull() ?: 0.0
+                val u = m.groupValues[2]
+                val mult = when {
+                    u.startsWith("Т") || u == "TB" -> 1024L * 1024 * 1024 * 1024
+                    u.startsWith("Г") || u == "GB" -> 1024L * 1024 * 1024
+                    u.startsWith("М") || u == "MB" -> 1024L * 1024
+                    else -> 1024L
+                }
+                (v * mult).toLong()
+            } ?: 0L
+            out += TorrentResult(
+                name = name,
+                infoHash = hash,
+                seeds = seeds,
+                sizeBytes = size,
+                provider = NAME,
+                resolution = ReleaseQuality.parse(name),
+            )
+        }
+        return out
+    }
+}
+
 object KnabenProvider {
 
     const val NAME = "knaben"

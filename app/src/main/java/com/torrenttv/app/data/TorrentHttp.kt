@@ -48,4 +48,20 @@ object TorrentHttp {
     } catch (_: Exception) {
         null
     }
+
+    /** POST формы (x-www-form-urlencoded), вернуть тело строки или null. */
+    fun postForm(url: String, fields: Map<String, String>, headers: Map<String, String> = emptyMap()): String? = try {
+        val form = fields.entries.joinToString("&") { (k, v) ->
+            java.net.URLEncoder.encode(k, "UTF-8") + "=" + java.net.URLEncoder.encode(v, "UTF-8")
+        }
+        val b = Request.Builder()
+            .url(url)
+            .post(form.toRequestBody("application/x-www-form-urlencoded".toMediaType()))
+        headers.forEach { (k, v) -> b.header(k, v) }
+        client.newCall(b.build()).execute().use { resp ->
+            if (!resp.isSuccessful) null else resp.body?.string()
+        }
+    } catch (_: Exception) {
+        null
+    }
 }

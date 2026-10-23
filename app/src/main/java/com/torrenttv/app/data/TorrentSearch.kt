@@ -151,6 +151,15 @@ object TorrentSearch {
                     runCatching { Call(KnabenProvider.NAME, KnabenProvider.search(query), null) }
                         .getOrElse { Call(KnabenProvider.NAME, emptyList(), it.message) }
                 })
+                // Рутрекер (rutrackerr.ru) — проверенный открытый русский каталог,
+                // ищет и по основному, и по альтернативному названию
+                add(async {
+                    runCatching {
+                        Call(RutrackerrProvider.NAME, RutrackerrProvider.search(query) +
+                            (altQuery?.takeIf { it.isNotBlank() && !it.equals(query, true) }
+                                ?.let { RutrackerrProvider.search(it) } ?: emptyList()), null)
+                    }.getOrElse { Call(RutrackerrProvider.NAME, emptyList(), it.message) }
+                })
                 // RuTor — открытый русский индексатор: русские сериалы/фильмы без регистрации
                 add(async {
                     runCatching {
