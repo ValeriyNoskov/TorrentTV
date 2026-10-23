@@ -109,6 +109,9 @@ class MainActivity : ComponentActivity() {
             isDaemon = true
             start()
         }
+        // Размер карточек из настроек (Настройки → Плеер → «Размер карточек»)
+        com.torrenttv.app.ui.cardWidthDp =
+            com.torrenttv.app.data.LocalStore(this).cardWidthDp()
         setContent {
             MaterialTheme(typography = AppTypography) {
                 App()

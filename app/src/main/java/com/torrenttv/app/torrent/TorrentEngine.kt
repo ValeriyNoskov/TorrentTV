@@ -249,6 +249,9 @@ object TorrentEngine {
     ): StreamSession? {
         start()
         saveDir.mkdirs()
+        // Политика кэша: перед новым стримом освобождаем место —
+        // досмотренное и старьё под нож, недосмотренное живёт до лимита
+        runCatching { com.torrenttv.app.torrent.TorrentCache.enforceLimit(saveDir) }
 
         // Кэш метаданных: для знакомой раздачи плеер стартует без пиров
         val cacheKeyS = Regex("urn:btih:([0-9a-fA-F]{40})").find(source)?.groupValues?.get(1)?.lowercase()

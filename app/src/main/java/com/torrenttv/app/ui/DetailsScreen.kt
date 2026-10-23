@@ -191,10 +191,10 @@ fun DetailsScreen(
 
                 if (menu) {
                     Spacer(Modifier.height(10.dp))
-                    Row {
+                    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         if (item.type == "tv") {
                             Button(onClick = { menu = false; onEpisodes(0) }) { Text("🎬 Эпизоды") }
-                            Spacer(Modifier.width(12.dp))
                         }
                         Button(onClick = { menu = false; onManualSearch() }) { Text("🔍 Выбрать раздачу") }
                         Spacer(Modifier.width(12.dp))
@@ -205,16 +205,29 @@ fun DetailsScreen(
                         Button(onClick = { fav = store.toggleFavorite(item) }) {
                             Text(if (fav) "★ В избранном" else "☆ В избранное")
                         }
-                        Spacer(Modifier.width(12.dp))
                         Button(onClick = { later = store.toggleWatchLater(item); menu = false }) {
                             Text(if (later) "✓ Смотреть позже" else "＋ Смотреть позже")
                         }
-                        Spacer(Modifier.width(12.dp))
                         Button(onClick = {
                             statusTag = store.cycleItemStatus(item)
                             menu = false
                         }) {
                             Text(statusLabel(statusTag))
+                        }
+                        // Убрать из просмотренных: статус + лента «Продолжить» + кэш
+                        if (statusTag.isNotBlank() || store.hasProgress(item)) {
+                            Button(onClick = {
+                                store.clearWatched(item)
+                                statusTag = ""
+                                magnet = store.getMagnet(item) != null
+                                // Кэш скачанного тоже под нож — фильм больше «не в просмотре»
+                                runCatching {
+                                    java.io.File(context.filesDir, "downloads/" + item.storeKey).deleteRecursively()
+                                }
+                                menu = false
+                            }) {
+                                Text("✕ Убрать из просмотренных")
+                            }
                         }
                     }
                 }

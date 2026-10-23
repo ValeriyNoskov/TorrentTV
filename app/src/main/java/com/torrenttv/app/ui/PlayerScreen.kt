@@ -424,10 +424,21 @@ private fun VideoPlayer(
 
     DisposableEffect(player) {
         onDispose {
+            val finished = runCatching {
+                com.torrenttv.app.torrent.TorrentCache.watchedToEnd(
+                    player.currentPosition, player.duration,
+                )
+            }.getOrDefault(false)
             player.release()
-            // Политика хранения: удаляем скачанное после просмотра и гасим торрент
-            stream.stop()
-            runCatching { stream.saveDir.deleteRecursively() }
+            // Политика кэша: досмотрено до конца — удаляем; недосмотрено —
+            // оставляем на диске для мгновенного «Продолжить просмотр»,
+            // чистку старья делает TorrentCache.enforceLimit перед новым стримом
+            if (finished) {
+                stream.stop()
+                runCatching { stream.saveDir.deleteRecursively() }
+            } else {
+                stream.stop()
+            }
         }
     }
 

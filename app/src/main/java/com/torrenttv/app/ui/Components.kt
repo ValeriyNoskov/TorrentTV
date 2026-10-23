@@ -165,13 +165,17 @@ fun HeroBanner(item: MediaItem, onOpenDetails: (MediaItem) -> Unit) {
     }
 }
 
+/** Текущая ширина карточки постера (dp) — меняется в Настройках («Размер карточек»). */
+var cardWidthDp by mutableStateOf(170)
+
 /** Карточка с постером — фокус берётся с пульта, по ОК открывается карточка. */
 @Composable
 fun PosterCard(item: MediaItem, onClick: () -> Unit) {
+    val w = cardWidthDp
     Surface(
         onClick = onClick,
         modifier = Modifier
-            .width(170.dp)
+            .width(w.dp)
             .padding(6.dp)
             .mouseClick { onClick() },
         shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
@@ -186,7 +190,7 @@ fun PosterCard(item: MediaItem, onClick: () -> Unit) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(250.dp)
+                            .height((w * 250 / 170).dp)
                             .background(Color(0xFF1F2430)),
                         contentAlignment = Alignment.Center,
                     ) {
@@ -198,7 +202,7 @@ fun PosterCard(item: MediaItem, onClick: () -> Unit) {
                         contentDescription = item.title,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(250.dp),
+                            .height((w * 250 / 170).dp),
                         contentScale = ContentScale.Crop,
                     )
                 }

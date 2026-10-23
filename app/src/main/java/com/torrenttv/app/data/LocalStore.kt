@@ -125,6 +125,27 @@ class LocalStore(context: Context) {
             }
             .reversed()
 
+    /** Полное «убрать из просмотренных»: статус, лента «Продолжить», отметка серии. */
+    fun clearWatched(item: MediaItem) {
+        setItemStatus(item, "")
+        prefs.edit()
+            .remove("statusitem:" + item.storeKey)
+            .remove("lastfile:" + item.storeKey)
+            .apply()
+        val arr = runCatching { JSONArray(prefs.getString("progress", "[]")) }.getOrDefault(JSONArray())
+        val out = JSONArray()
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            val e = WatchEntry.fromJson(o)
+            if (e.item.storeKey != item.storeKey) out.put(o)
+        }
+        prefs.edit().putString("progress", out.toString()).apply()
+    }
+
+    /** Есть ли запись о просмотре (для ленты «Продолжить»). */
+    fun hasProgress(item: MediaItem): Boolean =
+        continueWatching().any { it.item.storeKey == item.storeKey }
+
     // ---------- Прогресс просмотра ----------
 
     fun continueWatching(): List<WatchEntry> {
@@ -214,6 +235,14 @@ class LocalStore(context: Context) {
 
     fun setGithubToken(v: String) {
         prefs.edit().putString("github_token", v.trim()).apply()
+    }
+
+    // ---------- Размер карточек ----------
+
+    fun cardWidthDp(): Int = prefs.getInt("card_width_dp", 170)
+
+    fun setCardWidthDp(v: Int) {
+        prefs.edit().putInt("card_width_dp", v).apply()
     }
 
     fun setKpApiKey(v: String) {

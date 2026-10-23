@@ -70,6 +70,12 @@ sealed class SmartChoice {
         override val label: String = "⚡ Играть сразу — ${r.name}"
         override val sub: String = "лучшая раздача · ${r.seeds} сидов · ${r.sizeLabel()}"
     }
+
+    /** Продолжить сериал с последней серии (раздача уже сохранена). */
+    data object Resume : SmartChoice() {
+        override val label: String = "⚡ Продолжить просмотр сериала"
+        override val sub: String = "с последней серии, мгновенно"
+    }
 }
 
 /**
@@ -134,15 +140,21 @@ fun SmartPlayScreen(
         val found = torrentsFound
         com.torrenttv.app.data.AppLog.log("smart", "sources: online=0 torrents=${found.size}")
 
-        // Лучшая раздача для «Играть сразу»: сиды × бонус качества
-        // (1080p — золотая середина, 2160p весит десятки ГБ, SD — компромисс)
+        // Лучшая раздача для «Играть сразу»: сиды × бонус качества.
+        // Для сериалов — бонус раздачам с сезоном/сериями в названии
+        // (пак «S01» или «S01E05» релевантнее полного сборника)
+        fun seasonBonus(name: String): Int = when {
+            Regex("S\\d{2}E\\d{2}", RegexOption.IGNORE_CASE).containsMatchIn(name) -> 2
+            Regex("S\\d{2}|\\d+\\s+[сС]езон|Сезон\\s*\\d", RegexOption.IGNORE_CASE).containsMatchIn(name) -> 3
+            else -> 1
+        }
         val best = found.maxByOrNull { r ->
-            r.seeds * when (r.resolution) {
+            r.seeds * (when (r.resolution) {
                 "1080p" -> 3
                 "2160p" -> 2
                 "720p" -> 2
                 else -> 1
-            }
+            }) * (if (isTv) seasonBonus(r.name) else 1)
         }
         val torrentChoices = found
             .sortedByDescending { it.seeds }
@@ -151,6 +163,11 @@ fun SmartPlayScreen(
 
         choices = (best?.let { listOf(SmartChoice.Instant(it)) } ?: emptyList()) +
             choices + torrentChoices
+
+        // Сериалы: продолжение с последней серии — самая верхняя строка
+        if (isTv && store.getMagnet(item) != null) {
+            choices = listOf(SmartChoice.Resume) + choices
+        }
         done = choices.isNotEmpty()
         failed = choices.isEmpty()
         status = if (failed) {
@@ -226,6 +243,7 @@ fun SmartPlayScreen(
                         androidx.tv.material3.Surface(
                             onClick = {
                                 when (c) {
+                                    is SmartChoice.Resume -> onPlayTorrent()
                                     is SmartChoice.Instant -> playTorrent(c.r)
                                     is SmartChoice.Online -> onPlayOnline(c.link)
                                     is SmartChoice.Serial -> onOpenOnline()
