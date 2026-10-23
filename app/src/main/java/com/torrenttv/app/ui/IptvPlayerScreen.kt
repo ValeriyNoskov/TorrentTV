@@ -252,6 +252,26 @@ fun IptvPlayerScreen(channel: IptvChannel, onBack: () -> Unit) {
                     favTick++
                 },
             )
+            val ctx = LocalContext.current
+            SidebarButton(
+                text = "⤴ Плеер",
+                focused = false,
+                focusRequester = null,
+                onClick = {
+                    // Внешний плеер: тот же поток m3u8 (VLC, MX Player и т.п.)
+                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                        setDataAndType(
+                            android.net.Uri.parse(current.url),
+                            if (current.url.contains(".m3u8", true)) "application/x-mpegURL" else "video/*",
+                        )
+                        addFlags(
+                            android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                        )
+                    }
+                    runCatching { ctx.startActivity(intent) }
+                },
+            )
             SidebarButton(
                 text = "← К списку каналов",
                 focused = false,

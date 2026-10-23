@@ -57,6 +57,7 @@ fun TorrentSearchScreen(
 
     var status by remember { mutableStateOf("Ищу торренты…") }
     var results by remember { mutableStateOf<List<TorrentResult>>(emptyList()) }
+    var stats by remember { mutableStateOf<List<TorrentSearch.ProviderStat>>(emptyList()) }
     var quality by remember { mutableStateOf<String?>(null) } // null = все
     // Выбранная частная раздача: идёт скачивание .torrent
     var selecting by remember { mutableStateOf<TorrentResult?>(null) }
@@ -79,16 +80,19 @@ fun TorrentSearchScreen(
     }
 
     LaunchedEffect(item) {
-        val found = TorrentSearch.searchAll(
+        val (found, st) = TorrentSearch.searchDetailed(
             query = query,
             altQuery = altQuery,
             isTvShow = item.type != "movie",
             imdbId = item.imdbId,
+            season = episode?.season ?: 0,
+            episode = episode?.episode ?: 0,
             jackett = store.jackettConfig(),
             privateTrackers = store.privateTrackers(),
             excludedKeywords = store.excludedKeywords().toSet(),
         )
         results = found
+        stats = st
         status = if (found.isEmpty()) {
             "Ничего не найдено — попробуйте «Указать magnet» вручную"
         } else {
@@ -148,6 +152,15 @@ fun TorrentSearchScreen(
             color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold,
         )
         Text(status, color = Color.White.copy(alpha = 0.6f), fontSize = 15.sp, modifier = Modifier.padding(top = 6.dp))
+        // Диагностика: сколько нашёл каждый провайдер («apibay:20 · torrentio:35»)
+        if (stats.isNotEmpty()) {
+            Text(
+                stats.joinToString(" · ") { it.label() },
+                color = Color.White.copy(alpha = 0.4f),
+                fontSize = 13.sp,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
 
         // ---------- Чипы качества (скраббер) ----------
         if (availableQualities.isNotEmpty()) {

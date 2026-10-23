@@ -100,9 +100,28 @@ object OnlineService {
     }
 
     /** Карточка Filmix по id (в Lampa — «post»); содержит player_links. Блокирующий. */
-    fun playerData(token: String, filmixId: String): List<OnlineLink> {
-        val (_, body) = apiGet("/api/v2/post/$filmixId?" + devParams(token)) ?: return emptyList()
-        return runCatching { parsePlayerData(body) }.getOrDefault(emptyList())
+    fun playerData(token: String, filmixId: String): List<OnlineLink> =
+        playerInfo(token, filmixId).links
+
+    /** Результат поста с диагнозом: есть ли player_links и не заблокировано ли всё. */
+    data class PlayerInfo(
+        val links: List<OnlineLink>,
+        val hasPlayerLinks: Boolean, // поле player_links присутствовало
+        val allBlocked: Boolean,     // ссылки были, но все «Заблокировано правообладателем»
+    )
+
+    /** Загрузить пост с диагностикой: почему пусто — нет поля или всё под блокировкой. */
+    fun playerInfo(token: String, filmixId: String): PlayerInfo {
+        val (_, body) = apiGet("/api/v2/post/$filmixId?" + devParams(token))
+            ?: return PlayerInfo(emptyList(), hasPlayerLinks = false, allBlocked = false)
+        val json = runCatching { JSONObject(body) }.getOrNull()
+            ?: return PlayerInfo(emptyList(), hasPlayerLinks = false, allBlocked = false)
+        val pl = json.optJSONObject("player_links")
+            ?: return PlayerInfo(emptyList(), hasPlayerLinks = false, allBlocked = false)
+        val out = mutableListOf<OnlineLink>()
+        walk(pl, path = emptyList(), out = out)
+        // walk уже отбросил abuse-ссылки: пусто при непустом player_links = всё заблокировано
+        return PlayerInfo(out, hasPlayerLinks = true, allBlocked = out.isEmpty())
     }
 
     private fun headers(): Map<String, String> = mapOf(
@@ -176,7 +195,12 @@ object OnlineService {
 
     private fun leaf(o: JSONObject, path: List<String>): OnlineLink {
         val translation = o.optString("translation", "")
-        val quality = o.optString("quality", "")
+        // качества доступны в HLS-потоке: [1080, 720, 480] — для подписи и фильтра
+        val qArr = o.optJSONArray("qualities")
+        val maxQ = qArr?.let { arr ->
+            (0 until arr.length()).mapNotNull { arr.optInt(it, 0) }.maxOrNull() ?: 0
+        } ?: 0
+        val quality = o.optString("quality", "").ifBlank { if (maxQ > 0) "${maxQ}p" else "" }
         // Путь вида [сезон, серия] для сериалов; для фильма пустой
         val numbers = path.filter { it.toIntOrNull() != null }.map { it.toInt() }
         val season = numbers.getOrNull(0) ?: 0

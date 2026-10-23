@@ -89,15 +89,38 @@ fun OnlineScreen(item: MediaItem, onBack: () -> Unit, onPlay: (OnlineService.Onl
         }
     }
 
-    // Шаг 2: playerdata для выбранной карточки
-    LaunchedEffect(chosen) {
+    // Шаг 2: ссылки для выбранной карточки; если пусто — перебираем другие совпадения
+    LaunchedEffect(chosen, matches) {
         val m = chosen ?: return@LaunchedEffect
         status = "Получаю ссылки…"
-        links = withContext(Dispatchers.IO) { OnlineService.playerData(token, m.filmixId) }
-        if (links.isEmpty()) {
-            status = "Ссылки не получены — проверьте токен Filmix в настройках (нужен аккаунт)"
+        var lastBlocked = false
+        var lastNoField = false
+
+        val queue = listOf(m) + matches.filter { it.filmixId != m.filmixId }.take(4)
+        for (cand in queue) {
+            val info = withContext(Dispatchers.IO) { OnlineService.playerInfo(token, cand.filmixId) }
+            if (info.links.isNotEmpty()) {
+                links = info.links
+                selectedSeason = info.links.filter { it.season > 0 }.minOfOrNull { it.season } ?: 0
+                return@LaunchedEffect
+            }
+            lastBlocked = lastBlocked || info.allBlocked
+            lastNoField = lastNoField || !info.hasPlayerLinks
         }
-        selectedSeason = links.filter { it.season > 0 }.minOfOrNull { it.season } ?: 0
+
+        links = emptyList()
+        status = when {
+            token.isBlank() ->
+                "Filmix не подключён — Настройки → 🌐 Filmix (код устройства)"
+            withContext(Dispatchers.IO) { OnlineService.profile(token) } == null ->
+                "Токен Filmix не активен — переподключите в настройках (🌐 Filmix)"
+            lastBlocked ->
+                "Контент заблокирован правообладателем даже с аккаунтом Filmix — смотрите через торренты"
+            lastNoField ->
+                "У найденных карточек нет онлайн-ссылок — смотрите через торренты"
+            else ->
+                "Не удалось получить ссылки — проверьте сеть или используйте торренты"
+        }
     }
 
     BackHandler { onBack() }
@@ -271,10 +294,13 @@ private fun SeasonChipLite(label: String, selected: Boolean, onClick: () -> Unit
     }
 }
 
-/** Плеер онлайн-потока: Media3 + заголовки Filmix (Referer/User-Agent). */
+/** Плеер онлайн-потока: Media3 + заголовки Filmix (Referer/User-Agent).
+ *  Кнопки поверх: выбор качества (ограничение трек-селекшна) и внешний плеер. */
 @Composable
 fun OnlinePlayerScreen(link: OnlineService.OnlineLink, title: String, onBack: () -> Unit) {
     val context = LocalContext.current
+    var showQuality by remember { mutableStateOf(false) }
+    var maxQuality by remember { mutableStateOf<Int?>(null) } // null = авто
 
     val player = remember(link.url) {
         val httpFactory = DefaultHttpDataSource.Factory()
@@ -301,9 +327,32 @@ fun OnlinePlayerScreen(link: OnlineService.OnlineLink, title: String, onBack: ()
             }
     }
 
+    // Ограничение качества видео (для HLS-мастера с вариантами)
+    LaunchedEffect(player, maxQuality) {
+        player.trackSelectionParameters = player.trackSelectionParameters
+            .buildUpon()
+            .setMaxVideoSize(Int.MAX_VALUE, maxQuality ?: Int.MAX_VALUE)
+            .build()
+    }
+
     DisposableEffect(player) { onDispose { player.release() } }
 
+    BackHandler(enabled = showQuality) { showQuality = false }
     BackHandler { onBack() }
+
+    fun openExternal() {
+        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+            setDataAndType(
+                android.net.Uri.parse(link.url),
+                if (link.url.contains(".m3u8", true)) "application/x-mpegURL" else "video/*",
+            )
+            addFlags(
+                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+            )
+        }
+        runCatching { context.startActivity(intent) }
+    }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         AndroidView(
@@ -323,6 +372,85 @@ fun OnlinePlayerScreen(link: OnlineService.OnlineLink, title: String, onBack: ()
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(16.dp),
+        )
+
+        // Кнопки поверх видео
+        Column(
+            Modifier
+                .align(Alignment.TopEnd)
+                .padding(16.dp),
+            horizontalAlignment = Alignment.End,
+        ) {
+            PlayerChip("⚙ Качество: ${maxQuality?.let { "${it}p" } ?: "авто"}") { showQuality = true }
+            Spacer(Modifier.height(8.dp))
+            PlayerChip("⤴ Внешний плеер") { openExternal() }
+        }
+
+        if (showQuality) {
+            Column(
+                Modifier
+                    .align(Alignment.Center)
+                    .background(Color(0xF0151B26), RoundedCornerShape(14.dp))
+                    .padding(18.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    "Качество видео",
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 10.dp),
+                )
+                val options = listOf(null to "Авто (по каналу)", 2160 to "2160p · 4K", 1080 to "1080p", 720 to "720p", 480 to "480p")
+                for ((q, label) in options) {
+                    androidx.tv.material3.Surface(
+                        onClick = { maxQuality = q; showQuality = false },
+                        modifier = Modifier
+                            .width(220.dp)
+                            .padding(vertical = 3.dp)
+                            .mouseClick { maxQuality = q; showQuality = false },
+                        shape = clickableSurfaceShape(RoundedCornerShape(8.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = if (maxQuality == q) Color(0xFFF5B942) else Color(0xFF1F2430),
+                            contentColor = if (maxQuality == q) Color(0xFF0E1116) else Color.White,
+                            focusedContainerColor = Color(0xFFFFD07A),
+                            focusedContentColor = Color(0xFF0E1116),
+                            pressedContainerColor = Color(0xFFE0A82E),
+                            pressedContentColor = Color(0xFF0E1116),
+                        ),
+                    ) {
+                        Text(
+                            label,
+                            fontSize = 15.sp,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Небольшая кнопка поверх видео. */
+@Composable
+private fun PlayerChip(label: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.mouseClick { onClick() },
+        shape = clickableSurfaceShape(RoundedCornerShape(8.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color(0x990E1116),
+            contentColor = Color.White,
+            focusedContainerColor = Color(0xFFF5B942),
+            focusedContentColor = Color(0xFF0E1116),
+            pressedContainerColor = Color(0xFFE0A82E),
+            pressedContentColor = Color(0xFF0E1116),
+        ),
+    ) {
+        Text(
+            label,
+            fontSize = 13.sp,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
         )
     }
 }

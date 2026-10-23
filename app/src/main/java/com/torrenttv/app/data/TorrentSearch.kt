@@ -34,6 +34,8 @@ object TorrentSearch {
      * @param query    основной запрос (оригинальное название + год)
      * @param altQuery альтернативный запрос (русское название) — тоже отдаётся apibay
      * @param imdbId   IMDb id карточки (для Torrentio), может быть пустым
+     * @param season   сезон (для Torrentio series endpoint), 0 — фильм
+     * @param episode  эпизод (для Torrentio series endpoint)
      * @param jackett  конфигурация Jackett из настроек, null если выключена
      * @param excludedKeywords стоп-слова из настроек (блокируют раздачу по названию)
      */
@@ -42,35 +44,94 @@ object TorrentSearch {
         altQuery: String? = null,
         isTvShow: Boolean,
         imdbId: String = "",
+        season: Int = 0,
+        episode: Int = 0,
         jackett: JackettProvider.Config? = null,
         privateTrackers: List<PrivateTrackers.TrackerAuth> = emptyList(),
         excludedKeywords: Set<String> = emptySet(),
         limit: Int = 50,
-    ): List<TorrentResult> = withContext(Dispatchers.IO) {
-        val partial = coroutineScope {
+    ): List<TorrentResult> =
+        searchDetailed(
+            query, altQuery, isTvShow, imdbId, season, episode,
+            jackett, privateTrackers, excludedKeywords, limit,
+        ).first
+
+    /** Статистика одного провайдера для диагностики («apibay:20 · torrentio:35 · jackett:—»). */
+    data class ProviderStat(
+        val name: String,
+        val count: Int,
+        val error: String? = null,
+    ) {
+        /** «apibay:20», «apibay:0 (недоступен)» или «apibay:—». */
+        fun label(): String = when {
+            error != null -> "$name:ошибка"
+            count == 0 -> "$name:—"
+            else -> "$name:$count"
+        }
+    }
+
+    /** Поиск + по каждому провайдеру — сколько нашёл (для строки диагностики). */
+    suspend fun searchDetailed(
+        query: String,
+        altQuery: String? = null,
+        isTvShow: Boolean,
+        imdbId: String = "",
+        season: Int = 0,
+        episode: Int = 0,
+        jackett: JackettProvider.Config? = null,
+        privateTrackers: List<PrivateTrackers.TrackerAuth> = emptyList(),
+        excludedKeywords: Set<String> = emptySet(),
+        limit: Int = 50,
+    ): Pair<List<TorrentResult>, List<ProviderStat>> = withContext(Dispatchers.IO) {
+        // Каждый вызов провайдера: имя, результаты, ошибка (если вылетел)
+        data class Call(val name: String, val res: List<TorrentResult>, val err: String?)
+
+        val calls: List<Call> = coroutineScope {
             val jobs = buildList {
-                add(async { ApibayProvider.search(query, isTvShow) })
-                if (!altQuery.isNullOrBlank() && !altQuery.equals(query, ignoreCase = true)) {
-                    add(async { ApibayProvider.search(altQuery, isTvShow) })
-                }
-                if (!isTvShow && imdbId.isNotBlank()) {
-                    add(async { TorrentioProvider.search(imdbId) })
+                add(async {
+                    runCatching {
+                        // apibay ищет и по оригинальному, и по русскому названию
+                        Call(ApibayProvider.NAME, ApibayProvider.search(query, isTvShow) +
+                            (altQuery?.takeIf { it.isNotBlank() && !it.equals(query, true) }
+                                ?.let { ApibayProvider.search(it, isTvShow) } ?: emptyList()), null)
+                    }.getOrElse { Call(ApibayProvider.NAME, emptyList(), it.message) }
+                })
+                if (imdbId.isNotBlank()) {
+                    // Torrentio: фильм целиком или конкретная серия (сериалы)
+                    if (season > 0 && episode > 0) {
+                        add(async {
+                            runCatching { Call(TorrentioProvider.NAME, TorrentioProvider.search(imdbId, season, episode), null) }
+                                .getOrElse { Call(TorrentioProvider.NAME, emptyList(), it.message) }
+                        })
+                    } else if (!isTvShow) {
+                        add(async {
+                            runCatching { Call(TorrentioProvider.NAME, TorrentioProvider.search(imdbId), null) }
+                                .getOrElse { Call(TorrentioProvider.NAME, emptyList(), it.message) }
+                        })
+                    }
                 }
                 if (jackett?.isConfigured == true) {
-                    add(async { JackettProvider.search(jackett, query) })
+                    add(async {
+                        runCatching { Call(JackettProvider.NAME, JackettProvider.search(jackett, query), null) }
+                            .getOrElse { Call(JackettProvider.NAME, emptyList(), it.message) }
+                    })
                 }
                 // Частные трекеры: RU-трекеры лучше ищут по русскому названию —
                 // поэтому запрос идёт и основным, и альтернативным
                 for (auth in privateTrackers.filter { it.isConfigured }) {
-                    add(async { PrivateTrackers.search(auth, query) })
-                    if (!altQuery.isNullOrBlank() && !altQuery.equals(query, ignoreCase = true)) {
-                        add(async { PrivateTrackers.search(auth, altQuery) })
-                    }
+                    add(async {
+                        runCatching {
+                            Call(auth.id, PrivateTrackers.search(auth, query) +
+                                (altQuery?.takeIf { it.isNotBlank() && !it.equals(query, true) }
+                                    ?.let { PrivateTrackers.search(auth, it) } ?: emptyList()), null)
+                        }.getOrElse { Call(auth.id, emptyList(), it.message) }
+                    })
                 }
             }
             jobs.awaitAll()
         }
-        merge(partial, excludedKeywords).take(limit)
+        val stats = calls.map { ProviderStat(it.name, it.res.size, it.err) }
+        merge(calls.map { it.res }, excludedKeywords).take(limit) to stats
     }
 
     /** Слить выдачи провайдеров: фильтр по сидам/стоп-словам, дедуп по info_hash. */

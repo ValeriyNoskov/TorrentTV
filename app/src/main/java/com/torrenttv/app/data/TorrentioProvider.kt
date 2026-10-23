@@ -4,7 +4,7 @@ import org.json.JSONObject
 
 /**
  * Провайдер Torrentio (torrentio.strem.fun) — агрегатор раздач по IMDb-id.
- * Работает только для фильмов (сериалам нужен конкретный сезон/эпизод).
+ * Фильмы: stream/movie/tt….json; сериалы: stream/series/tt…:S:E.json.
  * Не требует ключей; ответ — JSON со списком потоков-раздач.
  */
 object TorrentioProvider {
@@ -20,11 +20,12 @@ object TorrentioProvider {
         return if (s.startsWith("tt", ignoreCase = true)) s.lowercase() else "tt$s"
     }
 
-    /** Найти раздачи фильма по imdb id (без префикса тоже сработает). */
-    fun search(imdbId: String): List<TorrentResult> {
+    /** Найти раздачи: фильм по imdb id или серию (season>0 → series/S/E). */
+    fun search(imdbId: String, season: Int = 0, episode: Int = 0): List<TorrentResult> {
         val id = normalizeImdb(imdbId)
         if (id.isBlank()) return emptyList()
-        val url = "https://torrentio.strem.fun/stream/movie/$id.json"
+        val kind = if (season > 0 && episode > 0) "series/$id:$season:$episode" else "movie/$id"
+        val url = "https://torrentio.strem.fun/stream/$kind.json"
         val body = TorrentHttp.get(url) ?: return emptyList()
 
         val streams = try {
