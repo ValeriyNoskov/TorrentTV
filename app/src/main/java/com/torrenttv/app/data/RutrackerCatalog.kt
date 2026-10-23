@@ -104,6 +104,39 @@ object RutrackerrCatalog {
         return parseCards(page).filter { it.title != item.title }.take(12)
     }
 
+    // ---------- Жанры = категории сайта (работают без лимитов) ----------
+
+    private val GENRES = listOf(
+        "boeviki" to "Боевики",
+        "komedii" to "Комедии",
+        "dramy" to "Драмы",
+        "trillery" to "Триллеры",
+        "uzhasy" to "Ужасы",
+        "fantastika" to "Фантастика",
+        "fjentezi" to "Фэнтези",
+        "kriminal" to "Криминал",
+        "melodramy" to "Мелодрамы",
+        "prikljuchenija" to "Приключения",
+        "semejnye" to "Семейные",
+        "detskie" to "Детские",
+        "multfilmy" to "Мультфильмы",
+        "anime" to "Аниме",
+        "dokumentalnye" to "Документальные",
+        "voennye" to "Военные",
+        "sport" to "Спорт",
+        "serialy" to "Сериалы",
+    )
+
+    /** Жанры-категории Рутрекера (id = hashCode слага — по нему находим slug). */
+    fun genres(): List<Genre> = GENRES.map { (slug, name) -> Genre(genreId(slug), name) }
+
+    private fun genreId(slug: String): Int = kotlin.math.abs(("rtg-" + slug).hashCode())
+
+    fun byGenre(id: Int, page: Int): List<MediaItem> {
+        val slug = GENRES.firstOrNull { genreId(it.first) == id }?.first ?: return emptyList()
+        return category("$BASE/$slug/", page)
+    }
+
     /** Разбор страницы категории/подобного списка: карточки rutef_movie. */
     private fun category(url: String, page: Int): List<MediaItem> {
         val full = if (page > 1) url.trimEnd('/') + "/page/$page/" else url

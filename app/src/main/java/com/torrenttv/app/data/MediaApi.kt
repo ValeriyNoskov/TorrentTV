@@ -58,10 +58,10 @@ object MediaApi {
         src({ KinopoiskClient.topRatedTv(page) }, { TmdbClient.topRatedTv(page) }, { RutrackerrCatalog.popularTv(page) })
 
     fun moviesByGenre(genreId: Int, page: Int = 1): List<MediaItem> =
-        src({ KinopoiskClient.moviesByGenre(genreId, page) }, { TmdbClient.moviesByGenre(genreId, page) }, { RutrackerrCatalog.popularMovies(page) })
+        src({ KinopoiskClient.moviesByGenre(genreId, page) }, { TmdbClient.moviesByGenre(genreId, page) }, { RutrackerrCatalog.byGenre(genreId, page) })
 
     fun tvByGenre(genreId: Int, page: Int = 1): List<MediaItem> =
-        src({ KinopoiskClient.tvByGenre(genreId, page) }, { TmdbClient.tvByGenre(genreId, page) }, { RutrackerrCatalog.popularTv(page) })
+        src({ KinopoiskClient.tvByGenre(genreId, page) }, { TmdbClient.tvByGenre(genreId, page) }, { RutrackerrCatalog.byGenre(genreId, page) })
 
     fun similar(item: MediaItem): List<MediaItem> =
         src({ KinopoiskClient.similar(item) }, { TmdbClient.similar(item) }, { RutrackerrCatalog.similar(item) })
@@ -71,12 +71,12 @@ object MediaApi {
         src({ KinopoiskClient.seasons(item) }, { TmdbClient.seasons(item) })
 
     fun movieGenres(): List<Genre> =
-        src({ KinopoiskClient.movieGenres() }, { TmdbClient.movieGenres() })
+        src({ KinopoiskClient.movieGenres() }, { TmdbClient.movieGenres() }, { RutrackerrCatalog.genres() })
 
     fun tvGenres(): List<Genre> =
-        src({ KinopoiskClient.tvGenres() }, { TmdbClient.tvGenres() })
+        src({ KinopoiskClient.tvGenres() }, { TmdbClient.tvGenres() }, { RutrackerrCatalog.genres() })
 
     /** Список стран для фильтра (для TMDB не поддерживается — пустой список). */
     fun countries(): List<Genre> =
-        src({ KinopoiskClient.countries() }, { emptyList() })
+        src({ KinopoiskClient.countries() }, { emptyList() }, { emptyList() })
 }

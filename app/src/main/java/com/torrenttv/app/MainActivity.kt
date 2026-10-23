@@ -59,7 +59,7 @@ sealed interface Screen {
     data class IptvPlayer(val channel: IptvChannel) : Screen
 
     companion object {
-        val TABS: List<Screen> = listOf(Home, Movies, TvShows, Iptv, Search, Settings)
+        val TABS: List<Screen> = listOf(Home, Movies, TvShows, Search, Settings)
     }
 }
 
