@@ -8,3 +8,4 @@ local.properties
 release-keystore.jks
 keystore-password.txt
 *.jks
+*.jks.old
