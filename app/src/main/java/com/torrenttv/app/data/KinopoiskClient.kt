@@ -24,6 +24,53 @@ object KinopoiskClient {
 
     val isConfigured: Boolean get() = BuildConfig.KP_API_KEY.isNotBlank()
 
+    // ---------- Дисковый кэш ответов (экономит дневной лимит API) ----------
+
+    private var cacheDir: java.io.File? = null
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, String>>()
+    private const val TTL_MS = 12 * 3600_000L       // свежий кэш: 12 часов
+    private const val MAX_ENTRIES = 250
+
+    /** Вызывается из Activity при старте: включаем кэш ответов на диске. */
+    fun attachCache(dir: java.io.File) {
+        if (cacheDir != null) return
+        cacheDir = dir
+        runCatching {
+            val f = java.io.File(dir, "kp_cache.json")
+            if (f.exists()) {
+                val arr = org.json.JSONArray(f.readText())
+                for (i in 0 until arr.length()) {
+                    val o = arr.getJSONObject(i)
+                    cache[o.getString("u")] = o.getLong("t") to o.getString("b")
+                }
+            }
+        }
+    }
+
+    private fun persistCache() {
+        val dir = cacheDir ?: return
+        runCatching {
+            // переполнение — удаляем самые старые записи
+            if (cache.size > MAX_ENTRIES) {
+                cache.entries.sortedBy { it.value.first }
+                    .take(cache.size - MAX_ENTRIES)
+                    .forEach { cache.remove(it.key) }
+            }
+            val arr = org.json.JSONArray()
+            for ((u, v) in cache) {
+                arr.put(org.json.JSONObject().put("u", u).put("t", v.first).put("b", v.second))
+            }
+            java.io.File(dir, "kp_cache.json").writeText(arr.toString())
+        }
+    }
+
+    private fun cacheFresh(url: String): String? {
+        val v = cache[url] ?: return null
+        return if (System.currentTimeMillis() - v.first < TTL_MS) v.second else null
+    }
+
+    private fun cacheStale(url: String): String? = cache[url]?.second
+
     private val http = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
@@ -51,6 +98,8 @@ object KinopoiskClient {
                 })
             }
         }
+        // Свежий кэш — без сети (экономит дневной лимит запросов)
+        cacheFresh(url)?.let { return runCatching { JSONObject(it) }.getOrNull() }
         return try {
             http.newCall(
                 Request.Builder()
@@ -59,10 +108,24 @@ object KinopoiskClient {
                     .build()
             ).execute().use { resp ->
                 lastFailed = !resp.isSuccessful
-                if (!resp.isSuccessful) null else JSONObject(resp.body!!.string())
+                if (!resp.isSuccessful) {
+                    // Сеть не удалась — отдаём устаревший кэш, чтобы каталоги работали
+                    cacheStale(url)?.let { return runCatching { JSONObject(it) }.getOrNull() }
+                    null
+                } else {
+                    val body = resp.body!!.string()
+                    cache[url] = System.currentTimeMillis() to body
+                    persistCache()
+                    JSONObject(body)
+                }
             }
         } catch (e: Exception) {
             lastFailed = true
+            // Нет сети — устаревший кэш лучше пустоты
+            cacheStale(url)?.let { s ->
+                lastFailed = false
+                return runCatching { JSONObject(s) }.getOrNull()
+            }
             null
         }
     }

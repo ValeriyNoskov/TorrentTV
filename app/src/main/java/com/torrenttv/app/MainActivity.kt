@@ -67,6 +67,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         com.torrenttv.app.data.AppLog.init(this)
+        // Дисковый кэш метаданных: экономит дневной лимит API и работает без сети
+        com.torrenttv.app.data.KinopoiskClient.attachCache(cacheDir)
         setContent {
             MaterialTheme {
                 App()

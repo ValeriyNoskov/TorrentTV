@@ -3,7 +3,8 @@ package com.torrenttv.app.data
 /**
  * Единая точка доступа к метаданным фильмов/сериалов.
  *
- * Приоритет провайдера: kinopoisk.dev (доступен из РФ) → TMDB (если сеть позволяет).
+ * Основной провайдер — Kinopoisk API Unofficial (доступен из РФ). Если он
+ * недоступен или исчерпан его дневной лимит — автоматический фолбэк на TMDB.
  * Ключи задаются в gradle.properties: kpApiKey=..., tmdbApiKey=...
  */
 object MediaApi {
@@ -14,48 +15,57 @@ object MediaApi {
     private val kp: Boolean
         get() = KinopoiskClient.isConfigured
 
-    fun search(query: String): List<MediaItem> =
-        if (kp) KinopoiskClient.search(query) else TmdbClient.search(query)
-
     /** Последний запрос метаданных завершился ошибкой (для показа «Повторить»). */
     val lastSearchFailed: Boolean
         get() = if (kp) KinopoiskClient.lastFailed else TmdbClient.lastFailed
 
+    /**
+     * Выбрать источник: KP основной; при его ошибке — TMDB, если настроен.
+     */
+    private fun <T> src(kpCall: () -> T, tmdbCall: () -> T): T {
+        if (!kp) return tmdbCall()
+        val r = kpCall()
+        return if (KinopoiskClient.lastFailed && TmdbClient.isConfigured) tmdbCall() else r
+    }
+
+    fun search(query: String): List<MediaItem> =
+        src({ KinopoiskClient.search(query) }, { TmdbClient.search(query) })
+
     fun trending(page: Int = 1): List<MediaItem> =
-        if (kp) KinopoiskClient.trending(page) else TmdbClient.trending(page)
+        src({ KinopoiskClient.trending(page) }, { TmdbClient.trending(page) })
 
     fun popularMovies(page: Int = 1): List<MediaItem> =
-        if (kp) KinopoiskClient.popularMovies(page) else TmdbClient.popularMovies(page)
+        src({ KinopoiskClient.popularMovies(page) }, { TmdbClient.popularMovies(page) })
 
     fun popularTv(page: Int = 1): List<MediaItem> =
-        if (kp) KinopoiskClient.popularTv(page) else TmdbClient.popularTv(page)
+        src({ KinopoiskClient.popularTv(page) }, { TmdbClient.popularTv(page) })
 
     fun topRatedMovies(page: Int = 1): List<MediaItem> =
-        if (kp) KinopoiskClient.topRatedMovies(page) else TmdbClient.topRatedMovies(page)
+        src({ KinopoiskClient.topRatedMovies(page) }, { TmdbClient.topRatedMovies(page) })
 
     fun topRatedTv(page: Int = 1): List<MediaItem> =
-        if (kp) KinopoiskClient.topRatedTv(page) else TmdbClient.topRatedTv(page)
+        src({ KinopoiskClient.topRatedTv(page) }, { TmdbClient.topRatedTv(page) })
 
     fun moviesByGenre(genreId: Int, page: Int = 1): List<MediaItem> =
-        if (kp) KinopoiskClient.moviesByGenre(genreId, page) else TmdbClient.moviesByGenre(genreId, page)
+        src({ KinopoiskClient.moviesByGenre(genreId, page) }, { TmdbClient.moviesByGenre(genreId, page) })
 
     fun tvByGenre(genreId: Int, page: Int = 1): List<MediaItem> =
-        if (kp) KinopoiskClient.tvByGenre(genreId, page) else TmdbClient.tvByGenre(genreId, page)
+        src({ KinopoiskClient.tvByGenre(genreId, page) }, { TmdbClient.tvByGenre(genreId, page) })
 
     fun similar(item: MediaItem): List<MediaItem> =
-        if (kp) KinopoiskClient.similar(item) else TmdbClient.similar(item)
+        src({ KinopoiskClient.similar(item) }, { TmdbClient.similar(item) })
 
     /** Сезоны и эпизоды сериала. */
     fun seasons(item: MediaItem): List<Season> =
-        if (kp) KinopoiskClient.seasons(item) else TmdbClient.seasons(item)
+        src({ KinopoiskClient.seasons(item) }, { TmdbClient.seasons(item) })
 
     fun movieGenres(): List<Genre> =
-        if (kp) KinopoiskClient.movieGenres() else TmdbClient.movieGenres()
+        src({ KinopoiskClient.movieGenres() }, { TmdbClient.movieGenres() })
 
     fun tvGenres(): List<Genre> =
-        if (kp) KinopoiskClient.tvGenres() else TmdbClient.tvGenres()
+        src({ KinopoiskClient.tvGenres() }, { TmdbClient.tvGenres() })
 
     /** Список стран для фильтра (для TMDB не поддерживается — пустой список). */
     fun countries(): List<Genre> =
-        if (kp) KinopoiskClient.countries() else emptyList()
+        src({ KinopoiskClient.countries() }, { emptyList() })
 }
