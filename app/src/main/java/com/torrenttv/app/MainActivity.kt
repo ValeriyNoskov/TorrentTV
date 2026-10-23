@@ -88,6 +88,12 @@ class MainActivity : ComponentActivity() {
         val store0 = com.torrenttv.app.data.LocalStore(this)
         com.torrenttv.app.data.KinopoiskClient.overrideApiKey = store0.kpApiKey()
         com.torrenttv.app.data.TmdbClient.overrideApiKey = store0.tmdbApiKey()
+        // Прогрев torrent-сессии: DHT/трекеры готовы заранее —
+        // метаданные раздач и стрим стартуют быстрее
+        Thread { com.torrenttv.app.torrent.TorrentEngine.start() }.apply {
+            isDaemon = true
+            start()
+        }
         setContent {
             MaterialTheme {
                 App()

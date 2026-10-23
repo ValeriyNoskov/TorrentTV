@@ -178,6 +178,19 @@ object TorrentEngine {
     ): com.frostwire.jlibtorrent.TorrentInfo? {
         start()
         saveDir.mkdirs()
+        // Кэш метаданных: повторный вход в раздачу — мгновенно, без пиров
+        val cacheKey = Regex("urn:btih:([0-9a-fA-F]{40})").find(source)?.groupValues?.get(1)?.lowercase()
+            ?: Integer.toHexString(source.hashCode())
+        val cacheFile = File(saveDir, "meta_$cacheKey.torrent")
+        if (cacheFile.exists() && cacheFile.length() > 0) {
+            try {
+                val ti = com.frostwire.jlibtorrent.TorrentInfo.bdecode(cacheFile.readBytes())
+                onStatus("Состав из кэша")
+                return ti
+            } catch (_: Exception) {
+                cacheFile.delete()
+            }
+        }
         onStatus("Получение метаданных…")
         val bytes: ByteArray? = try {
             when {
@@ -208,6 +221,8 @@ object TorrentEngine {
             onStatus("Метаданные не получены — нет сидов или ссылка битая")
             return null
         }
+        // Сохраним в кэш — в следующий раз состав откроется мгновенно
+        runCatching { cacheFile.writeBytes(bytes) }
         return try {
             com.frostwire.jlibtorrent.TorrentInfo.bdecode(bytes)
         } catch (e: Exception) {
@@ -227,8 +242,15 @@ object TorrentEngine {
         start()
         saveDir.mkdirs()
 
+        // Кэш метаданных: для знакомой раздачи плеер стартует без пиров
+        val cacheKeyS = Regex("urn:btih:([0-9a-fA-F]{40})").find(source)?.groupValues?.get(1)?.lowercase()
+            ?: Integer.toHexString(source.hashCode())
+        val cacheFileS = File(saveDir, "meta_$cacheKeyS.torrent")
+
         onStatus("Получение метаданных…")
-        val bytes: ByteArray? = try {
+        val bytes: ByteArray? = if (cacheFileS.exists() && cacheFileS.length() > 0) {
+            runCatching { cacheFileS.readBytes() }.getOrNull()
+        } else try {
             when {
                 source.startsWith("magnet:") -> {
                     val enriched = enrichMagnet(source)
@@ -265,6 +287,8 @@ object TorrentEngine {
             onStatus("Метаданные не получены — проверьте ссылку и наличие сидов")
             return null
         }
+        // Пополнить кэш метаданных
+        runCatching { cacheFileS.writeBytes(bytes) }
 
         val ti = TorrentInfo.bdecode(bytes)
         val fs = ti.files()
