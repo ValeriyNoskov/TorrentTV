@@ -43,6 +43,8 @@ object IptvService {
         val seen = HashSet<String>()
         val parsed = (federal + main)
             .filter { c -> seen.add(c.url) && seen.add("n:" + dedupName(c.name)) }
+            // Региональные каналы других регионов (Астрахань 24, Дон 24, …) не нужны
+            .filter { c -> !isRegional(c.name) }
             .flatMap { c ->
                 // «Animation;Kids» → канал попадает в обе группы
                 if (';' in c.group) {
@@ -51,8 +53,13 @@ object IptvService {
                     }
                 } else listOf(c)
             }
+            // Сортировка «как положено»: федеральные, универсальные, кино, сериалы…
             .sortedWith(
-                compareBy({ it.group != FEDERAL_GROUP }, { it.group }, { it.name })
+                compareBy(
+                    { groupOrder(it.group) },
+                    { it.group.lowercase() },
+                    { it.name },
+                )
             )
         if (parsed.isNotEmpty()) {
             cache = parsed
@@ -66,6 +73,74 @@ object IptvService {
         .lowercase()
         .replace('ё', 'е')
         .replace(Regex("[^a-zа-я0-9]"), "")
+
+    // ---------- Региональный фильтр ----------
+
+    /**
+     * Гео-маркеры региональных каналов (города и регионы РФ, кроме Москвы/МО).
+     * iptv-org отдаёт названия транслитом («Astrahan 24»), Free-TV — кириллицей,
+     * поэтому проверяем оба написания.
+     */
+    private val REGION_MARKERS = listOf(
+        // латиница (как в iptv-org)
+        "astrahan", "bashkortostan", "bashkiria", "belgorod", "bryansk", "vladivostok",
+        "primorye", "volgograd", "voronezh", "dagestan", "grozny", "chechen",
+        "ivanovo", "irkutsk", "kazan", "tatarstan", "kalmykia", "kaluga", "kemerevo",
+        "kuzbass", "kostroma", "krasnodar", "kuban", "krasnoyarsk", "kurgan", "kursk",
+        "lipetsk", "magadan", "murmansk", "nnovgorod", "novosibirsk", "omsk", "orel",
+        "oryol", "orenburg", "penza", "perm", "pskov", "ryazan", "samara", "saratov",
+        "sakhalin", "yakutia", "saha", "sakha", "smolensk", "stavropol", "syktyvkar",
+        "tver", "tula", "tolyatti", "tomsk", "tula24", "tyumen", "ufa", "khakassia",
+        "khanty", "yamal", "chelyabinsk", "chita", "chuvashia", "yamalo", "yaroslavl",
+        "enisey", "angarsk", "bratsk", "afontovo", "arkhyz", "arktika", "kamchatka",
+        "karelia", "komi", "mariel", "mordovia", "udmurtia", "buratia", "buryatia",
+        "altai", "adigea", "ossetia", "kabardino", "karachay", "ingushetia", "tuva",
+        "amur24", "amursk", "astrakhan", "don24", "don 24", "vladimir24", "region29",
+        // кириллица (как в Free-TV и переведённых названиях)
+        "астрахань", "башкортостан", "белгород", "брянск", "владивосток", "приморье",
+        "волгоград", "воронеж", "дагестан", "грозный", "иваново", "иркутск", "казань",
+        "татарстан", "калмыкия", "калуга", "кемерово", "кузбасс", "кострома",
+        "краснодар", "кубань", "красноярск", "курган", "курск", "липецк", "магадан",
+        "мурманск", "нижний новгород", "новосибирск", "омск", "орёл", "оренбург",
+        "пенза", "пермь", "псков", "рязань", "самара", "саратов", "сахалин", "якутия",
+        "смоленск", "ставрополь", "сыктывкар", "тверь", "тула", "тольятти", "томск",
+        "тюмень", "уфа", "хакасия", "ямал", "челябинск", "чита", "чувашия",
+        "ярославль", "енисей", "ангарск", "братск", "афонтово", "архыз", "арктика",
+        "камчатка", "карелия", "коми", "мордва", "удмуртия", "бурятия", "алтай",
+        "адыгея", "осетия", "кабардино", "карачай", "ингушетия", "тыва", "амур",
+        "ульяновск", "хабаровск", "чукотка", "эвенкия", "норильск", "сургут",
+        "таганрог", "балаково", "биробиджан", "магнитогорск", "нижний тагил",
+        "дон 24", "донтр", "дон тр",
+    )
+
+    /** Региональный канал другого региона? (Москва и МО остаются.) */
+    internal fun isRegional(name: String): Boolean {
+        val n = name.lowercase().replace('ё', 'е')
+        if (n.contains("москв")) return false // Москва 24, Москва. Доверие, Говорит Москва
+        return REGION_MARKERS.any { n.contains(it) }
+    }
+
+    /** Порядок групп в списке: значимые — первыми, прочие — по алфавиту в конце. */
+    internal fun groupOrder(group: String): Int = when (group.lowercase()) {
+        FEDERAL_GROUP -> 0
+        "general" -> 1
+        "movies" -> 2
+        "series" -> 3
+        "entertainment" -> 4
+        "kids", "family" -> 5
+        "documentary", "science", "education" -> 6
+        "news" -> 7
+        "sports" -> 8
+        "music" -> 9
+        "culture", "classic" -> 10
+        "comedy" -> 11
+        "lifestyle", "travel", "outdoor", "cooking", "auto" -> 12
+        "religious" -> 13
+        "business", "legislative" -> 14
+        "shop" -> 18
+        "undefined", "" -> 19
+        else -> 16
+    }
 
     /** Группы в порядке первого появления + человеческие подписи. */
     fun groups(channels: List<IptvChannel>): List<Pair<String, String>> {

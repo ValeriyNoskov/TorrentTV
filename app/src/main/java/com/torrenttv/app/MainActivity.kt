@@ -45,7 +45,12 @@ sealed interface Screen {
     data class Details(val item: MediaItem) : Screen
     data class Episodes(val item: MediaItem) : Screen
     data class MagnetEntry(val item: MediaItem) : Screen
-    data class TorrentSearch(val item: MediaItem, val episode: com.torrenttv.app.data.Episode? = null) : Screen
+    data class TorrentSearch(
+        val item: MediaItem,
+        val episode: com.torrenttv.app.data.Episode? = null,
+        /** Zona-режим: сразу подобрать лучшую раздачу и начать просмотр. */
+        val autoStart: Boolean = true,
+    ) : Screen
     data class Online(val item: MediaItem) : Screen
     data class OnlinePlayer(val item: MediaItem, val link: com.torrenttv.app.data.OnlineService.OnlineLink) : Screen
     data class Player(val item: MediaItem, val episode: com.torrenttv.app.data.Episode? = null) : Screen
@@ -120,7 +125,9 @@ private fun App() {
                 onBack = { screen = Screen.Home },
                 onWatch = { screen = Screen.Player(s.item) },
                 onEnterMagnet = { screen = Screen.MagnetEntry(s.item) },
-                onAutoSearch = { screen = Screen.TorrentSearch(s.item) },
+                // Zona-флоу: «Смотреть» без magnet → авто-подбор раздачи и сразу плеер
+                onAutoSearch = { screen = Screen.TorrentSearch(s.item, autoStart = true) },
+                onManualSearch = { screen = Screen.TorrentSearch(s.item, autoStart = false) },
                 onOpenDetails = { screen = Screen.Details(it) },
                 onEpisodes = { screen = Screen.Episodes(s.item) },
                 onOnline = { screen = Screen.Online(s.item) },
@@ -142,9 +149,10 @@ private fun App() {
             is Screen.TorrentSearch -> TorrentSearchScreen(
                 item = s.item,
                 episode = s.episode,
+                autoStart = s.autoStart,
                 onDone = {
                     screen = if (s.episode != null) Screen.Player(s.item, s.episode)
-                    else Screen.Details(s.item)
+                    else Screen.Player(s.item)
                 },
                 onBack = {
                     screen = if (s.episode != null) Screen.Episodes(s.item)

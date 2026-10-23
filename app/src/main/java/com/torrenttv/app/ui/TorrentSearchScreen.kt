@@ -44,11 +44,15 @@ import java.net.URLEncoder
  * доступные провайдеры (apibay, Torrentio, Jackett). Скраббер: чипы
  * фильтра по качеству (2160p/1080p/720p/SD), сортировка по сидам.
  * Выбор результата привязывает magnet к карточке.
+ *
+ * Zona-режим (autoStart=true): лучшая раздача подбирается автоматически
+ * и сразу начинается просмотр; список остаётся для ручной замены.
  */
 @Composable
 fun TorrentSearchScreen(
     item: MediaItem,
     episode: com.torrenttv.app.data.Episode? = null,
+    autoStart: Boolean = true,
     onDone: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -79,7 +83,20 @@ fun TorrentSearchScreen(
         else if (episode != null) "$ru $epCode" else ru
     }
 
+    // Выбор раздачи: магнит сохраняется и сразу открывается плеер;
+    // частная раздача — сначала скачивание .torrent (см. LaunchedEffect(selecting))
+    fun select(r: TorrentResult) {
+        val suffix = episode?.sourceSuffix ?: ""
+        if (r.isPrivate) {
+            selecting = r
+        } else {
+            store.saveMagnet(item, TorrentSearch.toMagnet(r), suffix)
+            onDone()
+        }
+    }
+
     LaunchedEffect(item) {
+        status = if (autoStart) "Подбираю лучшую раздачу…" else "Ищу торренты…"
         val (found, st) = TorrentSearch.searchDetailed(
             query = query,
             altQuery = altQuery,
@@ -93,6 +110,10 @@ fun TorrentSearchScreen(
         )
         results = found
         stats = st
+        if (autoStart && found.isNotEmpty()) {
+            select(bestTorrent(found))
+            return@LaunchedEffect
+        }
         status = if (found.isEmpty()) {
             "Ничего не найдено — попробуйте «Указать magnet» вручную"
         } else {
@@ -127,16 +148,6 @@ fun TorrentSearchScreen(
         }
     }
 
-    fun select(r: TorrentResult) {
-        val suffix = episode?.sourceSuffix ?: ""
-        if (r.isPrivate) {
-            selecting = r
-        } else {
-            store.saveMagnet(item, TorrentSearch.toMagnet(r), suffix)
-            onDone()
-        }
-    }
-
     BackHandler { onBack() }
 
     Column(
@@ -145,7 +156,7 @@ fun TorrentSearchScreen(
             .background(Color(0xFF0E1116))
             .padding(32.dp),
     ) {
-        Text("🔍 Автопоиск", color = Color(0xFFF5B942), fontSize = 16.sp)
+        Text(if (autoStart) "🚀 Просмотр" else "🔍 Автопоиск", color = Color(0xFFF5B942), fontSize = 16.sp)
         Text(
             if (episode != null) "${item.title} · ${episode.code}"
             else item.title,
@@ -267,3 +278,14 @@ private fun QualityChip(label: String, selected: Boolean, onClick: () -> Unit) {
 
 /** Экранирование для запроса (на будущее — URLEncoder используется в провайдерах). */
 private fun encodeQuery(q: String): String = URLEncoder.encode(q, "UTF-8")
+
+/**
+ * Лучшая раздача для авто-старта (как в Zona): предпочитаем HD (2160/1080/720),
+ * если у HD прилично сидов (≥10); иначе просто максимум сидов.
+ */
+internal fun bestTorrent(list: List<TorrentResult>): TorrentResult {
+    if (list.size == 1) return list[0]
+    val hd = list.filter { it.resolution in setOf("2160p", "1080p", "720p") }
+    val pool = if (hd.any { it.seeds >= 10 }) hd else list
+    return pool.maxByOrNull { it.seeds } ?: list.first()
+}

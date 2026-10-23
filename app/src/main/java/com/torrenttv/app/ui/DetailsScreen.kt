@@ -41,7 +41,10 @@ fun DetailsScreen(
     onBack: () -> Unit,
     onWatch: () -> Unit = {},
     onEnterMagnet: () -> Unit = {},
+    /** Авто-подбор раздачи и сразу просмотр (Zona-флоу). */
     onAutoSearch: () -> Unit = {},
+    /** Ручной выбор из списка раздач. */
+    onManualSearch: () -> Unit = {},
     onOpenDetails: (MediaItem) -> Unit = {},
     onEpisodes: () -> Unit = {},
     onOnline: () -> Unit = {},
@@ -119,11 +122,12 @@ fun DetailsScreen(
                             store.saveProgress(item, positionSec = 0, durationSec = 0)
                             onWatch()
                         } else {
-                            status = "Сначала укажите magnet-ссылку торрента"
+                            // Zona-флоу: раздача подберётся автоматически и сразу включится
+                            onAutoSearch()
                         }
                     }) { Text("▶ Смотреть") }
                     Spacer(Modifier.width(16.dp))
-                    Button(onClick = onAutoSearch) { Text("🔍 Автопоиск") }
+                    Button(onClick = onManualSearch) { Text("🔍 Выбрать раздачу") }
                     if (item.type == "tv") {
                         Spacer(Modifier.width(16.dp))
                         Button(onClick = onEpisodes) { Text("🎬 Эпизоды") }
