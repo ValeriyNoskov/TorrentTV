@@ -45,60 +45,138 @@ import androidx.tv.material3.Text
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
 import com.torrenttv.app.data.OnlineService
+import com.torrenttv.app.data.RezkaService
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Онлайн-просмотр через Filmix: поиск карточки по названию, выбор
- * сезона/серии/перевода, воспроизведение прямой ссылки в Media3.
+ * Онлайн-просмотр: Filmix (если подключён) + HDRezka (fallback/второй источник).
+ * Поиск карточки по названию, выбор сезона/серии/перевода, воспроизведение
+ * прямой ссылки в Media3.
  */
+
+/** Карточка любого источника для единого списка выбора. */
+private data class Card(
+    val source: String,
+    val fx: OnlineService.OnlineMatch? = null,
+    val rz: RezkaService.RezkaMatch? = null,
+) {
+    val title: String get() = fx?.title ?: rz?.title ?: ""
+    val originalTitle: String get() = fx?.originalTitle ?: rz?.originalTitle ?: ""
+    val year: String get() = fx?.year ?: rz?.year ?: ""
+    val isSerial: Boolean get() = fx?.isSerial ?: rz?.isSerial ?: false
+    val sourceLabel: String get() = if (source == "rezka") "HDRezka" else "Filmix"
+}
+
 @Composable
 fun OnlineScreen(item: MediaItem, onBack: () -> Unit, onPlay: (OnlineService.OnlineLink) -> Unit) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
 
-    var status by remember { mutableStateOf("Ищу в Filmix…") }
-    var matches by remember { mutableStateOf<List<OnlineService.OnlineMatch>>(emptyList()) }
-    var chosen by remember { mutableStateOf<OnlineService.OnlineMatch?>(null) }
+    var status by remember { mutableStateOf("Ищу в Filmix и HDRezka…") }
+    var cards by remember { mutableStateOf<List<Card>>(emptyList()) }
+    var chosen by remember { mutableStateOf<Card?>(null) }
     var links by remember { mutableStateOf<List<OnlineService.OnlineLink>>(emptyList()) }
+
+    // HDRezka-сериал: сезоны/эпизоды получаем из get_episodes, ссылку — на клике
+    var rzSeasons by remember { mutableStateOf<List<Int>>(emptyList()) }
+    var rzEpisodes by remember { mutableStateOf<Map<Int, List<Int>>>(emptyMap()) }
+    var rzSeason by remember { mutableStateOf(0) }
+    var rzEpisodeLinks by remember { mutableStateOf<List<OnlineService.OnlineLink>?>(null) }
 
     var selectedSeason by remember { mutableStateOf(0) }
     var selectedEpisode by remember { mutableStateOf<OnlineService.OnlineLink?>(null) }
 
     val token = remember { store.filmixToken() }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
 
-    // Шаг 1: поиск карточки (основной запрос по оригиналу + русское название)
-    LaunchedEffect(item) {
-        val query1 = item.originalTitle.ifBlank { item.title }
-        val found = withContext(Dispatchers.IO) {
-            val a = OnlineService.search(token, query1)
-            if (item.title.isNotBlank() && !item.title.equals(query1, ignoreCase = true)) {
-                a + OnlineService.search(token, item.title)
-            } else a
-        }
-        val unique = found.distinctBy { it.filmixId }
-        matches = unique
-        // Автовыбор: совпадение по оригинальному/русскому названию и году
-        chosen = unique.firstOrNull { m ->
-            (m.originalTitle.equals(item.originalTitle, true) || m.title.equals(item.title, true)) &&
-                (m.year.isBlank() || item.year.isBlank() || m.year == item.year)
-        } ?: unique.firstOrNull()
-        if (chosen == null) {
-            status = if (unique.isEmpty()) "Не найдено в Filmix — проверьте токен в настройках"
-            else "Уточните выбор:"
+    /** Ссылки эпизода HDRezka (асинхронно, вне композиции). */
+    fun loadRezkaEpisode(
+        m: RezkaService.RezkaMatch,
+        season: Int,
+        episode: Int,
+        onResult: (List<OnlineService.OnlineLink>) -> Unit,
+    ) {
+        scope.launch {
+            val got = withContext(Dispatchers.IO) { RezkaService.streams(m, season, episode) }
+            onResult(got)
         }
     }
 
-    // Шаг 2: ссылки для выбранной карточки; если пусто — перебираем другие совпадения
-    LaunchedEffect(chosen, matches) {
-        val m = chosen ?: return@LaunchedEffect
+    // Шаг 1: поиск карточек в обоих источниках параллельно
+    LaunchedEffect(item) {
+        val query1 = item.originalTitle.ifBlank { item.title }
+        val (fx, rz) = withContext(Dispatchers.IO) {
+            val f = if (token.isNotBlank()) {
+                runCatching {
+                    val a = OnlineService.search(token, query1)
+                    if (item.title.isNotBlank() && !item.title.equals(query1, true)) {
+                        a + OnlineService.search(token, item.title)
+                    } else a
+                }.getOrDefault(emptyList())
+            } else emptyList()
+            val r = runCatching {
+                RezkaService.search(query1) +
+                    (item.title.takeIf { it.isNotBlank() && !it.equals(query1, true) }
+                        ?.let { RezkaService.search(it) } ?: emptyList())
+            }.getOrDefault(emptyList())
+            f to r
+        }
+
+        val fxCards = fx.distinctBy { it.filmixId }.map { Card("filmix", fx = it) }
+        // Rezka: ищем по обоим запросам, дедуп по url
+        val rzCards = rz.distinctBy { it.url }.map { Card("rezka", rz = it) }
+        cards = fxCards + rzCards
+
+        // Автовыбор: совпадение по оригинальному/русскому названию и году
+        val byTitle = { c: Card ->
+            (c.originalTitle.equals(item.originalTitle, true) || c.title.equals(item.title, true)) &&
+                (c.year.isBlank() || item.year.isBlank() || c.year == item.year)
+        }
+        chosen = cards.firstOrNull(byTitle)
+            ?: cards.firstOrNull { it.title.equals(item.title, true) }
+            ?: cards.firstOrNull()
+        if (chosen == null) {
+            status = "Не найдено в Filmix и HDRezka — смотрите через торренты"
+        }
+    }
+
+    // Шаг 2: ссылки для выбранной карточки
+    LaunchedEffect(chosen) {
+        val c = chosen ?: return@LaunchedEffect
+        if (c.source == "rezka") {
+            status = "Получаю ссылки с HDRezka…"
+            val m = c.rz ?: return@LaunchedEffect
+            if (c.isSerial) {
+                val (seasons, eps) = withContext(Dispatchers.IO) { RezkaService.episodes(m) }
+                rzSeasons = seasons
+                rzEpisodes = eps
+                rzSeason = seasons.firstOrNull() ?: 0
+                rzEpisodeLinks = null
+                links = emptyList()
+                if (seasons.isEmpty()) status = "HDRezka: не удалось получить список серий"
+                return@LaunchedEffect
+            }
+            val got = withContext(Dispatchers.IO) { RezkaService.streams(m) }
+            if (got.isNotEmpty()) {
+                links = got
+            } else {
+                status = "HDRezka: ссылки не получены — попробуйте торренты"
+            }
+            return@LaunchedEffect
+        }
+
+        // Filmix: если пусто — перебираем другие совпадения, затем сам Rezka
         status = "Получаю ссылки…"
         var lastBlocked = false
         var lastNoField = false
 
-        val queue = listOf(m) + matches.filter { it.filmixId != m.filmixId }.take(4)
+        val fxMatches = cards.filter { it.source == "filmix" && it.fx != null }
+        val queue = listOf(c) + fxMatches.filter { it.fx?.filmixId != c.fx?.filmixId }.take(4)
         for (cand in queue) {
-            val info = withContext(Dispatchers.IO) { OnlineService.playerInfo(token, cand.filmixId) }
+            val id = cand.fx?.filmixId ?: continue
+            val info = withContext(Dispatchers.IO) { OnlineService.playerInfo(token, id) }
             if (info.links.isNotEmpty()) {
                 links = info.links
                 selectedSeason = info.links.filter { it.season > 0 }.minOfOrNull { it.season } ?: 0
@@ -108,14 +186,35 @@ fun OnlineScreen(item: MediaItem, onBack: () -> Unit, onPlay: (OnlineService.Onl
             lastNoField = lastNoField || !info.hasPlayerLinks
         }
 
+        // Fallback: HDRezka
+        val rzCard = cards.firstOrNull { it.source == "rezka" }
+        if (rzCard?.rz != null) {
+            status = "Filmix пуст — пробую HDRezka…"
+            val m = rzCard.rz!!
+            if (rzCard.isSerial) {
+                val (seasons, eps) = withContext(Dispatchers.IO) { RezkaService.episodes(m) }
+                rzSeasons = seasons
+                rzEpisodes = eps
+                rzSeason = seasons.firstOrNull() ?: 0
+                rzEpisodeLinks = null
+                if (seasons.isNotEmpty()) return@LaunchedEffect
+            } else {
+                val got = withContext(Dispatchers.IO) { RezkaService.streams(m) }
+                if (got.isNotEmpty()) {
+                    links = got
+                    return@LaunchedEffect
+                }
+            }
+        }
+
         links = emptyList()
         status = when {
             token.isBlank() ->
-                "Filmix не подключён — Настройки → 🌐 Filmix (код устройства)"
+                "Filmix не подключён, HDRezka недоступен — смотрите через торренты"
             withContext(Dispatchers.IO) { OnlineService.profile(token) } == null ->
-                "Токен Filmix не активен — переподключите в настройках (🌐 Filmix)"
+                "Токен Filmix не активен, HDRezka недоступен — смотрите через торренты"
             lastBlocked ->
-                "Контент заблокирован правообладателем даже с аккаунтом Filmix — смотрите через торренты"
+                "Контент заблокирован правообладателем (Filmix), HDRezka не ответил — смотрите через торренты"
             lastNoField ->
                 "У найденных карточек нет онлайн-ссылок — смотрите через торренты"
             else ->
@@ -131,18 +230,18 @@ fun OnlineScreen(item: MediaItem, onBack: () -> Unit, onPlay: (OnlineService.Onl
             .background(Color(0xFF0E1116))
             .padding(32.dp),
     ) {
-        Text("🌐 Онлайн · Filmix", color = Color(0xFFF5B942), fontSize = 16.sp)
+        Text("🌐 Онлайн · Filmix + HDRezka", color = Color(0xFFF5B942), fontSize = 16.sp)
         Text(item.title, color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
 
         // ---------- Выбор карточки, если автоподбор не сработал ----------
-        if (chosen == null && matches.isNotEmpty()) {
+        if (chosen == null && cards.isNotEmpty()) {
             Text(status, color = Color.White.copy(alpha = 0.6f), fontSize = 15.sp, modifier = Modifier.padding(top = 8.dp))
             LazyColumn(Modifier.weight(1f)) {
-                itemsIndexed(matches) { _, m ->
+                itemsIndexed(cards) { _, c ->
                     ListRow(
-                        title = listOf(m.title, m.year).filter { it.isNotBlank() }.joinToString(" · "),
-                        hint = m.originalTitle,
-                        onClick = { chosen = m },
+                        title = listOf(c.title, c.year).filter { it.isNotBlank() }.joinToString(" · "),
+                        hint = listOf(c.originalTitle, c.sourceLabel).filter { it.isNotBlank() }.joinToString(" · "),
+                        onClick = { chosen = c },
                     )
                 }
             }
@@ -154,6 +253,60 @@ fun OnlineScreen(item: MediaItem, onBack: () -> Unit, onPlay: (OnlineService.Onl
         if (chosen == null) {
             Text(status, color = Color.White.copy(alpha = 0.6f), fontSize = 15.sp, modifier = Modifier.padding(top = 10.dp))
             Spacer(Modifier.weight(1f))
+            Button(onClick = onBack) { Text("← Назад") }
+            return@Column
+        }
+
+        // ---------- HDRezka-сериал: сезоны → серии → качества ----------
+        val c = chosen!!
+        if (c.source == "rezka" && c.isSerial && rzEpisodes.isNotEmpty()) {
+            val pendingEps = rzEpisodeLinks
+            if (pendingEps == null) {
+                Row(Modifier.padding(top = 12.dp)) {
+                    LazyRow {
+                        itemsIndexed(rzSeasons) { _, s ->
+                            SeasonChipLite("Сезон $s", s == rzSeason) { rzSeason = s }
+                        }
+                    }
+                }
+                LazyColumn(Modifier.weight(1f)) {
+                    val eps = rzEpisodes[rzSeason] ?: emptyList()
+                    itemsIndexed(eps) { _, e ->
+                        ListRow(
+                            title = "E%02d".format(e),
+                            hint = "HDRezka",
+                            onClick = {
+                                status = "Получаю ссылки…"
+                                links = emptyList()
+                                // загружаем ссылки эпизода в фоне
+                                loadRezkaEpisode(c.rz!!, rzSeason, e) { got ->
+                                    if (got.size == 1) onPlay(got.first())
+                                    else {
+                                        rzEpisodeLinks = got
+                                        if (got.isEmpty()) status = "HDRezka: ссылки не получены"
+                                    }
+                                }
+                            },
+                        )
+                    }
+                }
+            } else {
+                Text(
+                    "S%02d — выберите качество:".format(rzSeason),
+                    color = Color(0xFFF5B942), fontSize = 16.sp,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+                )
+                LazyColumn(Modifier.weight(1f)) {
+                    itemsIndexed(pendingEps) { _, l ->
+                        ListRow(title = l.label, hint = l.url, onClick = { onPlay(l) })
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = { rzEpisodeLinks = null }) { Text("← К списку серий") }
+            }
+            Spacer(Modifier.height(10.dp))
+            Button(onClick = { chosen = null; links = emptyList(); rzEpisodes = emptyMap() }) { Text("Другая карточка") }
+            Spacer(Modifier.height(8.dp))
             Button(onClick = onBack) { Text("← Назад") }
             return@Column
         }
@@ -303,9 +456,11 @@ fun OnlinePlayerScreen(link: OnlineService.OnlineLink, title: String, onBack: ()
     var maxQuality by remember { mutableStateOf<Int?>(null) } // null = авто
 
     val player = remember(link.url) {
+        // CDN проверяет Referer: у Filmix — filmix.ac, у HDRezka — её зеркало
+        val referer = link.referer.ifBlank { "https://filmix.ac/" }
         val httpFactory = DefaultHttpDataSource.Factory()
             .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-            .setDefaultRequestProperties(mapOf("Referer" to "https://filmix.ac/"))
+            .setDefaultRequestProperties(mapOf("Referer" to referer))
             .setConnectTimeoutMs(15_000)
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(httpFactory))

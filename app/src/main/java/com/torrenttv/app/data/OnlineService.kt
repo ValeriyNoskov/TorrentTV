@@ -46,6 +46,10 @@ object OnlineService {
         val episode: Int = 0,
         val quality: String = "",
         val translation: String = "",
+        /** Источник: "filmix" (по умолчанию) или "rezka". */
+        val source: String = "filmix",
+        /** Referer для CDN-плеера (у Rezka проверяется зеркалом). */
+        val referer: String = "",
     )
 
     private var activeMirror: String? = null
