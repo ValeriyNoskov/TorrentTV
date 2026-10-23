@@ -734,7 +734,7 @@ private fun NetCheckScreen(onClose: () -> Unit) {
                         uploadState = "Отправляю лог…"
                         uploadUrl = ""
                         kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-                            val url = sendLogToPastebin()
+                            val url = com.torrenttv.app.data.AppLog.sendToPastebin()
                             com.torrenttv.app.data.AppLog.log("upload", if (url.isNotBlank()) "sent -> $url" else "send FAILED")
                             uploadUrl = url
                             uploadState = if (url.isNotBlank()) "" else
@@ -763,103 +763,6 @@ private fun NetCheckScreen(onClose: () -> Unit) {
         }
     }
 }
-
-/**
- * Выложить лог на pastebin и вернуть URL. Приоритет: dpaste.org → paste.rs → 0x0.st.
- */
-private fun sendLogToPastebin(): String {
-    val content = com.torrenttv.app.data.AppLog.dump().toByteArray(Charsets.UTF_8)
-    val client = com.torrenttv.app.data.TorrentHttp.client
-
-    // 1) dpaste.org: form-encoded, ответ — URL
-    runCatching {
-        val body = okhttp3.FormBody.Builder()
-            .add("content", String(content, Charsets.UTF_8))
-            .add("lexer", "_text")
-            .add("format", "url")
-            .add("expires", "2592000")
-            .build()
-        client.newCall(
-            okhttp3.Request.Builder()
-                .url("https://dpaste.org/api/")
-                .post(body)
-                .build()
-        ).execute().use { resp ->
-            if (resp.isSuccessful) {
-                val u = resp.body?.string()?.trim().orEmpty()
-                if (u.startsWith("http")) return u
-            }
-        }
-    }
-
-    // 2) paste.rs: тело запроса = содержимое, ответ — URL
-    runCatching {
-        client.newCall(
-            okhttp3.Request.Builder()
-                .url("https://paste.rs/")
-                .post(okhttp3.RequestBody.create(null, content))
-                .build()
-        ).execute().use { resp ->
-            if (resp.isSuccessful) {
-                val u = resp.body?.string()?.trim().orEmpty()
-                if (u.startsWith("http")) return u
-            }
-        }
-    }
-
-    // 3) 0x0.st: multipart
-    runCatching {
-        val body = okhttp3.MultipartBody.Builder()
-            .setType(okhttp3.MultipartBody.FORM)
-            .addFormDataPart(
-                "file", "log.txt",
-                okhttp3.RequestBody.create(null, content),
-            )
-            .build()
-        client.newCall(
-            okhttp3.Request.Builder()
-                .url("https://0x0.st/")
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-                .post(body)
-                .build()
-        ).execute().use { resp ->
-            if (resp.isSuccessful) {
-                val u = resp.body?.string()?.trim().orEmpty()
-                if (u.startsWith("http")) return u
-            }
-        }
-    }
-
-    // 4) tmpfiles.org: multipart, ответ JSON {"data":{"url":...}}
-    runCatching {
-        val body = okhttp3.MultipartBody.Builder()
-            .setType(okhttp3.MultipartBody.FORM)
-            .addFormDataPart(
-                "file", "log.txt",
-                okhttp3.RequestBody.create(null, content),
-            )
-            .build()
-        client.newCall(
-            okhttp3.Request.Builder()
-                .url("https://tmpfiles.org/api/v1/upload")
-                .post(body)
-                .build()
-        ).execute().use { resp ->
-            if (resp.isSuccessful) {
-                val u = resp.body?.string().orEmpty()
-                val match = Regex("\"url\"\\s*:\\s*\"([^\"]+)\"").find(u)
-                val direct = match?.groupValues?.get(1)
-                if (direct != null && direct.startsWith("http")) {
-                    // tmpfiles отдаёт страницу просмотра — прямой файл: dl.tmpfiles.org
-                    return direct.replace("tmpfiles.org/", "tmpfiles.org/dl/")
-                }
-            }
-        }
-    }
-
-    return ""
-}
-
 
 /** Выбор скрываемых жанров: фильмы и сериалы. */
 @Composable

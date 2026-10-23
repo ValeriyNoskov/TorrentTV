@@ -4,11 +4,13 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,9 +31,11 @@ import com.torrenttv.app.data.OnlineService
 import com.torrenttv.app.data.RezkaService
 import com.torrenttv.app.data.TorrentResult
 import com.torrenttv.app.data.TorrentSearch
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -58,6 +62,9 @@ fun SmartPlayScreen(
     var status by remember { mutableStateOf("Ищу онлайн (Filmix · HDRezka)…") }
     var detail by remember { mutableStateOf("") }
     var done by remember { mutableStateOf(false) }
+    var uploadUrl by remember { mutableStateOf("") }
+    var uploading by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
 
     LaunchedEffect(item) {
         if (done) return@LaunchedEffect
@@ -152,8 +159,10 @@ fun SmartPlayScreen(
         com.torrenttv.app.data.AppLog.log("smart", "torrent: found=${found.size} $detail")
 
         if (found.isEmpty()) {
+            com.torrenttv.app.data.AppLog.log("smart", "FAILED: ничего не нашлось")
             status = "Ничего не нашлось: онлайн и торренты недоступны. " +
-                "Проверьте сеть или выберите раздачу вручную"
+                "Нажмите «Отправить лог» — я увижу причину и починю"
+            failed = true
             return@LaunchedEffect
         }
         val best = bestTorrent(found)
@@ -181,7 +190,33 @@ fun SmartPlayScreen(
                 Text(detail, color = Color.White.copy(alpha = 0.55f), fontSize = 14.sp)
             }
             Spacer(Modifier.height(24.dp))
-            Button(onClick = onBack) { Text("← Отмена") }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Button(onClick = onBack) { Text("← Отмена") }
+                if (failed) {
+                    Spacer(Modifier.width(16.dp))
+                    Button(
+                        onClick = {
+                            if (!uploading) {
+                                uploading = true
+                                kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                                    val url = com.torrenttv.app.data.AppLog.sendToPastebin()
+                                    com.torrenttv.app.data.AppLog.log("upload", if (url.isNotBlank()) "sent -> $url" else "send FAILED")
+                                    uploadUrl = url
+                                    uploading = false
+                                }
+                            }
+                        },
+                        enabled = !uploading,
+                    ) { Text(if (uploading) "⏳ Отправляю…" else "📤 Отправить лог") }
+                }
+            }
+            if (uploadUrl.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Назовите разработчику этот адрес:  " + uploadUrl.trim(),
+                    color = Color(0xFF8AB4F8), fontSize = 18.sp, fontWeight = FontWeight.Bold,
+                )
+            }
         }
     }
 }
