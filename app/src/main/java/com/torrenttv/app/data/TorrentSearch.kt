@@ -127,6 +127,26 @@ object TorrentSearch {
                             .getOrElse { Call(YtsProvider.NAME, emptyList(), it.message) }
                     })
                 }
+                // Открытые трекеры без регистрации: EZTV (сериалы, в т.ч. по IMDb),
+                // SolidTorrents и BTDig (DHT-поиск) — расширяют покрытие
+                if (imdbId.isNotBlank() || isTvShow) {
+                    add(async {
+                        runCatching {
+                            Call(EztvProvider.NAME, EztvProvider.search(query, isTvShow, imdbId, season, episode), null)
+                        }.getOrElse { Call(EztvProvider.NAME, emptyList(), it.message) }
+                    })
+                }
+                add(async {
+                    runCatching { Call(SolidTorrentsProvider.NAME, SolidTorrentsProvider.search(query), null) }
+                        .getOrElse { Call(SolidTorrentsProvider.NAME, emptyList(), it.message) }
+                })
+                add(async {
+                    runCatching {
+                        Call(BtdigProvider.NAME, BtdigProvider.search(query) +
+                            (altQuery?.takeIf { it.isNotBlank() && !it.equals(query, true) }
+                                ?.let { BtdigProvider.search(it) } ?: emptyList()), null)
+                    }.getOrElse { Call(BtdigProvider.NAME, emptyList(), it.message) }
+                })
                 if (jackett?.isConfigured == true) {
                     add(async {
                         runCatching { Call(JackettProvider.NAME, JackettProvider.search(jackett, query), null) }

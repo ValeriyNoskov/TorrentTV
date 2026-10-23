@@ -247,6 +247,11 @@ private fun VideoPlayer(
             .setSeekForwardIncrementMs(10_000L)
             .build()
             .apply {
+                // Русский звук по умолчанию (дубляж), если дорожки размечены
+                trackSelectionParameters = trackSelectionParameters
+                    .buildUpon()
+                    .setPreferredAudioLanguage("rus")
+                    .build()
                 // Стриминг: ExoPlayer читает недокачанный файл через TorrentDataSource,
                 // который дожидается нужных кусков последовательной загрузки
                 val dataSourceFactory = DataSource.Factory { TorrentDataSource(stream) }

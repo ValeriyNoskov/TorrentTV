@@ -478,6 +478,11 @@ fun OnlinePlayerScreen(link: OnlineService.OnlineLink, title: String, onBack: ()
             .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(httpFactory))
             .build()
             .apply {
+                // Русский звук по умолчанию (дубляж), если дорожки размечены
+                trackSelectionParameters = trackSelectionParameters
+                    .buildUpon()
+                    .setPreferredAudioLanguage("rus")
+                    .build()
                 // .m3u8 → HLS-источник, остальное — прогрессивный стрим
                 setMediaItem(
                     ExoMediaItem.Builder()
@@ -507,7 +512,10 @@ fun OnlinePlayerScreen(link: OnlineService.OnlineLink, title: String, onBack: ()
     BackHandler(enabled = showQuality) { showQuality = false }
     BackHandler { onBack() }
 
-    fun openExternal() {
+    // Галочка «Всегда внешний плеер»: сразу открываем во внешнем плеере и выходим
+    val storePrefs = remember { com.torrenttv.app.data.LocalStore(context) }
+    var extMsg by remember { mutableStateOf("") }
+    fun openExternal(auto: Boolean = false) {
         val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
             setDataAndType(
                 android.net.Uri.parse(link.url),
@@ -518,7 +526,15 @@ fun OnlinePlayerScreen(link: OnlineService.OnlineLink, title: String, onBack: ()
                     android.content.Intent.FLAG_ACTIVITY_NEW_TASK
             )
         }
-        runCatching { context.startActivity(intent) }
+        val ok = runCatching { context.startActivity(intent) }.isSuccess
+        if (!ok) {
+            extMsg = "Внешний плеер не найден — установите VLC или MX Player, либо выключите «Всегда внешний плеер» в настройках"
+        } else if (auto) {
+            onBack()
+        }
+    }
+    LaunchedEffect(Unit) {
+        if (storePrefs.useExternalPlayer()) openExternal(auto = true)
     }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
@@ -551,6 +567,18 @@ fun OnlinePlayerScreen(link: OnlineService.OnlineLink, title: String, onBack: ()
             PlayerChip("⚙ Качество: ${maxQuality?.let { "${it}p" } ?: "авто"}") { showQuality = true }
             Spacer(Modifier.height(8.dp))
             PlayerChip("⤴ Внешний плеер") { openExternal() }
+        }
+
+        if (extMsg.isNotBlank()) {
+            Text(
+                extMsg,
+                color = Color.White,
+                fontSize = 14.sp,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .background(Color(0xF0151B26), RoundedCornerShape(12.dp))
+                    .padding(16.dp),
+            )
         }
 
         if (showQuality) {

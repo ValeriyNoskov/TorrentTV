@@ -1,6 +1,8 @@
 package com.torrenttv.app.data
 
 import com.torrenttv.app.torrent.TorrentEngine
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 import java.net.URLEncoder
 import java.nio.charset.Charset
@@ -217,5 +219,77 @@ object PrivateTrackers {
         val file = File(destDir, "$hash.torrent")
         file.writeBytes(bytes)
         return file.absolutePath
+    }
+
+    // ---------- Вход логином и паролем (без браузера) ----------
+
+    private const val UA =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+
+    /** POST формы: вернуть склеенную куку ответа (Set-Cookie → "k=v; k2=v2"). */
+    private fun postForm(url: String, form: Map<String, String>): String? {
+        val client = TorrentHttp.client.newBuilder()
+            .followRedirects(false)
+            .build()
+        val body = form.entries.joinToString("&") { "${it.key}=${URLEncoder.encode(it.value, "UTF-8")}" }
+        val req = okhttp3.Request.Builder()
+            .url(url)
+            .post(body.toRequestBody("application/x-www-form-urlencoded".toMediaType()))
+            .header("User-Agent", UA)
+            .build()
+        return try {
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful && resp.code !in 300..399) return null
+                val cookies = resp.headers("Set-Cookie")
+                val joined = cookies.joinToString("; ") { c -> c.substringBefore(';') }
+                joined.ifBlank { null }
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Войти на трекер логином/паролем, вернуть cookie-строку (её сохраняем как
+     * обычный Cookie из настроек). null — неверный логин/капча/сеть.
+     */
+    fun login(id: String, user: String, pass: String): String? = try {
+        when (id) {
+            RUTRACKER -> postForm(
+                "https://rutracker.org/forum/login.php",
+                mapOf(
+                    "login_username" to user,
+                    "login_password" to pass,
+                    "login" to "Вход",
+                    "redirect" to "index.php",
+                ),
+            )?.takeIf { it.contains("bb_session") }
+            KINOZAL -> postForm(
+                "https://kinozal.tv/takelogin.php",
+                mapOf("username" to user, "password" to pass, "returnto" to ""),
+            )?.takeIf { it.contains("uid") }
+            NNMCLUB -> {
+                // сначала GET-страница входа: из action формы достаём sid
+                val page = TorrentHttp.get("https://nnmclub.to/forums/ucp.php?mode=login")
+                if (page == null) null
+                else {
+                    val sid = Regex("sid=([a-f0-9]{32})").find(page)?.groupValues?.get(1) ?: ""
+                    postForm(
+                        "https://nnmclub.to/forums/ucp.php?mode=login" + if (sid.isNotBlank()) "?sid=$sid" else "",
+                        buildMap {
+                            put("username", user)
+                            put("password", pass)
+                            put("autologin", "1")
+                            put("login", "Вход")
+                            put("redirect", "index.php")
+                            if (sid.isNotBlank()) put("sid", sid)
+                        },
+                    )?.takeIf { it.contains("sid") }
+                }
+            }
+            else -> null
+        }
+    } catch (_: Exception) {
+        null
     }
 }

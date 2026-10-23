@@ -1,6 +1,9 @@
 package com.torrenttv.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,6 +68,7 @@ private val SECTIONS = listOf(
     Triple("epg", "📆 Телеканалы", "Каналы IPTV и телепрограмма"),
     Triple("netcheck", "🩺 Проверка сети", "Какие источники доступны с этого устройства"),
     Triple("torrserve", "🚀 TorrServe", "Внешний движок торрентов — надёжнее внутреннего"),
+    Triple("player", "📺 Плеер", "Встроенный или внешний плеер (VLC, MX Player)"),
 )
 
 @Composable
@@ -82,6 +87,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     var jackettUrl by remember { mutableStateOf(store.jackettUrl()) }
     var jackettKey by remember { mutableStateOf(store.jackettApiKey()) }
     var rtCookie by remember { mutableStateOf(store.trackerCookie(PrivateTrackers.RUTRACKER)) }
+    var extPlayer by remember { mutableStateOf(store.useExternalPlayer()) }
     var kzCookie by remember { mutableStateOf(store.trackerCookie(PrivateTrackers.KINOZAL)) }
     var nnmCookie by remember { mutableStateOf(store.trackerCookie(PrivateTrackers.NNMCLUB)) }
     var fxToken by remember { mutableStateOf(store.filmixToken()) }
@@ -89,9 +95,12 @@ fun SettingsScreen(onBack: () -> Unit) {
     var epgUrl by remember { mutableStateOf(store.epgUrl()) }
     var iptvAll by remember { mutableStateOf(store.iptvAllGroups()) }
 
-    // Полноэкранный редактор текста: target = "jurl"|"jkey"|"rt"|"kz"|"nnm"|"epg"
+    // Полноэкранный редактор текста: target = "jurl"|"jkey"|"rt"|"kz"|"nnm"|"epg"|"rtlogin"|"kzlogin"|"nnmlogin"
     var editTarget by remember { mutableStateOf<String?>(null) }
     var editTmp by remember { mutableStateOf("") }
+    // Сообщение о результате входа на частный трекер
+    var loginMsg by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
     // Под-экраны выбора (жанры/страны/стоп-слова/проверка сети)
     var subscreen by remember { mutableStateOf<String?>(null) }
     // Ожидание активации кода Filmix
@@ -106,6 +115,35 @@ fun SettingsScreen(onBack: () -> Unit) {
 
     fun saveEdit() {
         val t = editTarget ?: return
+        // Вход на частный трекер логином/паролем (формат "логин:пароль")
+        if (t.endsWith("login")) {
+            val id = t.removeSuffix("login")
+            val parts = editTmp.split(':', limit = 2)
+            if (parts.size != 2 || parts[0].isBlank() || parts[1].isBlank()) {
+                loginMsg = "Формат: логин:пароль (через двоеточие)"
+                editTarget = null
+                return
+            }
+            loginMsg = "Вхожу…"
+            editTarget = null
+            scope.launch {
+                val cookie = withContext(Dispatchers.IO) {
+                    PrivateTrackers.login(id, parts[0].trim(), parts[1].trim())
+                }
+                if (cookie != null) {
+                    store.setTrackerCookie(id, cookie)
+                    when (id) {
+                        PrivateTrackers.RUTRACKER -> rtCookie = cookie
+                        PrivateTrackers.KINOZAL -> kzCookie = cookie
+                        else -> nnmCookie = cookie
+                    }
+                    loginMsg = "✓ Вход выполнен"
+                } else {
+                    loginMsg = "✗ Не удалось войти: проверьте логин/пароль (или трекер требует капчу — тогда используйте Cookie)"
+                }
+            }
+            return
+        }
         if (editTmp.isNotBlank()) {
             when (t) {
                 "jurl" -> { store.setJackettUrl(editTmp); jackettUrl = editTmp }
@@ -161,6 +199,7 @@ fun SettingsScreen(onBack: () -> Unit) {
 
     val (sTitle, sDesc) = SECTIONS.first { it.first == section }.let { it.second to it.third }
 
+    Box(Modifier.fillMaxSize()) {
     Row(
         Modifier
             .fillMaxSize()
@@ -168,7 +207,12 @@ fun SettingsScreen(onBack: () -> Unit) {
             .padding(24.dp),
     ) {
         // ---------- Разделы (слева) ----------
-        Column(Modifier.width(300.dp).fillMaxHeight()) {
+        Column(
+            Modifier
+                .width(300.dp)
+                .fillMaxHeight()
+                .verticalScroll(rememberScrollState()),
+        ) {
             Button(onClick = onBack) { Text("← Назад") }
             Text(
                 "Настройки",
@@ -182,6 +226,13 @@ fun SettingsScreen(onBack: () -> Unit) {
                     section = id
                     subscreen = null
                 }
+            }
+            // Полный выход из приложения
+            Button(
+                onClick = { (context as? android.app.Activity)?.finishAffinity() },
+                modifier = Modifier.padding(top = 20.dp),
+            ) {
+                Text("⛔ Выход из приложения")
             }
         }
 
@@ -240,12 +291,43 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 value = if (cookie.isNotBlank()) "✓ Подключён" else "Не подключён",
                                 valueOk = cookie.isNotBlank(),
                             ) { openEdit(id, cookie, "Cookie для $title") }
+                            // Вход без браузера: логин и пароль прямо здесь
+                            SettingsRow(
+                                title = "🔑 Вход в $title (логин:пароль)",
+                                value = "",
+                            ) {
+                                openEdit(
+                                    "${id}login",
+                                    "",
+                                    "Логин и пароль для $title\nформат: логин:пароль",
+                                )
+                            }
+                        }
+                        if (loginMsg.isNotBlank()) {
+                            SettingsNote(loginMsg)
                         }
                         SettingsNote(
-                            "Как получить Cookie: откройте сайт трекера в браузере, " +
-                                "войдите, нажмите F12 → вкладка Network → кликните любой " +
-                                "запрос → в заголовках (Request Headers) найдите Cookie " +
-                                "и скопируйте всё значение целиком."
+                            "Есть аккаунт на трекере? Введите логин и пароль через двоеточие " +
+                                "(например ivan:parol123) — приложение войдёт само, браузер не нужен. " +
+                                "Нет аккаунта — зарегистрируйтесь на сайте трекера, либо оставьте " +
+                                "только открытые трекеры: они работают без регистрации."
+                        )
+                    }
+
+                    "player" -> {
+                        SettingsRow(
+                            title = if (extPlayer) "✅ Всегда внешний плеер" else "⬜ Всегда внешний плеер",
+                            value = if (extPlayer) "ВКЛ — видео открывается в VLC/MX Player" else "ВЫКЛ — встроенный плеер",
+                            valueOk = extPlayer,
+                        ) {
+                            extPlayer = !extPlayer
+                            store.setUseExternalPlayer(extPlayer)
+                        }
+                        SettingsNote(
+                            "Включите, если предпочитаете смотреть через установленный плеер " +
+                                "(VLC, MX Player и т.п.) — приложение будет передавать видео ему. " +
+                                "Если плеер не установлен, видео откроется как обычно во встроенном. " +
+                                "Кнопка «⤴ Внешний плеер» поверх видео работает и без этой галочки."
                         )
                     }
 
@@ -427,6 +509,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             onCancel = { fxWaiting = null },
         )
     }
+    } // Box поверх всего: подэкраны рисаются ПОВЕРХ настроек, а не «в строку»
 }
 
 // ---------- Компоненты ----------
@@ -826,7 +909,13 @@ private fun SubscreenGenres(
         Modifier
             .fillMaxSize()
             .background(Color(0xFF0E1116))
-            .padding(28.dp),
+            .padding(28.dp)
+            .onGloballyPositioned { c ->
+                com.torrenttv.app.data.AppLog.log(
+                    "settings",
+                    "genres screen size=${c.size.width}x${c.size.height} pos=${c.positionInRoot()}",
+                )
+            },
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = onClose) { Text("← Готово") }

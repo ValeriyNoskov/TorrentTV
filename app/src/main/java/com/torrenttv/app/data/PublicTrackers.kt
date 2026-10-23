@@ -1,0 +1,126 @@
+package com.torrenttv.app.data
+
+import org.json.JSONObject
+import java.net.URLEncoder
+
+/**
+ * Дополнительные открытые трекеры — без регистрации и кук:
+ *  - EZTV (eztv.re) — сериалы, официальный JSON API;
+ *  - SolidTorrents (solidtorrents.to) — JSON-поиск по большому индексу;
+ *  - BTDig (btdig.com) — поиск по DHT, HTML-разбор.
+ * Схема результата та же, что у apibay: info_hash → magnet с публичными трекерами.
+ */
+object EztvProvider {
+
+    const val NAME = "eztv"
+
+    fun search(query: String, isTvShow: Boolean, imdbId: String = "", season: Int = 0, episode: Int = 0): List<TorrentResult> {
+        val sb = StringBuilder("https://eztv.re/api/get-torrents?limit=60")
+        if (imdbId.isNotBlank()) {
+            // imdb id "tt1234567" → 1234567
+            val n = imdbId.removePrefix("tt").toLongOrNull()
+            if (n != null) sb.append("&imdb_id=").append(n)
+            if (season > 0) sb.append("&season=").append(season)
+            if (episode > 0) sb.append("&episode=").append(episode)
+        } else {
+            sb.append("&query_term=").append(URLEncoder.encode(query, "UTF-8"))
+        }
+        val body = TorrentHttp.get(sb.toString()) ?: return emptyList()
+        val root = try { JSONObject(body) } catch (_: Exception) { return emptyList() }
+        val arr = root.optJSONArray("torrents") ?: return emptyList()
+
+        val out = mutableListOf<TorrentResult>()
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            val hash = o.optString("hash").lowercase()
+            if (hash.length != 40) continue
+            val name = o.optString("title")
+            out += TorrentResult(
+                name = name,
+                infoHash = hash,
+                seeds = o.optInt("seeds", 0),
+                sizeBytes = o.optLong("size_bytes", 0),
+                provider = NAME,
+                resolution = ReleaseQuality.parse(name),
+            )
+        }
+        return out
+    }
+}
+
+object SolidTorrentsProvider {
+
+    const val NAME = "solid"
+
+    fun search(query: String): List<TorrentResult> {
+        val url = "https://solidtorrents.to/api/v1/search?q=${URLEncoder.encode(query, "UTF-8")}"
+        val body = TorrentHttp.get(url) ?: return emptyList()
+        val root = try { JSONObject(body) } catch (_: Exception) { return emptyList() }
+        // Форматы ответа: {"results": {"items": [...]}} либо {"results": [...]}
+        val arr = root.optJSONObject("results")?.optJSONArray("items")
+            ?: root.optJSONArray("results")
+            ?: return emptyList()
+
+        val out = mutableListOf<TorrentResult>()
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            val hash = (o.optString("infoHash").ifBlank { o.optString("info_hash") }).lowercase()
+            if (hash.length != 40) continue
+            val name = o.optString("title").ifBlank { o.optString("name") }
+            val size = o.optJSONObject("size")?.optLong("value")
+                ?: o.optLong("size", 0)
+            val seeds = o.optInt("seeders", 0)
+            if (name.isBlank()) continue
+            out += TorrentResult(
+                name = name,
+                infoHash = hash,
+                seeds = seeds,
+                sizeBytes = size,
+                provider = NAME,
+                resolution = ReleaseQuality.parse(name),
+            )
+        }
+        return out
+    }
+}
+
+object BtdigProvider {
+
+    const val NAME = "btdig"
+
+    fun search(query: String): List<TorrentResult> {
+        val url = "https://btdig.com/search?q=${URLEncoder.encode(query, "UTF-8")}&order=0"
+        val html = TorrentHttp.get(url) ?: return emptyList()
+
+        // Блоки раздач: magnet + рядом название; сиды — если найдём рядом цифры
+        val out = mutableListOf<TorrentResult>()
+        val blocks = html.split("<div class=\"one_result\">")
+        for (b in blocks.drop(1)) {
+            val hash = Regex("urn:btih:([0-9a-fA-F]{40})").find(b)?.groupValues?.get(1)?.lowercase() ?: continue
+            val name = Regex("class=\"one_result_desc\"[^>]*>([^<]+)</a>").find(b)?.groupValues?.get(1)
+                ?: Regex("<b>([^<]{10,})</b>").find(b)?.groupValues?.get(1)
+                ?: continue
+            val seeds = Regex("class=\"one_result_seed\">([0-9 ]+)<").find(b)?.groupValues?.get(1)
+                ?.replace(" ", "")?.toIntOrNull() ?: 0
+            val size = Regex("([0-9.]+)\\s*(ГБ|GB|МБ|MB|TB|ТБ)").find(b)?.let { m ->
+                val v = m.groupValues[1].toDoubleOrNull() ?: 0.0
+                val mult = when {
+                    m.groupValues[2].startsWith("Т") || m.groupValues[2] == "TB" -> 1024L * 1024 * 1024 * 1024
+                    m.groupValues[2].startsWith("Г") || m.groupValues[2] == "GB" -> 1024L * 1024 * 1024
+                    else -> 1024L * 1024
+                }
+                (v * mult).toLong()
+            } ?: 0L
+            if (seeds <= 0) continue // без сидов не показываем — их слишком много мёртвых
+            out += TorrentResult(
+                name = name.trim(),
+                infoHash = hash,
+                seeds = seeds,
+                sizeBytes = size,
+                provider = NAME,
+                resolution = ReleaseQuality.parse(name),
+            )
+        }
+        return out
+    }
+}

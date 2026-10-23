@@ -276,6 +276,13 @@ class LocalStore(context: Context) {
         prefs.edit().putString("torrserve_host", v.trim().removeSuffix("/")).apply()
     }
 
+    /** Открывать видео во внешнем плеере (VLC, MX Player и т.п.) вместо встроенного. */
+    fun useExternalPlayer(): Boolean = prefs.getBoolean("use_external_player", false)
+
+    fun setUseExternalPlayer(v: Boolean) {
+        prefs.edit().putBoolean("use_external_player", v).apply()
+    }
+
     // ---------- Внутреннее ----------
 
     private fun readList(key: String): List<MediaItem> {

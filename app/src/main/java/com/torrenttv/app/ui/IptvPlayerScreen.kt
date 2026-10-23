@@ -127,6 +127,11 @@ fun IptvPlayerScreen(channel: IptvChannel, onBack: () -> Unit) {
         ExoPlayer.Builder(context)
             .build()
             .apply {
+                // Русский звук по умолчанию, если дорожки размечены
+                trackSelectionParameters = trackSelectionParameters
+                    .buildUpon()
+                    .setPreferredAudioLanguage("rus")
+                    .build()
                 setMediaItem(ExoMediaItem.fromUri(current.url))
                 prepare()
                 playWhenReady = true
