@@ -17,14 +17,25 @@ import org.json.JSONObject
  */
 object OnlineService {
 
-    /** Публичные зеркала API (порядок = приоритет). */
+    /** Публичные зеркала API (порядок = приоритет). Живое — filmixapp.cyou (http). */
     val MIRRORS = listOf(
-        "https://filmixapp.cyou",
+        "http://filmixapp.cyou",
         "https://filmix.app",
         "https://filmix.ac",
         "https://filmix.my",
         "https://filmix.co",
     )
+
+    /**
+     * Параметры устройства — как в официальном приложении Filmix (Lampa).
+     * user_dev_token — токен (может быть пустым до активации).
+     */
+    private fun devParams(token: String): String =
+        "user_dev_apk=2.0.1&user_dev_id=&user_dev_name=Xiaomi&user_dev_os=11" +
+            "&user_dev_token=" + Uri.encode(token) + "&user_dev_vendor=Xiaomi"
+
+    /** Код устройства для привязки аккаунта: ввести userCode на filmix.ac/consoles. */
+    data class DeviceCode(val token: String, val userCode: String, val expiresAt: Long)
 
     /** Прямая ссылка на поток с подписью (перевод · качество · сезон/серия). */
     data class OnlineLink(
@@ -39,12 +50,12 @@ object OnlineService {
     private var activeMirror: String? = null
 
     /** Базовый URL зеркала: сначала кэш, затем перебор. */
-    private fun mirror(token: String): String? {
+    private fun mirror(): String? {
         activeMirror?.let { return it }
         for (m in MIRRORS) {
-            // Проверка живости: лёгкий запрос поиска без токена
-            val probe = TorrentHttp.get("$m/api/v2/search?query=test")
-            if (probe != null && probe.contains("\"item\"")) {
+            // Проверка живости: поиск отвечает массивом карточек с alt_name
+            val probe = TorrentHttp.get("$m/api/v2/search?story=test&" + devParams(""))
+            if (probe != null && probe.contains("alt_name")) {
                 activeMirror = m
                 return m
             }
@@ -52,22 +63,44 @@ object OnlineService {
         return null
     }
 
+    /** Запросить код устройства для привязки аккаунта Filmix. */
+    fun requestDeviceCode(): DeviceCode? {
+        val base = mirror() ?: return null
+        val body = TorrentHttp.get("$base/api/v2/token_request?" + devParams(""), headers())
+            ?: return null
+        val json = runCatching { JSONObject(body) }.getOrNull() ?: return null
+        if (json.optString("status") != "ok") return null
+        val token = json.optString("code", "")
+        val userCode = json.optString("user_code", "")
+        if (token.isBlank() || userCode.isBlank()) return null
+        return DeviceCode(token, userCode, json.optLong("expire", 0L))
+    }
+
+    /** Профиль по токену: null — токен ещё не активирован/не работает. */
+    fun profile(token: String): JSONObject? {
+        if (token.isBlank()) return null
+        val base = mirror() ?: return null
+        val body = TorrentHttp.get("$base/api/v2/user_profile?" + devParams(token), headers())
+            ?: return null
+        val json = runCatching { JSONObject(body) }.getOrNull() ?: return null
+        return json.optJSONObject("user_data")
+    }
+
     /** Поиск карточки по названию. Блокирующий — из фонового потока. */
     fun search(token: String, query: String): List<OnlineMatch> {
-        val base = mirror(token) ?: return emptyList()
+        val base = mirror() ?: return emptyList()
         val body = TorrentHttp.get(
-            "$base/api/v2/search?query=" + Uri.encode(query),
+            "$base/api/v2/search?story=" + Uri.encode(query) + "&" + devParams(token),
             headers(),
         ) ?: return emptyList()
         return parseSearch(body)
     }
 
-    /** Прямой запрос playerdata по id карточки Filmix. Блокирующий. */
+    /** Карточка Filmix по id (в Lampa — «post»); содержит player_links. Блокирующий. */
     fun playerData(token: String, filmixId: String): List<OnlineLink> {
-        if (token.isBlank()) return emptyList()
-        val base = mirror(token) ?: return emptyList()
+        val base = mirror() ?: return emptyList()
         val body = TorrentHttp.get(
-            "$base/api/v2/get-playerdata?id=$filmixId&token=" + Uri.encode(token),
+            "$base/api/v2/post/$filmixId?" + devParams(token),
             headers(),
         ) ?: return emptyList()
         return runCatching { parsePlayerData(body) }.getOrDefault(emptyList())
@@ -89,19 +122,20 @@ object OnlineService {
     )
 
     fun parseSearch(body: String): List<OnlineMatch> {
-        val json = runCatching { JSONObject(body) }.getOrNull() ?: return emptyList()
-        val arr = json.optJSONArray("item") ?: return emptyList()
+        // API возвращает массив карточек (как в Lampa), а не объект с полем item
+        val arr = runCatching { JSONArray(body) }.getOrNull() ?: return emptyList()
         return (0 until arr.length()).mapNotNull { i ->
             val o = arr.optJSONObject(i) ?: return@mapNotNull null
             val id = o.optString("id", "")
             val title = o.optString("title", "")
             if (id.isBlank() || title.isBlank()) return@mapNotNull null
+            val serialStats = o.optJSONObject("serial_stats")
             OnlineMatch(
                 filmixId = id,
                 title = title,
                 originalTitle = o.optString("original_title", ""),
                 year = o.optString("year", "").take(4),
-                isSerial = o.optString("type", "") == "serial",
+                isSerial = serialStats != null,
             )
         }
     }
@@ -122,7 +156,8 @@ object OnlineService {
         when (node) {
             is JSONObject -> {
                 if (node.optString("link", "").isNotBlank()) {
-                    out += leaf(node, path)
+                    // «abuse_» в ссылке = «Заблокировано правообладателем» — мусор
+                    if (!node.optString("link").contains("abuse_")) out += leaf(node, path)
                 } else {
                     val keys = node.keys()
                     while (keys.hasNext()) {

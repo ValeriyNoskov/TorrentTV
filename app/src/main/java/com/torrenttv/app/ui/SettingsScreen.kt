@@ -33,6 +33,7 @@ import androidx.tv.material3.Text
 import com.torrenttv.app.data.Genre
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaApi
+import com.torrenttv.app.data.OnlineService
 import com.torrenttv.app.data.PrivateTrackers
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -64,6 +65,9 @@ fun SettingsScreen(onBack: () -> Unit) {
     var nnmCookie by remember { mutableStateOf(store.trackerCookie(PrivateTrackers.NNMCLUB)) }
     var fxToken by remember { mutableStateOf(store.filmixToken()) }
     var epgUrl by remember { mutableStateOf(store.epgUrl()) }
+    // Привязка Filmix через код устройства (filmix.ac/consoles)
+    var fxMsg by remember { mutableStateOf("") }
+    var fxFlowTick by remember { mutableStateOf(0) }
     // Активное поле для экранной клавиатуры: "kw" | "jurl" | "jkey" | "rt" | "kz" | "nnm" | "fx" | "epg"
     var editTarget by remember { mutableStateOf("kw") }
     val kbFocus = remember { FocusRequester() }
@@ -111,6 +115,29 @@ fun SettingsScreen(onBack: () -> Unit) {
             tvGenres = MediaApi.tvGenres()
             countries = MediaApi.countries()
         }
+    }
+
+    // Filmix: код устройства → пользователь вводит на filmix.ac/consoles → поллинг токена
+    LaunchedEffect(fxFlowTick) {
+        if (fxFlowTick == 0) return@LaunchedEffect
+        val dc = withContext(Dispatchers.IO) { OnlineService.requestDeviceCode() }
+        if (dc == null) {
+            fxMsg = "Filmix недоступен — проверьте сеть и нажмите ещё раз"
+            return@LaunchedEffect
+        }
+        fxMsg = "Код: ${dc.userCode} — введите на filmix.ac/consoles в своём аккаунте"
+        for (i in 0 until 36) { // ждём активацию до 6 минут
+            kotlinx.coroutines.delay(10_000)
+            val user = withContext(Dispatchers.IO) { OnlineService.profile(dc.token) }
+            if (user != null) {
+                store.setFilmixToken(dc.token)
+                fxToken = dc.token
+                val login = user.optString("login")
+                fxMsg = if (login.isNotBlank()) "✓ Filmix подключён: $login" else "✓ Filmix подключён"
+                return@LaunchedEffect
+            }
+        }
+        fxMsg = "Код не введён (истёк) — нажмите «Filmix» ещё раз"
     }
 
     Column(
@@ -288,8 +315,8 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 10.dp)) {
-            // Filmix (онлайн-просмотр)
-            Button(onClick = { editTarget = "fx"; kw = ""; kbFocus.requestFocus() }) {
+            // Filmix: привязка устройства — код на filmix.ac/consoles
+            Button(onClick = { fxMsg = "Получаю код устройства…"; fxFlowTick++ }) {
                 Text(if (fxToken.isNotBlank()) "✓ 🌐 Filmix" else "🌐 Filmix")
             }
             Spacer(Modifier.width(12.dp))
@@ -304,6 +331,14 @@ fun SettingsScreen(onBack: () -> Unit) {
                     " из ${PrivateTrackers.ALL.size}",
                 color = Color.White.copy(alpha = 0.4f),
                 fontSize = 13.sp,
+            )
+        }
+        if (fxMsg.isNotBlank()) {
+            Text(
+                text = fxMsg,
+                color = if (fxMsg.startsWith("✓")) Color(0xFF9CCC65) else Color(0xFFF5B942),
+                fontSize = 14.sp,
+                modifier = Modifier.padding(top = 6.dp),
             )
         }
 
