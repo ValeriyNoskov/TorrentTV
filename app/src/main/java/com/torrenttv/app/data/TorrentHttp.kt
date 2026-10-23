@@ -1,7 +1,9 @@
 package com.torrenttv.app.data
 
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 
 /** Общий HTTP-клиент для провайдеров поиска раздач. */
@@ -29,6 +31,19 @@ object TorrentHttp {
         headers.forEach { (k, v) -> b.header(k, v) }
         client.newCall(b.build()).execute().use { resp ->
             if (!resp.isSuccessful) null else resp.body?.bytes()
+        }
+    } catch (_: Exception) {
+        null
+    }
+
+    /** POST JSON, вернуть тело строки или null при любой ошибке. */
+    fun postJson(url: String, json: String, headers: Map<String, String> = emptyMap()): String? = try {
+        val b = Request.Builder()
+            .url(url)
+            .post(json.toRequestBody("application/json".toMediaType()))
+        headers.forEach { (k, v) -> b.header(k, v) }
+        client.newCall(b.build()).execute().use { resp ->
+            if (!resp.isSuccessful) null else resp.body?.string()
         }
     } catch (_: Exception) {
         null

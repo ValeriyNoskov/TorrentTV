@@ -147,6 +147,10 @@ object TorrentSearch {
                                 ?.let { BtdigProvider.search(it) } ?: emptyList()), null)
                     }.getOrElse { Call(BtdigProvider.NAME, emptyList(), it.message) }
                 })
+                add(async {
+                    runCatching { Call(KnabenProvider.NAME, KnabenProvider.search(query), null) }
+                        .getOrElse { Call(KnabenProvider.NAME, emptyList(), it.message) }
+                })
                 if (jackett?.isConfigured == true) {
                     add(async {
                         runCatching { Call(JackettProvider.NAME, JackettProvider.search(jackett, query), null) }

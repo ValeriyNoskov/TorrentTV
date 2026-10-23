@@ -95,8 +95,9 @@ fun SearchScreen(onBack: () -> Unit, onOpenDetails: (MediaItem) -> Unit) {
         }
     }
 
-    // Поиск с дебаунсом
-    LaunchedEffect(query) {
+    // Поиск с дебаунсом; searchTick — немедленный поиск по кнопке «Найти»
+    var searchTick by remember { mutableStateOf(0) }
+    LaunchedEffect(query, searchTick) {
         if (query.length >= 2) {
             loading = true
             delay(500)
@@ -107,6 +108,8 @@ fun SearchScreen(onBack: () -> Unit, onOpenDetails: (MediaItem) -> Unit) {
             loading = false
         }
     }
+    var showKb by remember { mutableStateOf(true) }
+    val findFocus = remember { FocusRequester() }
 
     Column(
         Modifier
@@ -126,6 +129,15 @@ fun SearchScreen(onBack: () -> Unit, onOpenDetails: (MediaItem) -> Unit) {
                 modifier = Modifier.weight(1f),
             )
             Button(onClick = { startVoice() }) { Text("🎤 Голос") }
+            Spacer(Modifier.width(10.dp))
+            Button(onClick = {
+                showKb = !showKb
+                if (!showKb) findFocus.requestFocus()
+            }) { Text(if (showKb) "⌨ Скрыть клавиатуру" else "⌨ Клавиатура") }
+            Spacer(Modifier.width(10.dp))
+            Button(onClick = { searchTick++ }, modifier = Modifier.focusRequester(findFocus)) {
+                Text("🔍 Найти")
+            }
         }
         if (status.isNotBlank()) {
             Text(status, color = Color(0xFFFFD54F), fontSize = 14.sp, modifier = Modifier.padding(top = 6.dp))
@@ -148,13 +160,15 @@ fun SearchScreen(onBack: () -> Unit, onOpenDetails: (MediaItem) -> Unit) {
 
         Spacer(Modifier.height(8.dp))
 
-        // ---------- Экранная клавиатура ----------
-        TvKeyboard(
-            onChar = { query += it },
-            onBackspace = { if (query.isNotEmpty()) query = query.dropLast(1) },
-            onClear = { query = "" },
-            firstKeyFocus = firstKeyFocus,
-        )
+        // ---------- Экранная клавиатура (можно спрятать) ----------
+        if (showKb) {
+            TvKeyboard(
+                onChar = { query += it },
+                onBackspace = { if (query.isNotEmpty()) query = query.dropLast(1) },
+                onClear = { query = "" },
+                firstKeyFocus = firstKeyFocus,
+            )
+        }
     }
 }
 

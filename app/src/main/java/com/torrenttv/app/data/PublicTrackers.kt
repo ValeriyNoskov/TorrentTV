@@ -124,3 +124,41 @@ object BtdigProvider {
         return out
     }
 }
+
+object KnabenProvider {
+
+    const val NAME = "knaben"
+
+    /**
+     * Knaben — открытый метапоиск по десяткам трекеров, публичный JSON-API
+     * (POST). Регистрация не нужна. Ответ: {"results":[{"name","infoHash",
+     * "seeders","size",...}]}.
+     */
+    fun search(query: String): List<TorrentResult> {
+        val body = """
+            {"query":"${query.replace("\\", "\\\\").replace("\"", "\\\"")}",
+             "accu":false,"keywords":[],"categories":[],"from":0,"size":60}
+        """.trimIndent()
+        val resp = TorrentHttp.postJson("https://api.knaben.eu/search/", body) ?: return emptyList()
+        val root = try { JSONObject(resp) } catch (_: Exception) { return emptyList() }
+        val arr = root.optJSONArray("results") ?: return emptyList()
+
+        val out = mutableListOf<TorrentResult>()
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            val hash = o.optString("infoHash").lowercase()
+            if (hash.length != 40) continue
+            val name = o.optString("name")
+            if (name.isBlank()) continue
+            out += TorrentResult(
+                name = name,
+                infoHash = hash,
+                seeds = o.optInt("seeders", 0),
+                sizeBytes = o.optLong("size", 0),
+                provider = NAME,
+                resolution = ReleaseQuality.parse(name),
+            )
+        }
+        return out
+    }
+}
