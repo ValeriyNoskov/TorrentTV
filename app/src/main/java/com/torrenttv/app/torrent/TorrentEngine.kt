@@ -27,6 +27,16 @@ object TorrentEngine {
     }
 
     /**
+     * info_hash v1 из байт .torrent-файла (hex, 40 символов) — для частных
+     * трекеров, где hash недоступен из страницы поиска и считается локально.
+     */
+    fun infoHashV1Hex(bytes: ByteArray): String? = try {
+        TorrentInfo.bdecode(bytes).infoHashV1().toString()
+    } catch (_: Exception) {
+        null
+    }
+
+    /**
      * Активная сессия стриминга одного файла торрента.
      */
     class StreamSession(

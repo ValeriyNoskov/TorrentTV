@@ -22,4 +22,15 @@ object TorrentHttp {
     } catch (_: Exception) {
         null
     }
+
+    /** GET, вернуть тело байтами (для .torrent-файлов) или null при любой ошибке. */
+    fun getBytes(url: String, headers: Map<String, String> = emptyMap()): ByteArray? = try {
+        val b = Request.Builder().url(url)
+        headers.forEach { (k, v) -> b.header(k, v) }
+        client.newCall(b.build()).execute().use { resp ->
+            if (!resp.isSuccessful) null else resp.body?.bytes()
+        }
+    } catch (_: Exception) {
+        null
+    }
 }

@@ -30,9 +30,13 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
+import com.torrenttv.app.data.PrivateTrackers
 import com.torrenttv.app.data.ReleaseQuality
 import com.torrenttv.app.data.TorrentResult
 import com.torrenttv.app.data.TorrentSearch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
 import java.net.URLEncoder
 
 /**
@@ -49,6 +53,8 @@ fun TorrentSearchScreen(item: MediaItem, onDone: () -> Unit, onBack: () -> Unit)
     var status by remember { mutableStateOf("Ищу торренты…") }
     var results by remember { mutableStateOf<List<TorrentResult>>(emptyList()) }
     var quality by remember { mutableStateOf<String?>(null) } // null = все
+    // Выбранная частная раздача: идёт скачивание .torrent
+    var selecting by remember { mutableStateOf<TorrentResult?>(null) }
 
     // Запросы: оригинальное (основной) и русское название (альтернативный)
     val query = remember(item) {
@@ -67,6 +73,7 @@ fun TorrentSearchScreen(item: MediaItem, onDone: () -> Unit, onBack: () -> Unit)
             isTvShow = item.type != "movie",
             imdbId = item.imdbId,
             jackett = store.jackettConfig(),
+            privateTrackers = store.privateTrackers(),
             excludedKeywords = store.excludedKeywords().toSet(),
         )
         results = found
@@ -82,6 +89,35 @@ fun TorrentSearchScreen(item: MediaItem, onDone: () -> Unit, onBack: () -> Unit)
     }
     val shown = remember(results, quality) {
         if (quality == null) results else results.filter { it.resolution == quality }
+    }
+
+    // Выбор частной раздачи: .torrent с куками → info_hash → файл-источник
+    LaunchedEffect(selecting) {
+        val r = selecting ?: return@LaunchedEffect
+        status = "Получаю .torrent с ${r.provider}…"
+        val path = withContext(Dispatchers.IO) {
+            PrivateTrackers.downloadTorrent(
+                r,
+                auth = store.trackerAuth(r.provider),
+                destDir = File(context.filesDir, "torrents"),
+            )
+        }
+        if (path != null) {
+            store.saveMagnet(item, path)
+            onDone()
+        } else {
+            status = "Не удалось скачать .torrent — проверьте Cookie в настройках"
+            selecting = null
+        }
+    }
+
+    fun select(r: TorrentResult) {
+        if (r.isPrivate) {
+            selecting = r
+        } else {
+            store.saveMagnet(item, TorrentSearch.toMagnet(r))
+            onDone()
+        }
     }
 
     BackHandler { onBack() }
@@ -112,17 +148,11 @@ fun TorrentSearchScreen(item: MediaItem, onDone: () -> Unit, onBack: () -> Unit)
         LazyColumn(Modifier.weight(1f)) {
             items(shown) { r ->
                 Surface(
-                    onClick = {
-                        store.saveMagnet(item, TorrentSearch.toMagnet(r))
-                        onDone()
-                    },
+                    onClick = { select(r) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 4.dp)
-                        .mouseClick {
-                            store.saveMagnet(item, TorrentSearch.toMagnet(r))
-                            onDone()
-                        },
+                        .mouseClick { select(r) },
                     shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = Color(0xFF1F2430),

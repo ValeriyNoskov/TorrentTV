@@ -8,7 +8,16 @@ data class TorrentResult(
     val sizeBytes: Long,
     val provider: String = "",
     val resolution: String = "",
+    /**
+     * Прямая ссылка на .torrent (частные трекеры). Если заполнена, hash
+     * неизвестен заранее — .torrent скачивается с cookie и hash считается
+     * локально при выборе раздачи.
+     */
+    val torrentUrl: String = "",
 ) {
+    /** Частный трекер: hash станет известен только после скачивания .torrent. */
+    val isPrivate: Boolean get() = torrentUrl.isNotBlank()
+
     val sizeMb: Int
         get() = (sizeBytes / 1024 / 1024).toInt()
 

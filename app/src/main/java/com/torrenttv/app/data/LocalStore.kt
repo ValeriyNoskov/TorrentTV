@@ -183,6 +183,28 @@ class LocalStore(context: Context) {
         return if (c.isConfigured) c else null
     }
 
+    // ---------- Частные трекеры (cookie-авторизация) ----------
+
+    /** Cookie-строка трекера из настроек (вставляется из браузера). */
+    fun trackerCookie(trackerId: String): String =
+        prefs.getString("tracker_cookie_$trackerId", "") ?: ""
+
+    fun setTrackerCookie(trackerId: String, cookie: String) {
+        prefs.edit().putString("tracker_cookie_$trackerId", cookie.trim()).apply()
+    }
+
+    /** Настроенные частные трекеры для автопоиска. */
+    fun privateTrackers(): List<PrivateTrackers.TrackerAuth> =
+        PrivateTrackers.ALL.map { (id, title, _) ->
+            PrivateTrackers.TrackerAuth(id, title, trackerCookie(id))
+        }.filter { it.isConfigured }
+
+    /** Авторизация конкретного трекера по id (для скачивания .torrent). */
+    fun trackerAuth(trackerId: String): PrivateTrackers.TrackerAuth {
+        val title = PrivateTrackers.ALL.firstOrNull { it.first == trackerId }?.second ?: trackerId
+        return PrivateTrackers.TrackerAuth(trackerId, title, trackerCookie(trackerId))
+    }
+
     // ---------- Внутреннее ----------
 
     private fun readList(key: String): List<MediaItem> {

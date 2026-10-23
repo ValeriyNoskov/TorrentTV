@@ -31,6 +31,7 @@ import androidx.tv.material3.Text
 import com.torrenttv.app.data.Genre
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaApi
+import com.torrenttv.app.data.PrivateTrackers
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -55,9 +56,44 @@ fun SettingsScreen(onBack: () -> Unit) {
     var kw by remember { mutableStateOf("") }
     var jackettUrl by remember { mutableStateOf(store.jackettUrl()) }
     var jackettKey by remember { mutableStateOf(store.jackettApiKey()) }
-    // Активное поле для экранной клавиатуры: "kw" | "jurl" | "jkey"
+    // Cookie частных трекеров
+    var rtCookie by remember { mutableStateOf(store.trackerCookie(PrivateTrackers.RUTRACKER)) }
+    var kzCookie by remember { mutableStateOf(store.trackerCookie(PrivateTrackers.KINOZAL)) }
+    var nnmCookie by remember { mutableStateOf(store.trackerCookie(PrivateTrackers.NNMCLUB)) }
+    // Активное поле для экранной клавиатуры: "kw" | "jurl" | "jkey" | "rt" | "kz" | "nnm"
     var editTarget by remember { mutableStateOf("kw") }
     val kbFocus = remember { FocusRequester() }
+
+    fun editValue(): String = when (editTarget) {
+        "jurl" -> jackettUrl
+        "jkey" -> jackettKey
+        "rt" -> rtCookie
+        "kz" -> kzCookie
+        "nnm" -> nnmCookie
+        else -> kw
+    }
+
+    fun editPlaceholder(): String = when (editTarget) {
+        "jurl" -> "Адрес Jackett, напр. http://192.168.1.10:9117"
+        "jkey" -> "API-ключ Jackett"
+        "rt" -> "Cookie для rutracker.org, напр. bb_data=1%7C…"
+        "kz" -> "Cookie для kinozal.tv, напр. uid=…; pass=…"
+        "nnm" -> "Cookie для nnmclub.to"
+        else -> "Новое стоп-слово…"
+    }
+
+    fun commitEdit() {
+        val v = editValue()
+        if (v.isBlank()) return
+        when (editTarget) {
+            "jurl" -> store.setJackettUrl(v)
+            "jkey" -> store.setJackettApiKey(v)
+            "rt" -> store.setTrackerCookie(PrivateTrackers.RUTRACKER, v)
+            "kz" -> store.setTrackerCookie(PrivateTrackers.KINOZAL, v)
+            "nnm" -> store.setTrackerCookie(PrivateTrackers.NNMCLUB, v)
+        }
+        editTarget = "kw"
+    }
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
@@ -222,15 +258,35 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
         }
 
+        // ---------- Частные трекеры ----------
         Text(
-            text = if (editTarget == "kw") {
-                if (kw.isBlank()) "Новое стоп-слово…" else kw
-            } else {
-                val cur = if (editTarget == "jurl") jackettUrl else jackettKey
-                if (cur.isBlank()) {
-                    if (editTarget == "jurl") "Адрес Jackett, напр. http://192.168.1.10:9117" else "API-ключ Jackett"
-                } else cur
-            },
+            text = "ЧАСТНЫЕ ТРЕКЕРЫ — прямой поиск и скачивание без Jackett. " +
+                "Вставьте строку Cookie из браузера: откройте сайт, войдите, F12 → Network → " +
+                "любой запрос → заголовок Cookie (всё значение целиком)",
+            color = Color.White.copy(alpha = 0.55f),
+            fontSize = 14.sp,
+            modifier = Modifier.padding(top = 20.dp, bottom = 4.dp),
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            for ((id, title, _) in PrivateTrackers.ALL) {
+                val configured = store.trackerCookie(id).isNotBlank()
+                Button(onClick = { editTarget = id; kw = ""; kbFocus.requestFocus() }) {
+                    Text(if (configured) "✓ $title" else "🔑 $title")
+                }
+                Spacer(Modifier.width(12.dp))
+            }
+        }
+        Text(
+            text = "Подключено трекеров: " +
+                PrivateTrackers.ALL.count { (id, _, _) -> store.trackerCookie(id).isNotBlank() } +
+                " из ${PrivateTrackers.ALL.size}",
+            color = Color.White.copy(alpha = 0.4f),
+            fontSize = 13.sp,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+
+        Text(
+            text = if (editValue().isBlank()) editPlaceholder() else editValue(),
             color = when {
                 editTarget != "kw" && editTarget.isNotEmpty() -> Color(0xFF64B5F6)
                 kw.isBlank() -> Color.White.copy(alpha = 0.35f)
@@ -254,13 +310,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 Spacer(Modifier.width(16.dp))
                 Button(onClick = { kw = "" }) { Text("Очистить поле") }
             } else {
-                Button(onClick = {
-                    val v = if (editTarget == "jurl") jackettUrl else jackettKey
-                    if (v.isNotBlank()) {
-                        if (editTarget == "jurl") store.setJackettUrl(v) else store.setJackettApiKey(v)
-                    }
-                    editTarget = "kw"
-                }) { Text("💾 Сохранить") }
+                Button(onClick = { commitEdit() }) { Text("💾 Сохранить") }
                 Spacer(Modifier.width(16.dp))
                 Button(onClick = { editTarget = "kw" }) { Text("Отмена") }
             }
@@ -273,6 +323,9 @@ fun SettingsScreen(onBack: () -> Unit) {
                 when (editTarget) {
                     "jurl" -> jackettUrl += ch
                     "jkey" -> jackettKey += ch
+                    "rt" -> rtCookie += ch
+                    "kz" -> kzCookie += ch
+                    "nnm" -> nnmCookie += ch
                     else -> kw += ch
                 }
             },
@@ -280,6 +333,9 @@ fun SettingsScreen(onBack: () -> Unit) {
                 when (editTarget) {
                     "jurl" -> if (jackettUrl.isNotEmpty()) jackettUrl = jackettUrl.dropLast(1)
                     "jkey" -> if (jackettKey.isNotEmpty()) jackettKey = jackettKey.dropLast(1)
+                    "rt" -> if (rtCookie.isNotEmpty()) rtCookie = rtCookie.dropLast(1)
+                    "kz" -> if (kzCookie.isNotEmpty()) kzCookie = kzCookie.dropLast(1)
+                    "nnm" -> if (nnmCookie.isNotEmpty()) nnmCookie = nnmCookie.dropLast(1)
                     else -> if (kw.isNotEmpty()) kw = kw.dropLast(1)
                 }
             },
@@ -287,6 +343,9 @@ fun SettingsScreen(onBack: () -> Unit) {
                 when (editTarget) {
                     "jurl" -> jackettUrl = ""
                     "jkey" -> jackettKey = ""
+                    "rt" -> rtCookie = ""
+                    "kz" -> kzCookie = ""
+                    "nnm" -> nnmCookie = ""
                     else -> kw = ""
                 }
             },

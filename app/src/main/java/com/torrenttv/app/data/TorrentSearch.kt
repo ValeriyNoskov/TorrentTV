@@ -12,7 +12,8 @@ import kotlinx.coroutines.withContext
  * Провайдеры:
  *  - apibay.org (ThePirateBay) — всегда, по названию;
  *  - Torrentio — по IMDb-id карточки (только фильмы);
- *  - Jackett — опционально, если настроен URL и API-ключ в настройках.
+ *  - Jackett — опционально, если настроен URL и API-ключ в настройках;
+ *  - частные трекеры (RuTracker, Kinozal, NNM-Club) — по cookie из настроек.
  *
  * Результаты сливаются, дедуплицируются по info_hash (остаётся раздача
  * с максимумом сидов), сортируются по сидам.
@@ -42,6 +43,7 @@ object TorrentSearch {
         isTvShow: Boolean,
         imdbId: String = "",
         jackett: JackettProvider.Config? = null,
+        privateTrackers: List<PrivateTrackers.TrackerAuth> = emptyList(),
         excludedKeywords: Set<String> = emptySet(),
         limit: Int = 50,
     ): List<TorrentResult> = withContext(Dispatchers.IO) {
@@ -57,6 +59,14 @@ object TorrentSearch {
                 if (jackett?.isConfigured == true) {
                     add(async { JackettProvider.search(jackett, query) })
                 }
+                // Частные трекеры: RU-трекеры лучше ищут по русскому названию —
+                // поэтому запрос идёт и основным, и альтернативным
+                for (auth in privateTrackers.filter { it.isConfigured }) {
+                    add(async { PrivateTrackers.search(auth, query) })
+                    if (!altQuery.isNullOrBlank() && !altQuery.equals(query, ignoreCase = true)) {
+                        add(async { PrivateTrackers.search(auth, altQuery) })
+                    }
+                }
             }
             jobs.awaitAll()
         }
@@ -71,9 +81,10 @@ object TorrentSearch {
         val banned = excludedKeywords.map { it.lowercase() }
         return results.asSequence()
             .flatten()
-            .filter { it.seeds > 0 }
+            // Частные раздачи могут прийти без известного числа сидов — не выбрасываем
+            .filter { it.seeds > 0 || it.isPrivate }
             .filter { banned.none { kw -> it.name.lowercase().contains(kw) } }
-            .groupBy { it.infoHash }
+            .groupBy { it.infoHash.ifBlank { "url:" + it.torrentUrl } }
             .map { (_, group) -> group.maxBy { it.seeds } }
             .sortedByDescending { it.seeds }
             .toList()
