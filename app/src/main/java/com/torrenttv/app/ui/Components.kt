@@ -2,6 +2,7 @@ package com.torrenttv.app.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.tv.material3.Button
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -289,6 +290,8 @@ fun PagedMediaRow(
     var items by remember(keyTag) { mutableStateOf<List<MediaItem>>(emptyList()) }
     var page by remember(keyTag) { mutableIntStateOf(0) }
     var exhausted by remember(keyTag) { mutableStateOf(false) }
+    // Первая загрузка не удалась (сеть/лимит API) — показать «Повторить» вместо вечного «Загрузка…»
+    var failed by remember(keyTag) { mutableStateOf(false) }
     val busy = remember(keyTag) { AtomicBoolean(false) }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
@@ -296,6 +299,7 @@ fun PagedMediaRow(
     fun requestNext() {
         if (busy.get() || exhausted) return
         busy.set(true)
+        failed = false
         scope.launch {
             try {
                 // Грузим страницы, пока не наберётся видимый контент после фильтра
@@ -303,6 +307,9 @@ fun PagedMediaRow(
                 while (attempts < 5 && !exhausted) {
                     val next = withContext(Dispatchers.IO) { loader(page + 1) }
                     if (next.isEmpty()) {
+                        // Пустой ответ на ПЕРВОЙ странице = источник недоступен/лимит,
+                        // а не «контент закончился»
+                        if (page == 0) failed = true
                         exhausted = true
                         break
                     }
@@ -318,6 +325,14 @@ fun PagedMediaRow(
                 busy.set(false)
             }
         }
+    }
+
+    fun retry() {
+        items = emptyList()
+        page = 0
+        exhausted = false
+        failed = false
+        requestNext()
     }
 
     // Сброс и первая страница
@@ -347,12 +362,25 @@ fun PagedMediaRow(
             modifier = Modifier.padding(horizontal = 32.dp, vertical = 6.dp),
         )
         if (items.isEmpty()) {
-            Text(
-                text = "Загрузка…",
-                color = Color.White.copy(alpha = 0.45f),
-                fontSize = 15.sp,
-                modifier = Modifier.padding(horizontal = 32.dp),
-            )
+            if (failed) {
+                Text(
+                    text = "Не удалось загрузить: источник недоступен или исчерпан лимит API.\nПроверьте сеть в настройках и повторите.",
+                    color = Color(0xFFFFD54F),
+                    fontSize = 15.sp,
+                    modifier = Modifier.padding(horizontal = 32.dp),
+                )
+                Button(
+                    onClick = { retry() },
+                    modifier = Modifier.padding(horizontal = 32.dp, vertical = 8.dp),
+                ) { Text("🔄 Повторить") }
+            } else {
+                Text(
+                    text = "Загрузка…",
+                    color = Color.White.copy(alpha = 0.45f),
+                    fontSize = 15.sp,
+                    modifier = Modifier.padding(horizontal = 32.dp),
+                )
+            }
         } else {
             LazyRow(state = listState, contentPadding = PaddingValues(horizontal = 28.dp)) {
                 items(items.size) { i ->
