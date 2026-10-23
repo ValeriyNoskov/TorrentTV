@@ -62,6 +62,8 @@ fun PlayerScreen(
     onPlayNext: (com.torrenttv.app.data.Episode) -> Unit = {},
     /** «Другое качество» — вернуться к выбору раздач/ссылок. */
     onPickTorrent: () -> Unit = {},
+    /** Запуск конкретного файла раздачи (из экрана файлов). */
+    startIndex: Int = -1,
 ) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
@@ -152,6 +154,8 @@ fun PlayerScreen(
                 fileMatcher = episode?.let { ep ->
                     { name: String -> com.torrenttv.app.data.Episode.fileMatches(name, ep.season, ep.episode) }
                 },
+                // Прямой запуск файла (из экрана файлов раздачи)
+                fileIndex = startIndex,
             )
         }
         if (st == null) {

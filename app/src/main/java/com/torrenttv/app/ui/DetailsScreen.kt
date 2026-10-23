@@ -150,26 +150,33 @@ fun DetailsScreen(
                     Spacer(Modifier.width(16.dp))
                     Button(onClick = onOnline) { Text("🌐 Онлайн") }
                     Spacer(Modifier.width(16.dp))
-                    // Трейлер: Rutube-поиск по названию (YouTube под санкциями)
+                    // Трейлер: Rutube (приложение) → поиск через браузер. YouTube не используется.
                     Button(onClick = {
                         val q = listOf(item.title, item.year, "трейлер")
                             .filter { it.isNotBlank() }.joinToString(" ")
-                        val url = "https://rutube.ru/search/?query=" + android.net.Uri.encode(q)
                         var ok = false
-                        // 1) приложение Rutube (TV/мобильное) — если установлено
+                        // 1) Приложение Rutube (TV или мобильное) — запускаем напрямую
                         for (pkg in listOf("ru.rutube.tv", "ru.rutube.rutube")) {
-                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)).apply {
-                                setPackage(pkg)
-                                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            val launch = context.packageManager.getLaunchIntentForPackage(pkg)
+                            if (launch != null) {
+                                // Открываем приложение с поиском, если умеет; иначе просто запускаем
+                                val withSearch = launch.apply {
+                                    data = android.net.Uri.parse("https://rutube.ru/search/?query=" + android.net.Uri.encode(q))
+                                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                if (runCatching { context.startActivity(withSearch) }.isSuccess ||
+                                    runCatching { context.startActivity(launch) }.isSuccess
+                                ) { ok = true; break }
                             }
-                            if (runCatching { context.startActivity(intent) }.isSuccess) { ok = true; break }
                         }
-                        // 2) браузер / любое приложение, перехватывающее ссылки rutube.ru
+                        // 2) Браузер / любое приложение, перехватывающее ссылки rutube.ru
                         if (!ok) {
                             ok = runCatching {
                                 context.startActivity(
-                                    android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
-                                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                                    android.content.Intent(
+                                        android.content.Intent.ACTION_VIEW,
+                                        android.net.Uri.parse("https://rutube.ru/search/?query=" + android.net.Uri.encode(q)),
+                                    ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
                                 )
                             }.isSuccess
                         }

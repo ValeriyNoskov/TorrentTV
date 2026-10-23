@@ -20,7 +20,7 @@ object TorrentEngine {
 
     val session = SessionManager()
 
-    private val VIDEO_EXT = setOf("mp4", "mkv", "avi", "mov", "m4v", "ts", "webm", "wmv", "flv")
+    val VIDEO_EXT = setOf("mp4", "mkv", "avi", "mov", "m4v", "ts", "webm", "wmv", "flv")
 
     fun start() {
         if (!session.isRunning) session.start()
@@ -136,6 +136,52 @@ object TorrentEngine {
                 append("&tr=")
                 append(java.net.URLEncoder.encode(t, "UTF-8"))
             }
+        }
+    }
+
+    /** Метаданные раздачи (для экрана «файлы раздачи») — без запуска стрима. */
+    fun fetchMetadata(
+        source: String,
+        saveDir: File,
+        onStatus: (String) -> Unit,
+    ): com.frostwire.jlibtorrent.TorrentInfo? {
+        start()
+        saveDir.mkdirs()
+        onStatus("Получение метаданных…")
+        val bytes: ByteArray? = try {
+            when {
+                source.startsWith("magnet:") -> {
+                    val enriched = enrichMagnet(source)
+                    val t0 = System.currentTimeMillis()
+                    val ticker = Thread {
+                        while (System.currentTimeMillis() - t0 < 90_000) {
+                            try { Thread.sleep(5000) } catch (_: InterruptedException) { return@Thread }
+                            onStatus("Ищу источники… ${(System.currentTimeMillis() - t0) / 1000} сек")
+                        }
+                    }
+                    ticker.isDaemon = true
+                    ticker.start()
+                    try {
+                        session.fetchMagnet(enriched, 90, saveDir)
+                    } finally {
+                        ticker.interrupt()
+                    }
+                }
+                source.startsWith("http") -> URL(source).readBytes()
+                else -> File(source).readBytes()
+            }
+        } catch (e: Exception) {
+            null
+        }
+        if (bytes == null) {
+            onStatus("Метаданные не получены — нет сидов или ссылка битая")
+            return null
+        }
+        return try {
+            com.frostwire.jlibtorrent.TorrentInfo.bdecode(bytes)
+        } catch (e: Exception) {
+            onStatus("Не удалось разобрать раздачу")
+            null
         }
     }
 

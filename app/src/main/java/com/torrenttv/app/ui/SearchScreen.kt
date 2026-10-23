@@ -68,6 +68,8 @@ fun SearchScreen(
     onTorrentSearch: (String) -> Unit = {},
     /** Раздача выбрана прямо из поиска: magnet сохранён — открыть плеер. */
     onPlayTorrent: (MediaItem) -> Unit = {},
+    /** Раздача из поиска: показать состав (файлы/серии) перед запуском. */
+    onOpenTorrentFiles: (MediaItem, String) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
@@ -228,8 +230,9 @@ fun SearchScreen(
                     val card = tItem.copy(posterUrl = poster)
                     Surface(
                         onClick = {
-                            store.saveMagnet(card, com.torrenttv.app.data.TorrentSearch.toMagnet(r))
-                            onPlayTorrent(card)
+                            // Сначала показываем состав раздачи (файлы/серии),
+                            // magnet сохранится при выборе файла
+                            onOpenTorrentFiles(card, com.torrenttv.app.data.TorrentSearch.toMagnet(r))
                         },
                         modifier = Modifier.width(170.dp).padding(6.dp),
                         shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),

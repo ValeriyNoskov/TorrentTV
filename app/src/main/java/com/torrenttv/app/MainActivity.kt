@@ -34,6 +34,7 @@ import com.torrenttv.app.ui.SearchScreen
 import com.torrenttv.app.ui.SettingsScreen
 import com.torrenttv.app.ui.SideNav
 import com.torrenttv.app.ui.SmartPlayScreen
+import com.torrenttv.app.ui.TorrentFilesScreen
 import com.torrenttv.app.ui.TorrentSearchScreen
 
 /** Экраны приложения. Верхние — вкладки с общей панелью табов. */
@@ -60,7 +61,8 @@ sealed interface Screen {
     data class Watch(val item: MediaItem) : Screen
     data class Online(val item: MediaItem) : Screen
     data class OnlinePlayer(val item: MediaItem, val link: com.torrenttv.app.data.OnlineService.OnlineLink) : Screen
-    data class Player(val item: MediaItem, val episode: com.torrenttv.app.data.Episode? = null) : Screen
+    data class Player(val item: MediaItem, val episode: com.torrenttv.app.data.Episode? = null, val fileIndex: Int = -1) : Screen
+    data class TorrentFiles(val item: MediaItem, val magnet: String) : Screen
     data class IptvPlayer(val channel: IptvChannel) : Screen
 
     companion object {
@@ -89,6 +91,9 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun App() {
     var screen by remember { mutableStateOf<Screen>(Screen.Home) }
+    val appStore = androidx.compose.ui.platform.LocalContext.current.let {
+        remember { com.torrenttv.app.data.LocalStore(it) }
+    }
 
     // Системная «Назад» не должна закрывать приложение, пока мы не на «Главной»:
     // плеер/magnet/автопоиск → карточка, карточка и вкладки → «Главная».
@@ -127,6 +132,9 @@ private fun App() {
                 Screen.Search -> SearchScreen(
                     onBack = { screen = Screen.Home },
                     onOpenDetails = { screen = Screen.Details(it) },
+                    onOpenTorrentFiles = { card, magnet ->
+                        screen = Screen.TorrentFiles(card, magnet)
+                    },
                     onTorrentSearch = { q ->
                         // Прямой торрент-поиск по запросу: фиктивная карточка
                         screen = Screen.TorrentSearch(
@@ -182,6 +190,17 @@ private fun App() {
                 onBack = { screen = Screen.Details(s.item) },
             )
 
+            is Screen.TorrentFiles -> TorrentFilesScreen(
+                item = s.item,
+                magnet = s.magnet,
+                // Выбран файл (серия) — сохраняем magnet и открываем плеер
+                onPick = { idx ->
+                    appStore.saveMagnet(s.item, s.magnet)
+                    screen = Screen.Player(s.item, fileIndex = idx)
+                },
+                onBack = { screen = Screen.Details(s.item) },
+            )
+
             is Screen.TorrentSearch -> TorrentSearchScreen(
                 item = s.item,
                 episode = s.episode,
@@ -199,6 +218,7 @@ private fun App() {
             is Screen.Player -> PlayerScreen(
                 item = s.item,
                 episode = s.episode,
+                startIndex = s.fileIndex,
                 onBack = {
                     screen = if (s.episode != null) Screen.Episodes(s.item)
                     else Screen.Details(s.item)
