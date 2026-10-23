@@ -93,6 +93,7 @@ fun SmartPlayScreen(
 
     var choices by remember { mutableStateOf<List<SmartChoice>>(emptyList()) }
     var fxSerial by remember { mutableStateOf(false) }
+    var torrentsFound: List<com.torrenttv.app.data.TorrentResult> = emptyList()
 
     LaunchedEffect(item) {
         val query = item.originalTitle.ifBlank { item.title }
@@ -165,23 +166,13 @@ fun SmartPlayScreen(
             choices = online
             done = online.isNotEmpty()
             fxSerial = fxIsSerial
+            // Торренты искались параллельно — забираем готовый результат
+            torrentsFound = torrents.await()
         }
 
-        // ---- Торренты (вторым блоком, список уже можно листать) ----
+        // ---- Торренты: результат уже посчитан параллельно с онлайн-источниками ----
         status = "Ищу торренты…"
-        val found = withContext(Dispatchers.IO) {
-            runCatching {
-                TorrentSearch.searchDetailed(
-                    query = query,
-                    altQuery = altQuery,
-                    isTvShow = isTv,
-                    imdbId = item.imdbId,
-                    jackett = store.jackettConfig(),
-                    privateTrackers = store.privateTrackers(),
-                    excludedKeywords = store.excludedKeywords().toSet(),
-                ).first
-            }.getOrDefault(emptyList())
-        }
+        val found = torrentsFound
         com.torrenttv.app.data.AppLog.log("smart", "sources: online=${choices.size} torrents=${found.size}")
 
         val torrentChoices = found

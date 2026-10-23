@@ -73,8 +73,8 @@ object KinopoiskClient {
     private fun cacheStale(url: String): String? = cache[url]?.second
 
     private val http = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(6, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
         .build()
 
     // Кэш жанров: имя → числовой id (эндпоинт filters). Жанры в выдачах идут
@@ -155,8 +155,10 @@ object KinopoiskClient {
                 .build()
         ).execute().use { resp ->
             if (!resp.isSuccessful) {
-                // Лимит/ключ: источник лежит — пауза 10 минут без запросов
-                if (resp.code == 429 || resp.code == 401 || resp.code == 403) {
+                // Лимит/ключ/лежащий источник: пауза 10 минут без запросов
+                if (resp.code == 429 || resp.code == 401 || resp.code == 403 ||
+                    resp.code == 402 || resp.code >= 500
+                ) {
                     cooldownUntil = System.currentTimeMillis() + 10 * 60_000L
                     com.torrenttv.app.data.AppLog.log("kp", "cooldown 10min (HTTP ${resp.code})")
                 }

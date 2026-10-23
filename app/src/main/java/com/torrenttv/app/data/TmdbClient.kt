@@ -36,8 +36,8 @@ object TmdbClient {
         get() = overrideApiKey.isNotBlank() || BuildConfig.TMDB_API_KEY.isNotBlank()
 
     private val http = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(6, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
         .build()
 
     /** true, если последний запрос к API не удался (сеть/ошибка HTTP). */
@@ -64,7 +64,7 @@ object TmdbClient {
         return try {
             http.newCall(Request.Builder().url(url).build()).execute().use { resp ->
                 lastFailed = !resp.isSuccessful
-                if (resp.code == 429 || resp.code == 401) {
+                if (resp.code == 429 || resp.code == 401 || resp.code >= 500) {
                     cooldownUntil = System.currentTimeMillis() + 10 * 60_000L
                 }
                 if (!resp.isSuccessful) null else JSONObject(resp.body!!.string())
