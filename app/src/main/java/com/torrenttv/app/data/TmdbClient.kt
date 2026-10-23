@@ -128,6 +128,15 @@ object TmdbClient {
     fun popularTv(page: Int = 1): List<MediaItem> =
         parseList(get("/tv/popular", mapOf("page" to page.toString())))
 
+    /** Шоу: реалити + ток-шоу (TMDB типов «шоу» отдельно нет — discover по жанрам). */
+    fun popularShows(page: Int = 1): List<MediaItem> =
+        parseList(
+            get(
+                "/discover/tv",
+                mapOf("with_genres" to "10764,10767", "sort_by" to "popularity.desc", "page" to page.toString()),
+            ),
+        )
+
     fun topRatedMovies(page: Int = 1): List<MediaItem> =
         parseList(get("/movie/top_rated", mapOf("page" to page.toString())))
 

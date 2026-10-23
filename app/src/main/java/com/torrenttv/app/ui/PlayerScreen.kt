@@ -207,6 +207,7 @@ fun PlayerScreen(
     if (tl != null) {
         OnlinePlayerScreen(
             link = com.torrenttv.app.data.OnlineService.OnlineLink(url = tl, label = "torrserve"),
+            item = item,
             title = item.title,
             onBack = onBack,
         )

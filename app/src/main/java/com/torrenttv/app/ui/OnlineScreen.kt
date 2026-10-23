@@ -462,8 +462,16 @@ private fun SeasonChipLite(label: String, selected: Boolean, onClick: () -> Unit
 /** Плеер онлайн-потока: Media3 + заголовки Filmix (Referer/User-Agent).
  *  Кнопки поверх: выбор качества (ограничение трек-селекшна) и внешний плеер. */
 @Composable
-fun OnlinePlayerScreen(link: OnlineService.OnlineLink, title: String, onBack: () -> Unit) {
+fun OnlinePlayerScreen(link: OnlineService.OnlineLink, item: MediaItem, title: String, onBack: () -> Unit) {
     val context = LocalContext.current
+    val store = remember { com.torrenttv.app.data.LocalStore(context) }
+    // Ключ источника: своя позиция на каждую ссылку (и серию) онлайн-просмотра
+    val onlineKey = item.storeKey + ":online" +
+        (if (link.season > 0) ":s%02de%02d".format(link.season, link.episode) else "")
+    // С какой секунды продолжать («Продолжить просмотр»)
+    val resumeSec = remember {
+        store.continueWatching().firstOrNull { it.sourceKey == onlineKey }?.positionSec ?: 0
+    }
     var showQuality by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var maxQuality by remember { mutableStateOf<Int?>(null) } // null = авто
@@ -512,8 +520,37 @@ fun OnlinePlayerScreen(link: OnlineService.OnlineLink, title: String, onBack: ()
                         .build()
                 )
                 prepare()
+                // Продолжаем с сохранённого места (если смотрели раньше)
+                if (resumeSec > 30) {
+                    seekTo(resumeSec * 1000L)
+                    seekInfo = "▶ Продолжаем с %d:%02d".format(resumeSec / 60, resumeSec % 60)
+                }
                 playWhenReady = true
             }
+    }
+
+    // Запоминание позиции: каждые 5 секунд + при выходе из плеера
+    LaunchedEffect(player) {
+        while (true) {
+            kotlinx.coroutines.delay(5000)
+            val pos = (player.currentPosition / 1000).toInt()
+            val dur = (player.duration / 1000).toInt()
+            if (pos > 10 && dur > 0) {
+                // Досмотрено до конца — удаляем из «Продолжить просмотр»
+                if (pos >= dur * 95 / 100) store.removeProgress(item)
+                else store.saveProgress(item, pos, dur, onlineKey)
+            }
+        }
+    }
+    DisposableEffect(player) {
+        onDispose {
+            val pos = (player.currentPosition / 1000).toInt()
+            val dur = (player.duration / 1000).toInt()
+            if (pos > 10 && dur > 0 && pos < dur * 95 / 100) {
+                store.saveProgress(item, pos, dur, onlineKey)
+            }
+            player.release()
+        }
     }
 
     // Ограничение качества видео (для HLS-мастера с вариантами)
@@ -523,8 +560,6 @@ fun OnlinePlayerScreen(link: OnlineService.OnlineLink, title: String, onBack: ()
             .setMaxVideoSize(Int.MAX_VALUE, maxQuality ?: Int.MAX_VALUE)
             .build()
     }
-
-    DisposableEffect(player) { onDispose { player.release() } }
 
     BackHandler(enabled = showQuality) { showQuality = false }
     BackHandler(enabled = showSettings) { showSettings = false }

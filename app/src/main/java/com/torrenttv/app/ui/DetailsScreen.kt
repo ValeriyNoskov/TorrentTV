@@ -26,10 +26,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.Arrangement
 import androidx.tv.material3.Button
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.torrenttv.app.data.LocalStore
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import com.torrenttv.app.data.MediaItem
 import com.torrenttv.app.data.MediaApi
 import kotlinx.coroutines.Dispatchers
@@ -49,7 +54,9 @@ fun DetailsScreen(
     /** Ручной выбор из списка раздач. */
     onManualSearch: () -> Unit = {},
     onOpenDetails: (MediaItem) -> Unit = {},
-    onEpisodes: () -> Unit = {},
+    onEpisodes: (Int) -> Unit = { },
+    /** Играем конкретную серию (из блока «Сезоны и серии»). */
+    onPlayEpisode: (com.torrenttv.app.data.Episode) -> Unit = {},
     onOnline: () -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -176,7 +183,7 @@ fun DetailsScreen(
                     Spacer(Modifier.height(10.dp))
                     Row {
                         if (item.type == "tv") {
-                            Button(onClick = { menu = false; onEpisodes() }) { Text("🎬 Эпизоды") }
+                            Button(onClick = { menu = false; onEpisodes(0) }) { Text("🎬 Эпизоды") }
                             Spacer(Modifier.width(12.dp))
                         }
                         Button(onClick = { menu = false; onManualSearch() }) { Text("🔍 Выбрать раздачу") }
@@ -197,6 +204,93 @@ fun DetailsScreen(
 
                 if (status.isNotBlank()) {
                     Text(status, color = Color(0xFFFFD54F), fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
+                }
+
+                // ---------- Сезоны и серии: сразу в карточке сериала ----------
+                var seasons by remember(item) { mutableStateOf<List<com.torrenttv.app.data.Season>>(emptyList()) }
+                var selSeason by remember(item) { mutableStateOf<Int?>(null) }
+                if (item.type == "tv") {
+                    LaunchedEffect(item) {
+                        seasons = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            runCatching { com.torrenttv.app.data.MediaApi.seasons(item) }.getOrDefault(emptyList())
+                        }
+                        selSeason = seasons.firstOrNull()?.number
+                    }
+                }
+                if (seasons.isNotEmpty()) {
+                    Text(
+                        "🎬 Сезоны и серии",
+                        color = Color(0xFFF5B942),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(top = 18.dp),
+                    )
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(top = 8.dp),
+                    ) {
+                        itemsIndexed(seasons) { _, s ->
+                            val sel = s.number == (selSeason ?: seasons.first().number)
+                            Surface(
+                                onClick = { selSeason = s.number },
+                                shape = clickableSurfaceShape(RoundedCornerShape(18.dp)),
+                                colors = ClickableSurfaceDefaults.colors(
+                                    containerColor = if (sel) Color(0xFFF5B942) else Color(0xFF1F2430),
+                                    contentColor = if (sel) Color(0xFF0E1116) else Color.White,
+                                    focusedContainerColor = Color(0xFFFFD07A),
+                                    focusedContentColor = Color(0xFF0E1116),
+                                ),
+                            ) {
+                                Text(
+                                    "Сезон ${s.number}",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                )
+                            }
+                        }
+                    }
+                    val curSeason = seasons.firstOrNull { it.number == (selSeason ?: seasons.first().number) }
+                    if (curSeason != null) {
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(top = 8.dp),
+                        ) {
+                            itemsIndexed(curSeason.episodes) { _, ep ->
+                                val hasSource = store.getMagnet(item, ep.sourceSuffix) != null
+                                Surface(
+                                    onClick = {
+                                        if (hasSource) onPlayEpisode(ep) else onEpisodes(ep.season)
+                                    },
+                                    shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+                                    colors = ClickableSurfaceDefaults.colors(
+                                        containerColor = if (hasSource) Color(0xFF2E4A26) else Color(0xFF1F2430),
+                                        contentColor = Color.White,
+                                        focusedContainerColor = Color(0xFFF5B942),
+                                        focusedContentColor = Color.Black,
+                                    ),
+                                ) {
+                                    Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                                        Text(
+                                            (if (hasSource) "▶ " else "") + ep.code,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                        )
+                                        if (ep.title.isNotBlank()) {
+                                            Text(
+                                                ep.title,
+                                                color = Color.White.copy(alpha = 0.6f),
+                                                fontSize = 12.sp,
+                                                maxLines = 1,
+                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                                modifier = Modifier.width(150.dp),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

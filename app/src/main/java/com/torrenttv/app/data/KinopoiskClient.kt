@@ -261,6 +261,9 @@ object KinopoiskClient {
 
     fun popularTv(page: Int = 1): List<MediaItem> = byType(page, type = "TV_SERIES", order = "NUM_VOTE")
 
+    /** Шоу (реалити, ток-шоу, ТВ-передачи). */
+    fun popularShows(page: Int = 1): List<MediaItem> = byType(page, type = "TV_SHOW", order = "NUM_VOTE")
+
     fun topRatedMovies(page: Int = 1): List<MediaItem> = collection("TOP_250_MOVIES", page)
 
     fun topRatedTv(page: Int = 1): List<MediaItem> = collection("TOP_250_TV_SHOWS", page)

@@ -452,6 +452,7 @@ fun TopTabBar(active: Screen, onTab: (Screen) -> Unit) {
         TabButton("🏠 Главная", Screen.Home, active, onTab)
         TabButton("🎬 Фильмы", Screen.Movies, active, onTab)
         TabButton("📺 Сериалы", Screen.TvShows, active, onTab)
+        TabButton("🎪 Шоу", Screen.Shows, active, onTab)
         TabButton("🔍 Поиск", Screen.Search, active, onTab)
         TabButton("⚙ Настройки", Screen.Settings, active, onTab)
     }

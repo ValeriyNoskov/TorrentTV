@@ -38,13 +38,14 @@ sealed interface Screen {
     data object Home : Screen
     data object Movies : Screen
     data object TvShows : Screen
+    data object Shows : Screen
     data object Iptv : Screen
     data object Search : Screen
     data object Settings : Screen
 
     // Полноэкранные (без таб-панели)
     data class Details(val item: MediaItem) : Screen
-    data class Episodes(val item: MediaItem) : Screen
+    data class Episodes(val item: MediaItem, val season: Int = 0) : Screen
     data class MagnetEntry(val item: MediaItem) : Screen
     data class TorrentSearch(
         val item: MediaItem,
@@ -59,7 +60,7 @@ sealed interface Screen {
     data class IptvPlayer(val channel: IptvChannel) : Screen
 
     companion object {
-        val TABS: List<Screen> = listOf(Home, Movies, TvShows, Search, Settings)
+        val TABS: List<Screen> = listOf(Home, Movies, TvShows, Shows, Search, Settings)
     }
 }
 
@@ -111,8 +112,9 @@ private fun App() {
                     onOpenDetails = { screen = Screen.Details(it) },
                 )
 
-                Screen.Movies -> CatalogScreen(isMovies = true, onOpenDetails = { screen = Screen.Details(it) })
-                Screen.TvShows -> CatalogScreen(isMovies = false, onOpenDetails = { screen = Screen.Details(it) })
+                Screen.Movies -> CatalogScreen(mode = "movies", onOpenDetails = { screen = Screen.Details(it) })
+                Screen.TvShows -> CatalogScreen(mode = "tv", onOpenDetails = { screen = Screen.Details(it) })
+                Screen.Shows -> CatalogScreen(mode = "shows", onOpenDetails = { screen = Screen.Details(it) })
                 Screen.Iptv -> IptvScreen(
                     onPlay = { screen = Screen.IptvPlayer(it) },
                 )
@@ -146,7 +148,8 @@ private fun App() {
                 onAutoSearch = { screen = Screen.TorrentSearch(s.item, autoStart = true) },
                 onManualSearch = { screen = Screen.TorrentSearch(s.item, autoStart = false) },
                 onOpenDetails = { screen = Screen.Details(it) },
-                onEpisodes = { screen = Screen.Episodes(s.item) },
+                onEpisodes = { season -> screen = Screen.Episodes(s.item, season) },
+                onPlayEpisode = { ep -> screen = Screen.Player(s.item, ep) },
                 onOnline = { screen = Screen.Online(s.item) },
             )
 
@@ -160,6 +163,7 @@ private fun App() {
 
             is Screen.Episodes -> EpisodesScreen(
                 item = s.item,
+                initialSeason = s.season.takeIf { it > 0 },
                 onPlay = { ep -> screen = Screen.Player(s.item, ep) },
                 onFind = { ep -> screen = Screen.TorrentSearch(s.item, ep) },
                 onBack = { screen = Screen.Details(s.item) },
@@ -206,6 +210,7 @@ private fun App() {
 
             is Screen.OnlinePlayer -> OnlinePlayerScreen(
                 link = s.link,
+                item = s.item,
                 title = s.item.title,
                 onBack = { screen = Screen.Online(s.item) },
             )

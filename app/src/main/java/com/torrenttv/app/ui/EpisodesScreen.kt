@@ -51,6 +51,7 @@ fun EpisodesScreen(
     onPlay: (Episode) -> Unit,
     onFind: (Episode) -> Unit,
     onBack: () -> Unit,
+    initialSeason: Int? = null,
 ) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
@@ -63,7 +64,10 @@ fun EpisodesScreen(
     LaunchedEffect(item) {
         seasons = withContext(Dispatchers.IO) { MediaApi.seasons(item) }
         loading = false
-        if (seasons.isNotEmpty() && selected == null) selected = seasons.first().number
+        if (seasons.isNotEmpty() && selected == null) {
+            selected = initialSeason?.takeIf { s -> seasons.any { it.number == s } }
+                ?: seasons.first().number
+        }
     }
 
     BackHandler { onBack() }

@@ -28,22 +28,26 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Каталог с табом: Фильмы (isMovies = true) или Сериалы.
+ * Каталог с табом: Фильмы (mode="movies"), Сериалы ("tv") или Шоу ("shows").
  * Полоса жанров + полки «Популярные» и «Топ» с бесконечной подгрузкой.
  */
 @Composable
-fun CatalogScreen(isMovies: Boolean, onOpenDetails: (MediaItem) -> Unit) {
+fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
-    val noun = if (isMovies) "фильмы" else "сериалы"
-    val title = if (isMovies) "Фильмы" else "Сериалы"
+    val noun = when (mode) { "movies" -> "фильмы"; "shows" -> "шоу"; else -> "сериалы" }
+    val title = when (mode) { "movies" -> "Фильмы"; "shows" -> "Шоу"; else -> "Сериалы" }
 
     var genres by remember { mutableStateOf<List<Genre>>(emptyList()) }
     var selected by remember { mutableStateOf<Genre?>(null) }
 
-    LaunchedEffect(isMovies) {
+    LaunchedEffect(mode) {
         genres = withContext(Dispatchers.IO) {
-            if (isMovies) MediaApi.movieGenres() else MediaApi.tvGenres()
+            when (mode) {
+                "movies" -> MediaApi.movieGenres()
+                "shows" -> emptyList()
+                else -> MediaApi.tvGenres()
+            }
         }
     }
 
@@ -79,7 +83,7 @@ fun CatalogScreen(isMovies: Boolean, onOpenDetails: (MediaItem) -> Unit) {
                 PagedMediaRow(
                     title = "$title · ${g.name}",
                     loader = { page ->
-                        if (isMovies) MediaApi.moviesByGenre(g.id, page)
+                        if (mode == "movies") MediaApi.moviesByGenre(g.id, page)
                         else MediaApi.tvByGenre(g.id, page)
                     },
                     onOpen = onOpenDetails,
@@ -92,7 +96,11 @@ fun CatalogScreen(isMovies: Boolean, onOpenDetails: (MediaItem) -> Unit) {
             PagedMediaRow(
                 title = "Популярные $noun",
                 loader = { page ->
-                    if (isMovies) MediaApi.popularMovies(page) else MediaApi.popularTv(page)
+                    when (mode) {
+                        "movies" -> MediaApi.popularMovies(page)
+                        "shows" -> MediaApi.popularShows(page)
+                        else -> MediaApi.popularTv(page)
+                    }
                 },
                 onOpen = onOpenDetails,
                 filterFn = { store.isAllowed(it) },
@@ -102,7 +110,7 @@ fun CatalogScreen(isMovies: Boolean, onOpenDetails: (MediaItem) -> Unit) {
             PagedMediaRow(
                 title = "Топ $noun",
                 loader = { page ->
-                    if (isMovies) MediaApi.topRatedMovies(page) else MediaApi.topRatedTv(page)
+                    if (mode == "movies") MediaApi.topRatedMovies(page) else MediaApi.topRatedTv(page)
                 },
                 onOpen = onOpenDetails,
                 filterFn = { store.isAllowed(it) },
