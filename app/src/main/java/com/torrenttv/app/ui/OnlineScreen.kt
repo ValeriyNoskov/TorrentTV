@@ -604,22 +604,22 @@ fun OnlinePlayerScreen(link: OnlineService.OnlineLink, title: String, onBack: ()
             )
         }
 
-        // Шестерёнка: качество и внешний плеер — внутри меню
+        // Шестерёнка внизу справа (рядом с контролами — как в MX Player)
         Column(
             Modifier
-                .align(Alignment.TopEnd)
-                .padding(16.dp),
+                .align(Alignment.BottomEnd)
+                .padding(24.dp),
             horizontalAlignment = Alignment.End,
         ) {
             PlayerChip(if (showSettings) "✕" else "⚙") { showSettings = !showSettings }
         }
 
-        // Меню шестерёнки
+        // Меню шестерёнки — раскрывается вверх от кнопки
         if (showSettings) {
             Column(
                 Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 64.dp, end = 16.dp)
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = 76.dp, end = 24.dp)
                     .background(Color(0xF0151B26), RoundedCornerShape(14.dp))
                     .padding(12.dp),
                 horizontalAlignment = Alignment.End,
