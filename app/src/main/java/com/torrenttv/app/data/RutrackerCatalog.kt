@@ -61,7 +61,8 @@ object RutrackerrCatalog {
                     title = title,
                     year = year,
                     posterUrl = "",
-                    originalTitle = "",
+                    // Служебный адрес страницы раздачи — для «Похожего»
+                    originalTitle = "@rt:" + (if (pageUrl.startsWith("http")) pageUrl else BASE + pageUrl),
                 ),
                 if (pageUrl.startsWith("http")) pageUrl else BASE + pageUrl,
             )
@@ -95,6 +96,14 @@ object RutrackerrCatalog {
         return items
     }
 
+    /** «Похожее» для элемента из Рутрекера: блок похожих на его странице. */
+    fun similar(item: MediaItem): List<MediaItem> {
+        val pageUrl = item.originalTitle.takeIf { it.startsWith("@rt:") }?.removePrefix("@rt:")
+            ?: return emptyList()
+        val page = TorrentHttp.get(pageUrl, UA) ?: return emptyList()
+        return parseCards(page).filter { it.title != item.title }.take(12)
+    }
+
     /** Разбор страницы категории/подобного списка: карточки rutef_movie. */
     private fun category(url: String, page: Int): List<MediaItem> {
         val full = if (page > 1) url.trimEnd('/') + "/page/$page/" else url
@@ -123,7 +132,8 @@ object RutrackerrCatalog {
                 title = title,
                 year = year,
                 posterUrl = poster,
-                originalTitle = "",
+                // Служебный адрес страницы раздачи — для «Похожего»
+                originalTitle = "@rt:" + (if (url.startsWith("http")) url else BASE + url),
             )
             if (out.size >= 40) break
         }

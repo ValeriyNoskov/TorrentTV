@@ -64,7 +64,7 @@ object MediaApi {
         src({ KinopoiskClient.tvByGenre(genreId, page) }, { TmdbClient.tvByGenre(genreId, page) }, { RutrackerrCatalog.popularTv(page) })
 
     fun similar(item: MediaItem): List<MediaItem> =
-        src({ KinopoiskClient.similar(item) }, { TmdbClient.similar(item) })
+        src({ KinopoiskClient.similar(item) }, { TmdbClient.similar(item) }, { RutrackerrCatalog.similar(item) })
 
     /** Сезоны и эпизоды сериала. */
     fun seasons(item: MediaItem): List<Season> =
