@@ -22,6 +22,18 @@ class IptvFilterTest {
         assertTrue(IptvService.isRegional("Enisey"))
         assertTrue(IptvService.isRegional("Астрахань 24"))
         assertTrue(IptvService.isRegional("Дон 24"))
+        // Free-TV: без мягкого знака, раньше проскакивали
+        assertTrue(IptvService.isRegional("Астрахан 24"))
+        assertTrue(IptvService.isRegional("Катунь 24"))
+        assertTrue(IptvService.isRegional("Крым 24"))
+        assertTrue(IptvService.isRegional("Луганск 24"))
+        assertTrue(IptvService.isRegional("Урал 24"))
+        assertTrue(IptvService.isRegional("Запад 24"))
+        assertTrue(IptvService.isRegional("Сибирь 24"))
+        assertTrue(IptvService.isRegional("Ветта 24"))
+        assertTrue(IptvService.isRegional("Мир Белогорья"))
+        assertTrue(IptvService.isRegional("Архыз 24"))
+        assertTrue(IptvService.isRegional("Якутия 24"))
     }
 
     @Test
@@ -33,6 +45,26 @@ class IptvFilterTest {
         assertFalse(IptvService.isRegional("Первый канал"))
         assertFalse(IptvService.isRegional("360°"))
         assertFalse(IptvService.isRegional("Discovery Channel"))
+        assertFalse(IptvService.isRegional("Подмосковье 360"))
+    }
+
+    // ---------- белый список групп (регистр) ----------
+
+    @Test
+    fun `shown groups match regardless of case`() {
+        val shown = IptvService.SHOWN_GROUPS
+        // В плейлисте iptv-org группы с заглавной: «Movies», «Kids»…
+        assertTrue(shown.contains("movies"))
+        // Фильтр показа: группа приводится к нижнему регистру перед сравнением
+        fun isShown(group: String) = group.lowercase().trim() in shown || group.lowercase() == "federal"
+        assertTrue(isShown("Movies"))
+        assertTrue(isShown("Kids"))
+        assertTrue(isShown("Entertainment"))
+        assertTrue(isShown("Federal"))
+        assertFalse(isShown("Shop"))
+        assertFalse(isShown("Undefined"))
+        assertFalse(isShown("General"))
+        assertFalse(isShown("Legislative"))
     }
 
     // ---------- groupOrder ----------

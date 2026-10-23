@@ -42,6 +42,9 @@ object IptvService {
         // Дедупликация: федеральные приоритетнее, дальше — по одному на нормализованное название и адрес
         val seen = HashSet<String>()
         val parsed = (federal + main)
+            // Группы в источниках пишутся с заглавной («Movies») — приводим к нижнему
+            // регистру, иначе белый список SHOWN_GROUPS их не находит
+            .map { c -> c.copy(group = c.group.lowercase().trim()) }
             .filter { c -> seen.add(c.url) && seen.add("n:" + dedupName(c.name)) }
             // Региональные каналы других регионов (Астрахань 24, Дон 24, …) не нужны
             .filter { c -> !isRegional(c.name) }
@@ -162,13 +165,22 @@ object IptvService {
         "ulyanovsk", "khabarovsk", "novokuznetsk", "abakan", "kyzyl",
         "ulanude", "ulan-ude", "blagoveshchensk", "yakutsk", "petropavlovsk",
         "yuzhno", "nakhodka", "ussuriysk", "komsomolsk", "anadyr", "chukotka",
+        // Free-TV: то, что проскочило раньше («Катунь 24», «Крым 24», «Урал 24»…)
+        "katun", "катун", "crimea", "krym", "крым 24", "lugansk", "луганск",
+        "sibir 24", "сибир 24", "siberia 24", "zapad 24", "запад 24",
+        "ural 24", "урал 24", "ural24", "vetta", "ветта", "belogor", "белогор",
+        "soloviev", "соловь", "министерство идей", "nebesa", "небеса",
+        "вести фм", "vesti fm", "первый информацион", "kemerovo",
     )
 
     /** Региональный канал другого региона? (Москва и МО остаются.) */
     internal fun isRegional(name: String): Boolean {
-        val n = name.lowercase().replace('ё', 'е')
+        // Мягкий/твёрдый знак убираем: «Астрахань»/«Астрахан 24», «Пермь»/«Пермский»…
+        fun norm(s: String) = s.lowercase().replace('ё', 'е').replace("ь", "").replace("ъ", "")
+        val n = norm(name)
         if (n.contains("москв")) return false // Москва 24, Москва. Доверие, Говорит Москва
-        return REGION_MARKERS.any { n.contains(it) }
+        if (n.contains("подмосков")) return false // Подмосковье 360 и пр.
+        return REGION_MARKERS.any { n.contains(norm(it)) }
     }
 
     /** Порядок групп в списке: значимые — первыми, прочие — по алфавиту в конце. */
