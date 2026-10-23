@@ -33,17 +33,13 @@ object RutrackerrCatalog {
             headers = UA + mapOf("Referer" to "$BASE/"),
         ) ?: return emptyList()
 
-        val out = mutableListOf<MediaItem>()
-        val seen = mutableSetOf<String>()
-        // Название раздачи: «<td><b>Название (год) качество...</b></td>» —
-        // берём до скобки с годом, группируем дубли
+        // Выдача поиска (2026): строки раздач rutor/NNM без страниц тор.html —
+        // только название, magnet и сиды/пиры. Группируем по названию фильма.
         val rows = html.split("<tr>")
-        data class Found(val item: MediaItem, val url: String)
-        val found = mutableListOf<Found>()
+        val seen = mutableSetOf<String>()
+        val items = mutableListOf<MediaItem>()
         for (r in rows) {
             val name = Regex("""<td><b>([^<]{4,})</b></td>""").find(r)?.groupValues?.get(1)?.trim() ?: continue
-            val pageUrl = Regex("""href="((?:https://rutrackerr\.ru)?/\d+[^"]*tor\.html)"""")
-                .find(r)?.groupValues?.get(1) ?: continue
             val clean = name.replace(Regex("""\s*\[.*$"""), "").trim()          // «Спецы [01x01-08…]» → «Спецы»
             val m = Regex("""^(.*?)\s*\((\d{4})\)""").find(clean)
             val title = (m?.groupValues?.get(1) ?: clean).replace("|", "").trim()
@@ -54,44 +50,14 @@ object RutrackerrCatalog {
             val q = query.lowercase().replace('ё', 'е').trim()
             if (title.length < 2 || !seen.add(key)) continue
             if (!key.contains(q)) continue
-            found += Found(
-                MediaItem(
-                    id = kotlin.math.abs(("rt-" + key).hashCode()),
-                    type = "movie",
-                    title = title,
-                    year = year,
-                    posterUrl = "",
-                    // Служебный адрес страницы раздачи — для «Похожего»
-                    originalTitle = "@rt:" + (if (pageUrl.startsWith("http")) pageUrl else BASE + pageUrl),
-                ),
-                if (pageUrl.startsWith("http")) pageUrl else BASE + pageUrl,
+            items += MediaItem(
+                id = kotlin.math.abs(("rt-" + key).hashCode()),
+                type = "movie",
+                title = title,
+                year = year,
+                posterUrl = "",
             )
-            if (found.size >= 12) break
-        }
-        if (found.isEmpty()) return emptyList()
-
-        // Постер и тип подтягиваем параллельно со страниц раздач
-        val pool = java.util.concurrent.Executors.newFixedThreadPool(6)
-        val items = try {
-            found.map { f ->
-                pool.submit<Found> {
-                    val r = runCatching {
-                        val page = TorrentHttp.get(f.url, UA)
-                        if (page == null) {
-                            f
-                        } else {
-                            val poster = Regex("""<img[^>]+src="([^"]*uploads/posts/[^"]+)"""")
-                                .find(page)?.groupValues?.get(1)
-                                ?.let { if (it.startsWith("http")) it else BASE + it } ?: ""
-                            val isTv = page.contains("/serialy/")
-                            f.copy(item = f.item.copy(posterUrl = poster, type = if (isTv) "tv" else "movie"))
-                        }
-                    }.getOrDefault(f)
-                    r
-                }
-            }.map { it.get() }.map { it.item }
-        } finally {
-            pool.shutdown()
+            if (items.size >= 12) break
         }
         return items
     }
