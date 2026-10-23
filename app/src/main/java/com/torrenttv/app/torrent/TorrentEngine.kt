@@ -22,6 +22,35 @@ object TorrentEngine {
 
     val VIDEO_EXT = setOf("mp4", "mkv", "avi", "mov", "m4v", "ts", "webm", "wmv", "flv")
 
+    /**
+     * Естественное сравнение: цифровые блоки сравниваются как числа —
+     * S01E02 < S01E10, «Часть 2» < «Часть 10».
+     */
+    fun naturalCompare(a: String, b: String): Int {
+        var i = 0
+        var j = 0
+        while (i < a.length && j < b.length) {
+            val ca = a[i]
+            val cb = b[j]
+            if (ca.isDigit() && cb.isDigit()) {
+                var i2 = i
+                while (i2 < a.length && a[i2].isDigit()) i2++
+                var j2 = j
+                while (j2 < b.length && b[j2].isDigit()) j2++
+                val na = a.substring(i, i2).toLongOrNull() ?: 0L
+                val nb = b.substring(j, j2).toLongOrNull() ?: 0L
+                if (na != nb) return na.compareTo(nb)
+                i = i2
+                j = j2
+            } else {
+                if (ca != cb) return ca.compareTo(cb)
+                i++
+                j++
+            }
+        }
+        return (a.length - i) - (b.length - j)
+    }
+
     fun start() {
         if (!session.isRunning) session.start()
     }
@@ -50,7 +79,7 @@ object TorrentEngine {
     ) {
         val videoFile: File by lazy { File(saveDir, ti.files().filePath(fileIndex)) }
 
-        /** Все видеофайлы торрента: (индекс, имя) — для выбора серии. */
+        /** Все видеофайлы торрента: (индекс, имя) — по порядку серий. */
         fun videoFiles(): List<Pair<Int, String>> {
             val fs = ti.files()
             val out = mutableListOf<Pair<Int, String>>()
@@ -59,6 +88,8 @@ object TorrentEngine {
                     out += i to fs.fileName(i)
                 }
             }
+            // Естественный порядок: S01E02 раньше S01E10, «Часть 2» раньше «Часть 10»
+            out.sortWith { x, y -> TorrentEngine.naturalCompare(x.second, y.second) }
             return out
         }
 

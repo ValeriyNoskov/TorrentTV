@@ -1,6 +1,7 @@
 package com.torrenttv.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -172,6 +174,7 @@ fun TorrentFilesScreen(
     onBack: () -> Unit,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val store = remember { com.torrenttv.app.data.LocalStore(context) }
     var status by remember { mutableStateOf("Получаю состав раздачи…") }
     var loading by remember { mutableStateOf(true) }
     // (индекс файла, имя, размер)
@@ -195,12 +198,44 @@ fun TorrentFilesScreen(
                     val ext = name.substringAfterLast('.', "").lowercase()
                     if (ext in TorrentEngine.VIDEO_EXT) Triple(i, name, fs.fileSize(i))
                     else null
-                }
+                }.sortedWith { a, b -> TorrentEngine.naturalCompare(a.second, b.second) }
             }.getOrDefault(emptyList())
         }
         files = res
         loading = false
     }
+
+    // Разбор «Сезон N / Серия M»: S01E02, 1x02, «Сезон 1 Серия 2», просто «Серия 2»
+    fun seasonEpisode(name: String): Pair<Int, Int>? {
+        val n = name.replace('х', 'x').replace('Х', 'x')
+        Regex("(?i)(?:^|[^0-9a-z])s(\\d{1,2})\\s*e(\\d{1,3})").find(n)?.let {
+            return it.groupValues[1].toInt() to it.groupValues[2].toInt()
+        }
+        Regex("(?i)(?:^|[^0-9a-z])(\\d{1,2})x(\\d{1,3})").find(n)?.let {
+            return it.groupValues[1].toInt() to it.groupValues[2].toInt()
+        }
+        Regex("(?i)сезон[\\s._-]*(\\d{1,2}).*?сери[ияя][\\s._-]*(\\d{1,3})").find(n)?.let {
+            return it.groupValues[1].toInt() to it.groupValues[2].toInt()
+        }
+        Regex("(?i)сери[ияя][\\s._-]*(\\d{1,3})").find(n)?.let {
+            return 1 to it.groupValues[1].toInt()
+        }
+        return null
+    }
+
+    // Группировка по сезонам (файлы уже отсортированы естественно)
+    val groups: List<Pair<Int, List<Triple<Int, String, Long>>>> = remember(files) {
+        val known = files.mapNotNull { f -> seasonEpisode(f.second)?.let { f to it } }
+        val seasons = known.map { it.second.first }.distinct().sorted()
+        if (seasons.size > 1) {
+            seasons.map { s -> s to known.filter { it.second.first == s }.map { it.first } } +
+                listOf(0 to files.filter { f -> known.none { it.first == f } })
+        } else {
+            listOf(0 to files)
+        }
+    }.filter { it.second.isNotEmpty() }
+    var selSeason by remember(files) { mutableStateOf(groups.firstOrNull()?.first ?: 0) }
+    val shown = groups.firstOrNull { it.first == selSeason }?.second ?: files
 
     Column(
         Modifier
@@ -242,16 +277,54 @@ fun TorrentFilesScreen(
             Button(onClick = onBack) { Text("← Назад") }
         } else {
             Text(
-                "Файлов: ${files.size} — выберите серию или фильм:",
+                if (groups.size > 1) "Сезонов: ${groups.count { it.first > 0 }} — выберите сезон и серию:"
+                else "Файлов: ${files.size} — выберите серию или фильм:",
                 color = Color.White.copy(alpha = 0.6f),
                 fontSize = 14.sp,
             )
             Spacer(Modifier.height(8.dp))
+            // Чипы сезонов
+            if (groups.size > 1) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            Modifier.horizontalScroll(rememberScrollState())
+                        ),
+                ) {
+                    for ((s, list) in groups) {
+                        if (s == 0) continue
+                        androidx.tv.material3.Surface(
+                            onClick = { selSeason = s },
+                            shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(20.dp)),
+                            colors = ClickableSurfaceDefaults.colors(
+                                containerColor = if (selSeason == s) Color(0xFFF5B942) else Color(0xFF161C26),
+                                contentColor = if (selSeason == s) Color(0xFF0E1116) else Color.White,
+                                focusedContainerColor = Color(0xFFF5B942),
+                                focusedContentColor = Color(0xFF0E1116),
+                            ),
+                        ) {
+                            Text(
+                                "Сезон $s · ${list.size}",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier.weight(1f),
             ) {
-                itemsIndexed(files) { _, (idx, name, size) ->
+                itemsIndexed(shown) { _, (idx, name, size) ->
+                    // Просмотренные: позиция > 95% длительности
+                    val watched = store.continueWatching().firstOrNull {
+                        it.sourceKey == item.storeKey + ":f" + idx
+                    }?.let { it.positionSec * 100 / it.durationSec.coerceAtLeast(1) > 95 } ?: false
                     Surface(
                         onClick = { onPick(idx) },
                         modifier = Modifier
@@ -270,8 +343,8 @@ fun TorrentFilesScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                "▶",
-                                color = Color(0xFFF5B942),
+                                if (watched) "✓" else "▶",
+                                color = if (watched) Color(0xFF6BE26B) else Color(0xFFF5B942),
                                 fontSize = 14.sp,
                                 modifier = Modifier.width(24.dp),
                             )

@@ -159,8 +159,9 @@ fun PlayerScreen(
                 fileMatcher = episode?.let { ep ->
                     { name: String -> com.torrenttv.app.data.Episode.fileMatches(name, ep.season, ep.episode) }
                 },
-                // Прямой запуск файла (из экрана файлов раздачи)
-                fileIndex = startIndex,
+                // Прямой запуск файла (из экрана файлов раздачи),
+                // иначе — запомненная последняя серия раздачи
+                fileIndex = if (startIndex >= 0) startIndex else store.lastFile(item),
             )
         }
         if (st == null) {
@@ -174,10 +175,13 @@ fun PlayerScreen(
         )
         torrentFiles = st.videoFiles()
         stream = st
+        // Запомнить серию, с которой смотрели (для сериалов без episode-меты)
+        if (episode == null) store.saveLastFile(item, st.fileIndex)
 
         // Перемотка в середину: поднимаем приоритет кусков вокруг позиции продолжения
         val watching = withContext(Dispatchers.IO) {
-            store.continueWatching().firstOrNull { it.sourceKey == sourceKey }
+            // Позиция хранится по файлу (серии): у каждой своя
+            store.continueWatching().firstOrNull { it.sourceKey == sourceKey + ":f" + st.fileIndex }
         }
         val resumeSec = watching?.positionSec ?: 0
         val durationSec = watching?.durationSec ?: 0
@@ -187,8 +191,9 @@ fun PlayerScreen(
             }
         }
 
-        // Порог старта: 4 МБ или ~3% файла (чтобы плеер прочитал заголовки/индекс)
-        val threshold = maxOf(4L * 1024 * 1024, st.fileSize / 33)
+        // Порог старта: 12 МБ или ~5% файла — заголовки, индекс и запас кадров,
+        // чтобы первые минуты не спотыкались
+        val threshold = minOf(maxOf(12L * 1024 * 1024, st.fileSize / 20), 96L * 1024 * 1024)
         // Диагностика и таймаут: если за 3 минуты не скачалось — говорим прямо,
         // вместо вечного «Буферизация»
         val deadline = System.currentTimeMillis() + 180_000
@@ -253,7 +258,11 @@ fun PlayerScreen(
             },
             files = torrentFiles,
             onSelectFile = { idx ->
-                if (idx != stream?.fileIndex) restartFileIndex = idx
+                if (idx != stream?.fileIndex) {
+                    restartFileIndex = idx
+                    // Переключили серию — запоминаем её как последнюю
+                    store.saveLastFile(item, idx)
+                }
             },
             onPickTorrent = onPickTorrent,
             externalUrl = torrLink,
@@ -327,9 +336,11 @@ private fun VideoPlayer(
 ) {
     val context = LocalContext.current
     val sourceKey = item.storeKey + (episode?.sourceSuffix ?: "")
+    // Позиция просмотра хранится по конкретной серии (файлу торрента)
+    val watchKey = stream?.let { sourceKey + ":f" + it.fileIndex } ?: sourceKey
 
-    val resumeSec = remember {
-        store.continueWatching().firstOrNull { it.sourceKey == sourceKey }?.positionSec ?: 0
+    val resumeSec = remember(stream) {
+        store.continueWatching().firstOrNull { it.sourceKey == watchKey }?.positionSec ?: 0
     }
 
     val player = remember(stream) {
@@ -337,6 +348,13 @@ private fun VideoPlayer(
             // Перемотка стрелками пульта: ±10 секунд
             .setSeekBackIncrementMs(10_000L)
             .setSeekForwardIncrementMs(10_000L)
+            // Буфер побольше: меньше стопов и тормозов при перемотке назад
+            .setLoadControl(
+                androidx.media3.exoplayer.DefaultLoadControl.Builder()
+                    .setBufferDurationsMs(60_000, 180_000, 6_000, 12_000)
+                    .setBackBuffer(60_000, true)
+                    .build()
+            )
             .build()
             .apply {
                 // Русский звук по умолчанию (дубляж), если дорожки размечены
@@ -381,10 +399,17 @@ private fun VideoPlayer(
                     item,
                     positionSec = (player.currentPosition / 1000).toInt(),
                     durationSec = (player.duration / 1000).toInt(),
-                    sourceKey = sourceKey,
+                    sourceKey = watchKey,
                     episodeLabel = episode?.code ?: "",
                 )
                 showSkip = player.duration - player.currentPosition < 3 * 60_000L
+                // Держим скачанными ~60 сек вперёд от позиции плеера:
+                // перемотка вперёд попадает в готовые куски
+                val st = stream
+                if (st != null && player.duration > 0) {
+                    val bps = st.fileSize * 1000.0 / player.duration
+                    st.boostPiecesAround(st.fileOffset + player.currentPosition + (bps * 60).toLong())
+                }
             }
         }
     }

@@ -132,6 +132,17 @@ class LocalStore(context: Context) {
     fun getMagnet(item: MediaItem, suffix: String = ""): String? =
         prefs.getString("magnet:" + item.storeKey + suffix, null)
 
+    // ---------- Последняя серия торрента (продолжить с той же серии) ----------
+
+    /** Запомнить последнюю проигранную серию (файл) раздачи. */
+    fun saveLastFile(item: MediaItem, fileIndex: Int) {
+        prefs.edit().putInt("lastfile:" + item.storeKey, fileIndex).apply()
+    }
+
+    /** Последняя серия раздачи или -1 (не смотрели). */
+    fun lastFile(item: MediaItem): Int =
+        prefs.getInt("lastfile:" + item.storeKey, -1)
+
     // ---------- Настройки фильтрации поиска ----------
 
     /** Исключённые жанры (id TMDB). */
