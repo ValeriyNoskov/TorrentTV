@@ -194,6 +194,8 @@ private fun App() {
                 },
                 // Автоплей: серия закончилась → сразу следующая
                 onPlayNext = { next -> screen = Screen.Player(s.item, next) },
+                // ⚙ «Другое качество» → экран выбора раздач/ссылок
+                onPickTorrent = { screen = Screen.Watch(s.item) },
             )
 
             is Screen.Online -> OnlineScreen(

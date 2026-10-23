@@ -298,6 +298,13 @@ class LocalStore(context: Context) {
         prefs.edit().putBoolean("use_external_player", v).apply()
     }
 
+    /** Ввод: внешняя (системная IME) клавиатура вместо встроенной экранной. */
+    fun useExternalKeyboard(): Boolean = prefs.getBoolean("external_keyboard", false)
+
+    fun setUseExternalKeyboard(v: Boolean) {
+        prefs.edit().putBoolean("external_keyboard", v).apply()
+    }
+
     // ---------- Внутреннее ----------
 
     private fun readList(key: String): List<MediaItem> {

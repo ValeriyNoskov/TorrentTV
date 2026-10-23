@@ -60,6 +60,8 @@ fun PlayerScreen(
     onBack: () -> Unit,
     /** Серия закончилась — перейти к следующей (автоплей сериала). */
     onPlayNext: (com.torrenttv.app.data.Episode) -> Unit = {},
+    /** «Другое качество» — вернуться к выбору раздач/ссылок. */
+    onPickTorrent: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
@@ -243,6 +245,8 @@ fun PlayerScreen(
             onSelectFile = { idx ->
                 if (idx != stream?.fileIndex) restartFileIndex = idx
             },
+            onPickTorrent = onPickTorrent,
+            externalUrl = torrLink,
         )
     } else {
         // Экран буферизации
@@ -306,6 +310,10 @@ private fun VideoPlayer(
     files: List<Pair<Int, String>> = emptyList(),
     /** Выбрана другая серия (файл) — перезапуск стрима. */
     onSelectFile: (Int) -> Unit = {},
+    /** «Другое качество»: вернуться к выбору раздач. */
+    onPickTorrent: () -> Unit = {},
+    /** URL для внешнего плеера (TorrServe) или null — внешний недоступен. */
+    externalUrl: String? = null,
 ) {
     val context = LocalContext.current
     val sourceKey = item.storeKey + (episode?.sourceSuffix ?: "")
@@ -512,6 +520,94 @@ private fun VideoPlayer(
                     }
                 }
             }
+        }
+
+        // ⚙ — качество (выбор раздачи) и внешний плеер
+        var showGear by remember { mutableStateOf(false) }
+        var gearMsg by remember { mutableStateOf("") }
+        Column(
+            Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 24.dp, bottom = if (showSkip) 110.dp else 24.dp),
+            horizontalAlignment = Alignment.End,
+        ) {
+            androidx.tv.material3.Button(
+                onClick = { showGear = !showGear },
+                colors = androidx.tv.material3.ButtonDefaults.colors(
+                    containerColor = Color(0xCC1F2430),
+                    contentColor = Color.White,
+                    focusedContainerColor = Color(0xFFF5B942),
+                    focusedContentColor = Color.Black,
+                ),
+            ) { Text(if (showGear) "✕" else "⚙", fontSize = 16.sp) }
+        }
+        if (showGear) {
+            Column(
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 24.dp, bottom = if (showSkip) 162.dp else 76.dp)
+                    .background(Color(0xF0151B26), androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+                    .padding(10.dp),
+                horizontalAlignment = Alignment.End,
+            ) {
+                androidx.tv.material3.Surface(
+                    onClick = { showGear = false; onPickTorrent() },
+                    shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+                    ),
+                    colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                        containerColor = Color.Transparent,
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContentColor = Color.Black,
+                    ),
+                ) { Text("🧲 Другое качество", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
+                Spacer(Modifier.height(4.dp))
+                androidx.tv.material3.Surface(
+                    onClick = {
+                        showGear = false
+                        val url = externalUrl
+                        if (url == null) {
+                            gearMsg = "Внешний плеер доступен при стриме через TorrServe"
+                        } else {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                setDataAndType(android.net.Uri.parse(url), "video/*")
+                                addFlags(
+                                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                        android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                                )
+                            }
+                            if (!runCatching { context.startActivity(intent) }.isSuccess) {
+                                gearMsg = "Внешний плеер не найден — установите VLC или MX Player"
+                            }
+                        }
+                    },
+                    shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+                    ),
+                    colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                        containerColor = Color.Transparent,
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContentColor = Color.Black,
+                    ),
+                ) { Text("⤴ Внешний плеер", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
+            }
+        }
+        if (gearMsg.isNotBlank()) {
+            LaunchedEffect(gearMsg) {
+                kotlinx.coroutines.delay(2500)
+                gearMsg = ""
+            }
+            androidx.tv.material3.Text(
+                gearMsg,
+                color = Color.White,
+                fontSize = 14.sp,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .background(Color(0xF0151B26), androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                    .padding(16.dp),
+            )
         }
 
         // Индикатор перемотки пультом

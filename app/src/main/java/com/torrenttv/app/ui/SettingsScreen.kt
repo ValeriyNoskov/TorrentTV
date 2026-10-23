@@ -29,6 +29,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -69,6 +70,7 @@ private val SECTIONS = listOf(
     Triple("netcheck", "🩺 Проверка сети", "Какие источники доступны с этого устройства"),
     Triple("torrserve", "🚀 TorrServe", "Внешний движок торрентов — надёжнее внутреннего"),
     Triple("player", "📺 Плеер", "Встроенный или внешний плеер (VLC, MX Player)"),
+    Triple("input", "⌨ Ввод", "Клавиатура: внешняя (системная) или встроенная"),
     Triple("mdbase", "🎞 База фильмов", "Свой ключ каталогов — свои лимиты, не общие"),
 )
 
@@ -89,6 +91,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     var jackettKey by remember { mutableStateOf(store.jackettApiKey()) }
     var rtCookie by remember { mutableStateOf(store.trackerCookie(PrivateTrackers.RUTRACKER)) }
     var extPlayer by remember { mutableStateOf(store.useExternalPlayer()) }
+    var extKb by remember { mutableStateOf(store.useExternalKeyboard()) }
     var kzCookie by remember { mutableStateOf(store.trackerCookie(PrivateTrackers.KINOZAL)) }
     var nnmCookie by remember { mutableStateOf(store.trackerCookie(PrivateTrackers.NNMCLUB)) }
     var fxToken by remember { mutableStateOf(store.filmixToken()) }
@@ -368,6 +371,23 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 "(VLC, MX Player и т.п.) — приложение будет передавать видео ему. " +
                                 "Если плеер не установлен, видео откроется как обычно во встроенном. " +
                                 "Кнопка «⤴ Внешний плеер» поверх видео работает и без этой галочки."
+                        )
+                    }
+
+                    "input" -> {
+                        SettingsRow(
+                            title = if (extKb) "✅ Внешняя клавиатура" else "⬜ Внешняя клавиатура",
+                            value = if (extKb) "ВКЛ — системный ввод (пульт с клавиатурой, Air Mouse, USB)" else "ВЫКЛ — встроенная экранная клавиатура",
+                            valueOk = extKb,
+                        ) {
+                            extKb = !extKb
+                            store.setUseExternalKeyboard(extKb)
+                        }
+                        SettingsNote(
+                            "ВКЛ: в поиске и при вводе текста открывается системная клавиатура " +
+                                "вашего ТВ/приставки — печатайте с пульта с микрофоном-клавиатурой, " +
+                                "Air Mouse или подключённой USB/Bluetooth-клавиатуры. " +
+                                "ВЫКЛ: буквы выбираются курсором на встроенной экранной клавиатуре."
                         )
                     }
 
@@ -689,6 +709,9 @@ private fun EditScreen(
     onCancel: () -> Unit,
 ) {
     val kbFocus = remember { FocusRequester() }
+    val externalKb = androidx.compose.ui.platform.LocalContext.current.let {
+        remember { com.torrenttv.app.data.LocalStore(it).useExternalKeyboard() }
+    }
     Column(
         Modifier
             .fillMaxSize()
@@ -711,12 +734,41 @@ private fun EditScreen(
             Spacer(Modifier.width(16.dp))
             Button(onClick = onCancel) { Text("Отмена") }
         }
-        TvKeyboard(
-            onChar = { ch -> onChange(value + ch) },
-            onBackspace = { if (value.isNotEmpty()) onChange(value.dropLast(1)) },
-            onClear = { onChange("") },
-            firstKeyFocus = kbFocus,
-        )
+        if (externalKb) {
+            LaunchedEffect(Unit) { kbFocus.requestFocus() }
+            androidx.compose.foundation.text.BasicTextField(
+                value = value,
+                onValueChange = onChange,
+                singleLine = false,
+                textStyle = androidx.compose.ui.text.TextStyle(
+                    color = Color(0xFFF5B942),
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                ),
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(Color(0xFFF5B942)),
+                modifier = Modifier
+                    .focusRequester(kbFocus)
+                    .fillMaxWidth()
+                    .padding(top = 10.dp)
+                    .background(Color(0xFF1F2430), androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                decorationBox = { inner ->
+                    Box {
+                        if (value.isBlank()) {
+                            Text("Печатайте с внешней клавиатуры…", color = Color.White.copy(alpha = 0.35f), fontSize = 16.sp)
+                        }
+                        inner()
+                    }
+                },
+            )
+        } else {
+            TvKeyboard(
+                onChar = { ch -> onChange(value + ch) },
+                onBackspace = { if (value.isNotEmpty()) onChange(value.dropLast(1)) },
+                onClear = { onChange("") },
+                firstKeyFocus = kbFocus,
+            )
+        }
     }
 }
 

@@ -24,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,10 +39,14 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import coil.compose.AsyncImage
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
 import com.torrenttv.app.data.MediaApi
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 // Раскладка экранной клавиатуры (ЙЦУКЕН)
 private val KEY_ROWS = listOf(
@@ -57,11 +62,19 @@ private val KEY_ROWS = listOf(
  * Результаты ищутся в TMDB (фильмы + сериалы) с дебаунсом 500 мс.
  */
 @Composable
-fun SearchScreen(onBack: () -> Unit, onOpenDetails: (MediaItem) -> Unit, onTorrentSearch: (String) -> Unit = {}) {
+fun SearchScreen(
+    onBack: () -> Unit,
+    onOpenDetails: (MediaItem) -> Unit,
+    onTorrentSearch: (String) -> Unit = {},
+    /** Раздача выбрана прямо из поиска: magnet сохранён — открыть плеер. */
+    onPlayTorrent: (MediaItem) -> Unit = {},
+) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
+    val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+    var torrents by remember { mutableStateOf<List<com.torrenttv.app.data.TorrentResult>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
@@ -97,24 +110,63 @@ fun SearchScreen(onBack: () -> Unit, onOpenDetails: (MediaItem) -> Unit, onTorre
         }
     }
 
-    // Поиск с дебаунсом; searchTick — немедленный поиск по кнопке «Найти»
+    // Поиск с дебаунсом; searchTick — немедленный поиск по кнопке «Найти».
+    // Фильмы и торренты ищутся параллельно — раздачи сразу в результатах.
     var searchTickForce by remember { mutableStateOf(0) }
     LaunchedEffect(query, searchTickForce) {
         if (query.length >= 2) {
             loading = true
             failed = false
             delay(500)
-            results = MediaApi.search(query).filter { store.isAllowed(it) }
+            kotlinx.coroutines.coroutineScope {
+                val films = async(Dispatchers.IO) {
+                    MediaApi.search(query).filter { store.isAllowed(it) }
+                }
+                val tr = async(Dispatchers.IO) {
+                    runCatching {
+                        com.torrenttv.app.data.TorrentSearch.searchDetailed(
+                            query = query,
+                            altQuery = null,
+                            isTvShow = false,
+                            imdbId = "",
+                            jackett = store.jackettConfig(),
+                            privateTrackers = store.privateTrackers(),
+                            excludedKeywords = store.excludedKeywords().toSet(),
+                        ).first
+                    }.getOrDefault(emptyList())
+                }
+                results = films.await()
+                torrents = tr.await()
+                    .sortedByDescending { it.seeds }
+                    .take(16)
+            }
             // пустой ответ при ошибке API (сеть/лимит) — показываем «Повторить»
             failed = results.isEmpty() && MediaApi.lastSearchFailed
             loading = false
         } else {
             results = emptyList()
+            torrents = emptyList()
             failed = false
             loading = false
         }
     }
-    var showKb by remember { mutableStateOf(true) }
+
+    /** Постер для раздачи: карточка фильма с совпадающим названием. */
+    fun posterFor(name: String): Pair<MediaItem, String> {
+        val n = name.lowercase().replace('ё', 'е')
+        val card = results.firstOrNull { c ->
+            val t = c.title.lowercase().replace('ё', 'е')
+            t.length >= 3 && (n.contains(t) || t.contains(n))
+        } ?: results.firstOrNull { c -> c.posterUrl.isNotBlank() && n.contains(c.title.lowercase().take(6)) }
+        val item = card ?: MediaItem(
+            id = kotlin.math.abs(("qt-" + name).hashCode()),
+            type = "movie",
+            title = name.substringBefore('[').substringBefore('(').trim().ifBlank { name },
+        )
+        return item to (card?.posterUrl ?: "")
+    }
+    var showKb by remember { mutableStateOf(false) }
+    val externalKb = remember { store.useExternalKeyboard() }
     val findFocus = remember { FocusRequester() }
 
     Column(
@@ -139,7 +191,7 @@ fun SearchScreen(onBack: () -> Unit, onOpenDetails: (MediaItem) -> Unit, onTorre
             Button(onClick = {
                 showKb = !showKb
                 if (!showKb) findFocus.requestFocus()
-            }) { Text(if (showKb) "⌨ Скрыть клавиатуру" else "⌨ Клавиатура") }
+            }) { Text(if (showKb) "⌨ Скрыть ввод" else "⌨ Ввод") }
             Spacer(Modifier.width(10.dp))
             Button(onClick = { searchTickForce++ }, modifier = Modifier.focusRequester(findFocus)) {
                 Text("🔍 Найти")
@@ -159,6 +211,61 @@ fun SearchScreen(onBack: () -> Unit, onOpenDetails: (MediaItem) -> Unit, onTorre
             )
             LazyRow(contentPadding = PaddingValues(vertical = 6.dp)) {
                 items(results.size) { i -> PosterCard(results[i]) { onOpenDetails(results[i]) } }
+            }
+        }
+        // ---------- Раздачи: сразу в результатах, с постером ----------
+        if (torrents.isNotEmpty()) {
+            Text(
+                text = "🧲 Раздачи: ${torrents.size}" + if (loading) " (обновление…)" else "",
+                color = Color.White.copy(alpha = 0.6f),
+                fontSize = 15.sp,
+                modifier = Modifier.padding(top = 10.dp),
+            )
+            LazyRow(contentPadding = PaddingValues(vertical = 6.dp)) {
+                items(torrents.size) { i ->
+                    val r = torrents[i]
+                    val (tItem, poster) = posterFor(r.name)
+                    val card = tItem.copy(posterUrl = poster)
+                    Surface(
+                        onClick = {
+                            store.saveMagnet(card, com.torrenttv.app.data.TorrentSearch.toMagnet(r))
+                            onPlayTorrent(card)
+                        },
+                        modifier = Modifier.width(170.dp).padding(6.dp),
+                        shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF1F2430),
+                            focusedContainerColor = Color(0xFF3A2E14),
+                        ),
+                    ) {
+                        Column(Modifier.padding(10.dp)) {
+                            if (poster.isNotBlank()) {
+                                coil.compose.AsyncImage(
+                                    model = poster,
+                                    contentDescription = r.name,
+                                    modifier = Modifier.fillMaxWidth().height(150.dp),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                )
+                                Spacer(Modifier.height(8.dp))
+                            }
+                            Text(
+                                r.name.substringBefore('[').substringBefore('(').trim().ifBlank { r.name },
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                maxLines = if (poster.isNotBlank()) 2 else 5,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "🧲 ${r.seeds} · ${
+                                    android.text.format.Formatter.formatShortFileSize(context, r.sizeBytes)
+                                }",
+                                color = Color(0xFF8BD17C),
+                                fontSize = 13.sp,
+                            )
+                        }
+                    }
+                }
             }
         } else if (loading) {
             Text("Ищем…", color = Color.White.copy(alpha = 0.5f), fontSize = 15.sp, modifier = Modifier.padding(top = 10.dp))
@@ -184,14 +291,48 @@ fun SearchScreen(onBack: () -> Unit, onOpenDetails: (MediaItem) -> Unit, onTorre
 
         Spacer(Modifier.height(8.dp))
 
-        // ---------- Экранная клавиатура (можно спрятать) ----------
+        // ---------- Клавиатура: встроенная или внешняя (системная IME) ----------
         if (showKb) {
-            TvKeyboard(
-                onChar = { query += it },
-                onBackspace = { if (query.isNotEmpty()) query = query.dropLast(1) },
-                onClear = { query = "" },
-                firstKeyFocus = firstKeyFocus,
-            )
+            if (externalKb) {
+                val kbFieldFocus = remember { FocusRequester() }
+                LaunchedEffect(Unit) { kbFieldFocus.requestFocus() }
+                androidx.compose.foundation.text.BasicTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    singleLine = true,
+                    textStyle = androidx.compose.ui.text.TextStyle(
+                        color = Color.White,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    ),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(Color(0xFFF5B942)),
+                    modifier = Modifier
+                        .focusRequester(kbFieldFocus)
+                        .fillMaxWidth()
+                        .padding(top = 10.dp)
+                        .background(Color(0xFF1F2430), androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    decorationBox = { inner ->
+                        Box {
+                            if (query.isEmpty()) {
+                                Text(
+                                    "Печатайте с внешней клавиатуры…",
+                                    color = Color.White.copy(alpha = 0.35f),
+                                    fontSize = 18.sp,
+                                )
+                            }
+                            inner()
+                        }
+                    },
+                )
+            } else {
+                TvKeyboard(
+                    onChar = { query += it },
+                    onBackspace = { if (query.isNotEmpty()) query = query.dropLast(1) },
+                    onClear = { query = "" },
+                    firstKeyFocus = firstKeyFocus,
+                )
+            }
         }
     }
 }

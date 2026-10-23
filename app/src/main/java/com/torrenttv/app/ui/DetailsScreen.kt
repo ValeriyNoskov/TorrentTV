@@ -143,6 +143,32 @@ fun DetailsScreen(
                     Spacer(Modifier.width(16.dp))
                     Button(onClick = onOnline) { Text("🌐 Онлайн") }
                     Spacer(Modifier.width(16.dp))
+                    // Трейлер: Rutube-поиск по названию (YouTube под санкциями)
+                    Button(onClick = {
+                        val q = listOf(item.title, item.year, "трейлер")
+                            .filter { it.isNotBlank() }.joinToString(" ")
+                        val url = "https://rutube.ru/search/?query=" + android.net.Uri.encode(q)
+                        var ok = false
+                        // 1) приложение Rutube (TV/мобильное) — если установлено
+                        for (pkg in listOf("ru.rutube.tv", "ru.rutube.rutube")) {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)).apply {
+                                setPackage(pkg)
+                                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            if (runCatching { context.startActivity(intent) }.isSuccess) { ok = true; break }
+                        }
+                        // 2) браузер / любое приложение, перехватывающее ссылки rutube.ru
+                        if (!ok) {
+                            ok = runCatching {
+                                context.startActivity(
+                                    android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                                )
+                            }.isSuccess
+                        }
+                        if (!ok) status = "Rutube/браузер не найдены — установите приложение Rutube или браузер"
+                    }) { Text("🎬 Трейлер") }
+                    Spacer(Modifier.width(16.dp))
                     Button(onClick = { menu = !menu }) { Text("⋯ Ещё") }
                 }
 
