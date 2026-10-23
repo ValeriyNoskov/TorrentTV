@@ -38,6 +38,34 @@ object TorrServeService {
         false
     }
 
+    /** Один раз за сессию пробуем сами открыть TorrServe (его Activity стартует сервер). */
+    @Volatile private var launchAttempted = false
+
+    /**
+     * Готов ли TorrServe к работе: отвечает на /echo. Если установлен, но спит —
+     * один раз за сессию запускаем его Activity (она стартует сервер) и ждём.
+     * false — ждём слишком долго или не установлен: работаем внутренним движком.
+     */
+    fun ensureRunning(ctx: Context, host: String, waitMs: Long = 10_000L): Boolean {
+        if (echo(host)) return true
+        if (!isInstalled(ctx)) return false
+        if (!launchAttempted) {
+            launchAttempted = true
+            runCatching {
+                ctx.packageManager.getLaunchIntentForPackage(PACKAGE)?.let { intent ->
+                    intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    ctx.startActivity(intent)
+                }
+            }
+            val deadline = System.currentTimeMillis() + waitMs
+            while (System.currentTimeMillis() < deadline) {
+                Thread.sleep(2000)
+                if (echo(host)) return true
+            }
+        }
+        return false
+    }
+
     private fun client(): OkHttpClient = TorrentHttp.client.newBuilder()
         .connectTimeout(2, TimeUnit.SECONDS)
         .readTimeout(150, TimeUnit.SECONDS) // add может ждать метаданные

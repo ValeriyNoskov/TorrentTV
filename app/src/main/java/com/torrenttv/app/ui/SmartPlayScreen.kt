@@ -174,7 +174,8 @@ fun SmartPlayScreen(
         // TorrServe (внешний движок): если установлен и отвечает — стримим им,
         // он надёжнее получает метаданные и быстрее отдаёт файл
         val tsHost = store.torrServeHost()
-        if (TorrServeService.echo(tsHost)) {
+        val tsReady = withContext(Dispatchers.IO) { TorrServeService.ensureRunning(context, tsHost) }
+        if (tsReady) {
             status = "Добавляю в TorrServe…"
             com.torrenttv.app.data.AppLog.log("smart", "torrserve: echo ok, adding magnet")
             val ts = TorrServeService.addMagnet(tsHost, magnet, item.title) { status = it }

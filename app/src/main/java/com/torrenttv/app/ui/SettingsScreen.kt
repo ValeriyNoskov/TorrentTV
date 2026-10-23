@@ -682,6 +682,29 @@ private fun NetCheckScreen(onClose: () -> Unit) {
 
     LaunchedEffect(Unit) { checkAll() }
 
+    // Автопроверка идёт при открытии экрана; кнопка — для повторного прогона
+    if (!running && rows.isNotEmpty()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = {
+                kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch { checkAll() }
+            }) { Text("🔄 Проверить снова") }
+            // TorrServe установлен, но не отвечает — открыть его, чтобы нажать UPDATE/Start
+            val tsRow = rows.firstOrNull { it.name.startsWith("TorrServe") }
+            if (com.torrenttv.app.data.TorrServeService.isInstalled(ctx) && tsRow?.ok != true) {
+                Spacer(Modifier.width(16.dp))
+                Button(onClick = {
+                    runCatching {
+                        ctx.packageManager.getLaunchIntentForPackage(com.torrenttv.app.data.TorrServeService.PACKAGE)?.let {
+                            it.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            ctx.startActivity(it)
+                        }
+                    }
+                }) { Text("🚀 Открыть TorrServe") }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+    }
+
     Column(
         Modifier
             .fillMaxSize()

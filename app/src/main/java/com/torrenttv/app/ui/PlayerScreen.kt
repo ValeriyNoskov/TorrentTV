@@ -69,7 +69,10 @@ fun PlayerScreen(item: MediaItem, episode: com.torrenttv.app.data.Episode? = nul
     LaunchedEffect(magnet) {
         if (magnet == null) return@LaunchedEffect
         val tsHost = store.torrServeHost()
-        if (com.torrenttv.app.data.TorrServeService.echo(tsHost)) {
+        val tsReady = withContext(Dispatchers.IO) {
+            com.torrenttv.app.data.TorrServeService.ensureRunning(context, tsHost)
+        }
+        if (tsReady) {
             status = "Добавляю в TorrServe…"
             com.torrenttv.app.data.AppLog.log("player", "torrserve: echo ok, adding")
             val ts = withContext(Dispatchers.IO) {
