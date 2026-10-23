@@ -466,11 +466,12 @@ fun OnlinePlayerScreen(link: OnlineService.OnlineLink, title: String, onBack: ()
     var maxQuality by remember { mutableStateOf<Int?>(null) } // null = авто
 
     val player = remember(link.url) {
-        // CDN проверяет Referer: у Filmix — filmix.ac, у HDRezka — её зеркало
-        val referer = link.referer.ifBlank { "https://filmix.ac/" }
+        // CDN проверяет Referer: у Filmix — filmix.ac, у HDRezka — её зеркало.
+        // TorrServe (label="torrserve") — локальный стрим, Referer не нужен.
+        val referer = if (link.label == "torrserve") "" else link.referer.ifBlank { "https://filmix.ac/" }
         val httpFactory = DefaultHttpDataSource.Factory()
             .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-            .setDefaultRequestProperties(mapOf("Referer" to referer))
+            .apply { if (referer.isNotBlank()) setDefaultRequestProperties(mapOf("Referer" to referer)) }
             .setConnectTimeoutMs(15_000)
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(httpFactory))

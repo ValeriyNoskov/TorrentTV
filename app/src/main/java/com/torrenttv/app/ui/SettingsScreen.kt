@@ -63,6 +63,7 @@ private val SECTIONS = listOf(
     Triple("filmix", "🌐 Онлайн-источники", "Filmix и HDRezka — просмотр без торрентов"),
     Triple("epg", "📆 Телеканалы", "Каналы IPTV и телепрограмма"),
     Triple("netcheck", "🩺 Проверка сети", "Какие источники доступны с этого устройства"),
+    Triple("torrserve", "🚀 TorrServe", "Внешний движок торрентов — надёжнее внутреннего"),
 )
 
 @Composable
@@ -113,6 +114,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 "kz" -> { store.setTrackerCookie(PrivateTrackers.KINOZAL, editTmp); kzCookie = editTmp }
                 "nnm" -> { store.setTrackerCookie(PrivateTrackers.NNMCLUB, editTmp); nnmCookie = editTmp }
                 "epg" -> { store.setEpgUrl(editTmp); epgUrl = editTmp }
+                "ts" -> store.setTorrServeHost(editTmp)
             }
         }
         editTarget = null
@@ -306,6 +308,22 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 "обновления) доступны с этого устройства. Если напротив " +
                                 "источника крестик — его блокирует ваш провайдер: это не " +
                                 "неисправность приложения. Перешлите результат в поддержку."
+                        )
+                    }
+
+                    "torrserve" -> {
+                        SettingsRow(
+                            title = "Адрес сервера",
+                            value = store.torrServeHost(),
+                            valueOk = true,
+                        ) { openEdit("ts", store.torrServeHost(), "http://127.0.0.1:8090") }
+                        SettingsNote(
+                            "TorrServe (MatriX) — отдельное бесплатное приложение-движок " +
+                                "торрент-стриминга. Установите его (F-Droid: ru.yourok.torrserve), " +
+                                "запустите — и ВНосКино автоматически станет стримить через него: " +
+                                "быстрее поиск пиров и стабильнее воспроизведение. Если TorrServe " +
+                                "не установлен или не отвечает, приложение пользуется внутренним движком. " +
+                                "На этом же ТВ-боксе оставьте адрес 127.0.0.1:8090."
                         )
                     }
 
@@ -608,21 +626,29 @@ private fun NetCheckScreen(onClose: () -> Unit) {
     var uploadState by remember { mutableStateOf("") }
     var uploadUrl by remember { mutableStateOf("") }
     var uploading by remember { mutableStateOf(false) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val targets = remember {
+        buildList {
+            addAll(listOf(
+                "apibay (торренты)" to "https://apibay.org/q.php?q=test&cat=201",
+                "Torrentio (торренты)" to "https://torrentio.strem.fun/stream/movie/tt0133093.json",
+                "bt4g (торренты)" to "https://bt4gprx.com/api/search?q=test",
+                "YTS (торренты)" to "https://yts.mx/api/v2/list_movies.json?query_term=test",
+                "Filmix (онлайн)" to "http://filmixapp.cyou/api/v2/token_request?user_dev_apk=2.0.1&user_dev_id=&user_dev_name=Xiaomi&user_dev_os=11&user_dev_token=&user_dev_vendor=Xiaomi",
+                "HDRezka (онлайн)" to "https://hdrezka.ag/",
+                "IPTV-плейлист (ТВ)" to "https://iptv-org.github.io/iptv/countries/ru.m3u",
+                "GitHub (обновления)" to "https://api.github.com/repos/ValeriyNoskov/TorrentTV/releases/latest",
+            ))
+            if (com.torrenttv.app.data.TorrServeService.isInstalled(ctx)) {
+                add("TorrServe (движок)" to com.torrenttv.app.data.LocalStore(ctx).torrServeHost() + "/echo")
+            }
+        }
+    }
 
     suspend fun checkAll() {
         running = true
         rows = emptyList()
         com.torrenttv.app.data.AppLog.log("netcheck", "start")
-        val targets = listOf(
-            "apibay (торренты)" to "https://apibay.org/q.php?q=test&cat=201",
-            "Torrentio (торренты)" to "https://torrentio.strem.fun/stream/movie/tt0133093.json",
-            "bt4g (торренты)" to "https://bt4gprx.com/api/search?q=test",
-            "YTS (торренты)" to "https://yts.mx/api/v2/list_movies.json?query_term=test",
-            "Filmix (онлайн)" to "http://filmixapp.cyou/api/v2/token_request?user_dev_apk=2.0.1&user_dev_id=&user_dev_name=Xiaomi&user_dev_os=11&user_dev_token=&user_dev_vendor=Xiaomi",
-            "HDRezka (онлайн)" to "https://hdrezka.ag/",
-            "IPTV-плейлист (ТВ)" to "https://iptv-org.github.io/iptv/countries/ru.m3u",
-            "GitHub (обновления)" to "https://api.github.com/repos/ValeriyNoskov/TorrentTV/releases/latest",
-        )
         done = 0
         // Параллельно: каждый источник с жёстким таймаутом 8 сек, строки
         // появляются по мере готовности — экран не «зависает»
@@ -719,7 +745,7 @@ private fun NetCheckScreen(onClose: () -> Unit) {
         Spacer(Modifier.height(10.dp))
         Text(
             when {
-                running -> "Проверяю… $done из 8"
+                running -> "Проверяю… $done из ${targets.size}"
                 rows.size < 8 -> ""
                 else -> "Проверка завершена: доступно ${rows.count { it.ok == true }} из ${rows.size}"
             },

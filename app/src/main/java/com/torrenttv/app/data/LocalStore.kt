@@ -269,6 +269,13 @@ class LocalStore(context: Context) {
         prefs.edit().putBoolean("iptv_all_groups", v).apply()
     }
 
+    /** Адрес TorrServe (внешний движок стриминга торрентов). */
+    fun torrServeHost(): String = prefs.getString("torrserve_host", "http://127.0.0.1:8090") ?: "http://127.0.0.1:8090"
+
+    fun setTorrServeHost(v: String) {
+        prefs.edit().putString("torrserve_host", v.trim().removeSuffix("/")).apply()
+    }
+
     // ---------- Внутреннее ----------
 
     private fun readList(key: String): List<MediaItem> {

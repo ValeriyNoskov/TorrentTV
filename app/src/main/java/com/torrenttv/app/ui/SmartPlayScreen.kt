@@ -31,6 +31,7 @@ import com.torrenttv.app.data.OnlineService
 import com.torrenttv.app.data.RezkaService
 import com.torrenttv.app.data.TorrentResult
 import com.torrenttv.app.data.TorrentSearch
+import com.torrenttv.app.data.TorrServeService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -168,7 +169,26 @@ fun SmartPlayScreen(
         val best = bestTorrent(found)
         com.torrenttv.app.data.AppLog.log("smart", "torrent best: \"${best.name}\" seeds=${best.seeds}")
         status = "Раздача: ${best.name.take(60)} (${best.seeds} сидов) — запускаю…"
-        store.saveMagnet(item, TorrentSearch.toMagnet(best), "")
+        val magnet = TorrentSearch.toMagnet(best)
+
+        // TorrServe (внешний движок): если установлен и отвечает — стримим им,
+        // он надёжнее получает метаданные и быстрее отдаёт файл
+        val tsHost = store.torrServeHost()
+        if (TorrServeService.echo(tsHost)) {
+            status = "Добавляю в TorrServe…"
+            com.torrenttv.app.data.AppLog.log("smart", "torrserve: echo ok, adding magnet")
+            val ts = TorrServeService.addMagnet(tsHost, magnet, item.title) { status = it }
+            val file = ts?.let { TorrServeService.bestVideo(it) }
+            if (ts != null && file != null) {
+                com.torrenttv.app.data.AppLog.log("smart", "torrserve: ok hash=${ts.hash} file=\"${file.path}\"")
+                done = true
+                onPlayOnline(OnlineService.OnlineLink(url = TorrServeService.streamUrl(tsHost, ts.hash, file), label = "torrserve"))
+                return@LaunchedEffect
+            }
+            com.torrenttv.app.data.AppLog.log("smart", "torrserve: failed, fallback to internal engine")
+        }
+
+        store.saveMagnet(item, magnet, "")
         done = true
         onPlayTorrent()
     }

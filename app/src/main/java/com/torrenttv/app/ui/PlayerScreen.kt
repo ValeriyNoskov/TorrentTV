@@ -63,9 +63,33 @@ fun PlayerScreen(item: MediaItem, episode: com.torrenttv.app.data.Episode? = nul
     var bufferedPct by remember { mutableStateOf(0) }
     var netInfo by remember { mutableStateOf("") }
     var stream by remember { mutableStateOf<TorrentEngine.StreamSession?>(null) }
+    var torrLink by remember { mutableStateOf<String?>(null) }
 
+    // Приоритет движков: 1) TorrServe (внешний), 2) внутренний jlibtorrent
     LaunchedEffect(magnet) {
         if (magnet == null) return@LaunchedEffect
+        val tsHost = store.torrServeHost()
+        if (com.torrenttv.app.data.TorrServeService.echo(tsHost)) {
+            status = "Добавляю в TorrServe…"
+            com.torrenttv.app.data.AppLog.log("player", "torrserve: echo ok, adding")
+            val ts = withContext(Dispatchers.IO) {
+                com.torrenttv.app.data.TorrServeService.addMagnet(tsHost, magnet, item.title) { s -> status = s }
+            }
+            val file = ts?.let { t ->
+                val ep = episode
+                if (ep != null) t.files.firstOrNull {
+                    com.torrenttv.app.data.Episode.fileMatches(it.path, ep.season, ep.episode)
+                } ?: com.torrenttv.app.data.TorrServeService.bestVideo(t)
+                else com.torrenttv.app.data.TorrServeService.bestVideo(t)
+            }
+            if (ts != null && file != null) {
+                com.torrenttv.app.data.AppLog.log("player", "torrserve: ok hash=${ts.hash} file=\"${file.path}\"")
+                torrLink = com.torrenttv.app.data.TorrServeService.streamUrl(tsHost, ts.hash, file)
+                return@LaunchedEffect
+            }
+            com.torrenttv.app.data.AppLog.log("player", "torrserve: failed, fallback to internal engine")
+        }
+
         com.torrenttv.app.data.AppLog.log("player", "startStream: ${magnet.take(90)}")
         val st = withContext(Dispatchers.IO) {
             TorrentEngine.startStream(
@@ -126,6 +150,17 @@ fun PlayerScreen(item: MediaItem, episode: com.torrenttv.app.data.Episode? = nul
             delay(500)
         }
         bufferedPct = 100
+    }
+
+    // TorrServe готов — играем его HTTP-стрим родным онлайн-плеером
+    val tl = torrLink
+    if (tl != null) {
+        OnlinePlayerScreen(
+            link = com.torrenttv.app.data.OnlineService.OnlineLink(url = tl, label = "torrserve"),
+            title = item.title,
+            onBack = onBack,
+        )
+        return
     }
 
     val st = stream

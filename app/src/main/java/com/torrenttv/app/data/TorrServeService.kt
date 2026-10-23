@@ -1,0 +1,189 @@
+package com.torrenttv.app.data
+
+import android.content.Context
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
+import org.json.JSONObject
+import java.net.URLEncoder
+import java.util.concurrent.TimeUnit
+
+/**
+ * Клиент TorrServe/TorrServer (https://github.com/YouROK) — внешний движок
+ * стриминга торрентов. Если приложение установлено и сервер отвечает,
+ * используем его вместо внутреннего: добавляем magnet через /torrents,
+ * играем файл через /stream/<name>?link=<hash>&index=<N>&play.
+ */
+object TorrServeService {
+
+    const val PACKAGE = "ru.yourok.torrserve"
+
+    /** После неудачи не дёргаем TorrServe 10 минут (чтобы не заставлять ждать дважды). */
+    @Volatile private var disabledUntil = 0L
+
+    fun isDisabled(): Boolean = System.currentTimeMillis() < disabledUntil
+
+    private fun disable() {
+        disabledUntil = System.currentTimeMillis() + 10 * 60_000L
+    }
+
+    data class TSFile(val id: Int, val path: String, val length: Long)
+
+    fun isInstalled(ctx: Context): Boolean = try {
+        ctx.packageManager.getPackageInfo(PACKAGE, 0)
+        true
+    } catch (_: Exception) {
+        false
+    }
+
+    private fun client(): OkHttpClient = TorrentHttp.client.newBuilder()
+        .connectTimeout(2, TimeUnit.SECONDS)
+        .readTimeout(150, TimeUnit.SECONDS) // add может ждать метаданные
+        .callTimeout(150, TimeUnit.SECONDS)
+        .build()
+
+    /** Сервер жив? GET /echo. */
+    fun echo(host: String): Boolean {
+        if (isDisabled()) return false
+        return try {
+            TorrentHttp.client.newBuilder()
+                .connectTimeout(2, TimeUnit.SECONDS)
+                .readTimeout(3, TimeUnit.SECONDS)
+                .build()
+                .newCall(Request.Builder().url("$host/echo").build())
+                .execute().use { it.isSuccessful }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun postJson(host: String, body: String): String? {
+        val req = Request.Builder()
+            .url("$host/torrents")
+            .post(body.toRequestBody("application/json".toMediaType()))
+            .build()
+        return runCatching {
+            client().newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) null else resp.body?.string()
+            }
+        }.getOrNull()
+    }
+
+    /**
+     * Добавить magnet и дождаться метаданных:
+     * 1) POST /torrents action=add — сервер возвращает hash, метаданные ещё не готовы;
+     * 2) GET /stream/<title>?link=<hash>&index=0&preload — родной способ TorrServer
+     *    запустить загрузку метаданных (соединение держится до готовности);
+     * 3) POST /torrents action=get — поллим file_stats каждые 3 сек.
+     * Возвращает торрент с непустым списком файлов или null по таймауту/ошибке.
+     */
+    fun addMagnet(
+        host: String,
+        magnet: String,
+        title: String,
+        timeoutMs: Long = 120_000L,
+        onStatus: (String) -> Unit = {},
+    ): TSTorrent? {
+        val req = JSONObject()
+            .put("action", "add")
+            .put("link", magnet)
+            .put("title", title)
+            .put("poster", "")
+            .put("category", "")
+            .put("save_to_db", false)
+            .toString()
+        val resp = postJson(host, req) ?: run {
+            onStatus("TorrServe не ответил")
+            disable()
+            return null
+        }
+        val ts = runCatching { parseTorrent(JSONObject(resp)) }.getOrNull() ?: run {
+            disable()
+            return null
+        }
+        if (ts.hash.isBlank()) {
+            disable()
+            return null
+        }
+
+        // preload в отдельном потоке: соединение держится, сервер качает метаданные
+        val preloadTitle = ts.title.ifBlank { title }
+        Thread {
+            runCatching {
+                client().newCall(
+                    Request.Builder()
+                        .url("$host/stream/${URLEncoder.encode(preloadTitle, "UTF-8")}?link=${ts.hash}&index=0&preload")
+                        .build()
+                ).execute().use { it.body?.bytes() }
+            }
+        }.apply { isDaemon = true }.start()
+
+        onStatus("Получаю метаданные через TorrServe…")
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            Thread.sleep(3000)
+            val t = get(host, ts.hash)
+            if (t != null) {
+                if (t.stat < 0) { // -1 = сломанный торрент
+                    onStatus("TorrServe: раздача недоступна")
+                    return null
+                }
+                if (t.files.isNotEmpty()) {
+                    disabledUntil = 0L
+                    return t
+                }
+                val p = t.peers
+                if (p > 0) onStatus("Ищу источники через TorrServe… пиры: $p")
+            }
+        }
+        onStatus("TorrServe: метаданные не получены")
+        return null
+    }
+
+    fun get(host: String, hash: String): TSTorrent? {
+        val resp = postJson(host, JSONObject().put("action", "get").put("hash", hash).toString())
+            ?: return null
+        return runCatching { parseTorrent(JSONObject(resp)) }.getOrNull()
+    }
+
+    private fun parseTorrent(o: JSONObject): TSTorrent {
+        val files = mutableListOf<TSFile>()
+        (o.optJSONArray("file_stats") ?: JSONArray()).let { arr ->
+            for (i in 0 until arr.length()) {
+                val f = arr.getJSONObject(i)
+                files += TSFile(f.optInt("id", i), f.optString("path", ""), f.optLong("length", 0))
+            }
+        }
+        return TSTorrent(
+            hash = o.optString("hash", ""),
+            title = o.optString("title", o.optString("name", "")),
+            stat = o.optInt("stat", 0),
+            peers = o.optInt("total_peers", 0),
+            files = files,
+        )
+    }
+
+    data class TSTorrent(
+        val hash: String,
+        val title: String,
+        val stat: Int = 0,
+        val peers: Int = 0,
+        val files: List<TSFile>,
+    )
+
+    /** Лучший видеофайл: самый крупный с видео-расширением; иначе просто самый крупный. */
+    fun bestVideo(t: TSTorrent): TSFile? {
+        val video = t.files.filter { f ->
+            val n = f.path.lowercase()
+            listOf(".mp4", ".mkv", ".avi", ".ts", ".m2ts", ".mov", ".webm", ".m4v", ".vob", ".mpg", ".flv", ".wmv").any { n.endsWith(it) }
+        }
+        return (video.ifEmpty { t.files }).maxByOrNull { it.length }
+    }
+
+    fun streamUrl(host: String, hash: String, file: TSFile): String {
+        val name = file.path.substringAfterLast('/')
+        return "$host/stream/${URLEncoder.encode(name, "UTF-8")}?link=$hash&index=${file.id}&play"
+    }
+}
