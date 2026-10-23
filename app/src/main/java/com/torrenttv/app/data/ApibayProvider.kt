@@ -44,8 +44,10 @@ object ApibayProvider {
         return out
     }
 
-    /** Собрать magnet-ссылку из info_hash с публичными трекерами. */
+    /** Собрать ссылку-источник из раздачи: прямая .torrent (Рутрекер) —
+     *  метаданные мгновенно; иначе magnet из info_hash. */
     fun toMagnet(r: TorrentResult): String {
+        if (r.dlUrl.isNotBlank()) return r.dlUrl
         val dn = URLEncoder.encode(r.name, "UTF-8")
         val tr = TorrentSearch.TRACKERS.joinToString("") { "&tr=${URLEncoder.encode(it, "UTF-8")}" }
         return "magnet:?xt=urn:btih:${r.infoHash}&dn=$dn$tr"

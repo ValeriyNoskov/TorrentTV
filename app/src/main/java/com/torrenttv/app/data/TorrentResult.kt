@@ -16,6 +16,8 @@ data class TorrentResult(
     val torrentUrl: String = "",
     /** Страница раздачи (Рутрекер) — для постера/описания в поиске. */
     val pageUrl: String = "",
+    /** Прямая ссылка на .torrent (Рутрекер) — метаданные мгновенно, без магнет-поиска. */
+    val dlUrl: String = "",
     /** Скачивающие (leechers) — если трекер отдаёт. */
     val peers: Int = 0,
 ) {

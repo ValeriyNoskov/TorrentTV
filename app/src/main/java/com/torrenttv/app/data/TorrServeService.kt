@@ -68,8 +68,8 @@ object TorrServeService {
 
     private fun client(): OkHttpClient = TorrentHttp.client.newBuilder()
         .connectTimeout(2, TimeUnit.SECONDS)
-        .readTimeout(150, TimeUnit.SECONDS) // add может ждать метаданные
-        .callTimeout(150, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS) // add: не ждём дольше — быстрый fallback на встроенный движок
+        .callTimeout(30, TimeUnit.SECONDS)
         .build()
 
     /** Сервер жив? GET /echo. */
@@ -111,7 +111,7 @@ object TorrServeService {
         host: String,
         magnet: String,
         title: String,
-        timeoutMs: Long = 120_000L,
+        timeoutMs: Long = 60_000L,
         onStatus: (String) -> Unit = {},
     ): TSTorrent? {
         val req = JSONObject()
@@ -156,6 +156,7 @@ object TorrServeService {
             if (t != null) {
                 if (t.stat < 0) { // -1 = сломанный торрент
                     onStatus("TorrServe: раздача недоступна")
+                    disable()
                     return null
                 }
                 if (t.files.isNotEmpty()) {
@@ -167,6 +168,8 @@ object TorrServeService {
             }
         }
         onStatus("TorrServe: метаданные не получены")
+        // Сервер жив, но не качает — карантин, чтобы не ждать каждый раз
+        disable()
         return null
     }
 

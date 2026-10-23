@@ -79,6 +79,20 @@ sealed interface Screen {
 }
 
 class MainActivity : ComponentActivity() {
+
+    companion object {
+        /** Обработчик кнопок пульта активного плеера: true — кнопка перехвачена.
+         *  Живёт на уровне Activity: пульт работает при ЛЮБОМ фокусе. */
+        @Volatile var remoteKeyHandler: ((Int) -> Boolean)? = null
+    }
+
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.action == android.view.KeyEvent.ACTION_UP && event.repeatCount == 0) {
+            if (remoteKeyHandler?.invoke(event.keyCode) == true) return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         com.torrenttv.app.data.AppLog.init(this)

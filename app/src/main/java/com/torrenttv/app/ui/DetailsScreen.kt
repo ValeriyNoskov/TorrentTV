@@ -148,8 +148,6 @@ fun DetailsScreen(
                         modifier = Modifier.focusRequester(watchFocus),
                     ) { Text("▶ Смотреть") }
                     Spacer(Modifier.width(16.dp))
-                    Button(onClick = onOnline) { Text("🌐 Онлайн") }
-                    Spacer(Modifier.width(16.dp))
                     // Трейлер: Rutube (приложение) → поиск через браузер. YouTube не используется.
                     Button(onClick = {
                         val q = listOf(item.title, item.year, "трейлер")

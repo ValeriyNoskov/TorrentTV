@@ -219,6 +219,9 @@ object RutrackerrProvider {
             val name = Regex("""<td><b>([^<]{4,})</b></td>""").find(r)?.groupValues?.get(1)?.trim() ?: continue
             val pageUrl = Regex("""href="((?:https://rutrackerr\.ru)?/\d+[^"]*tor\.html)"""")
                 .find(r)?.groupValues?.get(1)?.let { if (it.startsWith("http")) it else "https://rutrackerr.ru" + it } ?: ""
+            // Прямая ссылка на .torrent: метаданные мгновенно, без магнет-поиска
+            val dlUrl = Regex("""href="(/search-torrents/download/[^"]+)"""")
+                .find(r)?.groupValues?.get(1)?.let { "https://rutrackerr.ru$it" } ?: ""
             // Числа в таблице: первое — сиды, второе — пиры
             val nums = Regex("""&nbsp;(\d+)""").findAll(r).mapNotNull { it.groupValues[1].toIntOrNull() }.toList()
             val seeds = nums.getOrNull(0) ?: 0
@@ -242,6 +245,7 @@ object RutrackerrProvider {
                 provider = NAME,
                 resolution = ReleaseQuality.parse(name),
                 pageUrl = pageUrl,
+                dlUrl = dlUrl,
                 peers = peers,
             )
         }

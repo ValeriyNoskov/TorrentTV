@@ -28,7 +28,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -43,6 +42,7 @@ import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Button
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Text
+import com.torrenttv.app.MainActivity
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaApi
 import com.torrenttv.app.data.MediaItem
@@ -193,8 +193,10 @@ fun PlayerScreen(
         }
 
         // Порог старта: 12 МБ или ~5% файла — заголовки, индекс и запас кадров,
-        // чтобы первые минуты не спотыкались
-        val threshold = minOf(maxOf(12L * 1024 * 1024, st.fileSize / 20), 96L * 1024 * 1024)
+        // чтобы первые минуты не спотыкались. Debug-сборка: 256 КБ (проверка
+        // кнопок на эмуляторе без реальных пиров)
+        val threshold = if (com.torrenttv.app.BuildConfig.DEBUG) 256L * 1024
+            else minOf(maxOf(12L * 1024 * 1024, st.fileSize / 20), 96L * 1024 * 1024)
         // Диагностика и таймаут: если за 3 минуты не скачалось — говорим прямо,
         // вместо вечного «Буферизация»
         val deadline = System.currentTimeMillis() + 180_000
@@ -270,7 +272,7 @@ fun PlayerScreen(
         )
     } else {
         // Экран буферизации
-        BackHandler { onBack() }
+        BackHandler { com.torrenttv.app.data.AppLog.log("player", "back from buffering"); onBack() }
         Column(
             Modifier
                 .fillMaxSize()
@@ -382,8 +384,13 @@ private fun VideoPlayer(
         val listener = object : androidx.media3.common.Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == androidx.media3.common.Player.STATE_ENDED) {
-                    player.seekTo(player.duration)
-                    onEnded()
+                    // «Конец» — только если видео реально проигрывалось:
+                    // при нулевой скорости/ошибке источника ExoPlayer может
+                    // выдать ENDED сразу после prepare — это не конец фильма
+                    if (player.duration > 0 && player.currentPosition > player.duration / 20) {
+                        player.seekTo(player.duration)
+                        onEnded()
+                    }
                 }
             }
         }
@@ -434,6 +441,18 @@ private fun VideoPlayer(
     val speeds = listOf(0.75f, 1f, 1.25f, 1.5f, 2f)
     var speedIdx by remember { mutableStateOf(1) }
 
+    // ---------- MX: блокировка экрана от случайных нажатий ----------
+    var locked by remember { mutableStateOf(false) }
+
+    // ---------- MX: масштаб картинки (Вписать / Растянуть / Заполнить) ----------
+    var pv by remember { mutableStateOf<androidx.media3.ui.PlayerView?>(null) }
+    val scales = listOf(
+        "Вписать" to androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT,
+        "Растянуть" to androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FILL,
+        "Заполнить" to androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM,
+    )
+    var scaleIdx by remember { mutableStateOf(0) }
+
     // ---------- Панель «как MX»: показывается при действии пульта ----------
     var panelTick by remember { mutableStateOf(1) }   // панель видна сразу при входе
     var showPanel by remember { mutableStateOf(true) }
@@ -450,16 +469,40 @@ private fun VideoPlayer(
     // Единый обработчик кнопок пульта — вызывается и из Compose-перехвата
     // (onPreviewKeyEvent на Box), и из PlayerView: панель появляется при
     // ЛЮБОЙ кнопке, независимо от того, где фокус
-    fun handleRemoteKey(keyCode: Int): Boolean = when (keyCode) {
-        KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
-            val delta = if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) 10_000L else -10_000L
-            val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
-            player.seekTo((player.currentPosition + delta).coerceIn(0L, dur))
-            seekInfo = if (delta > 0) "⏩ +10 сек" else "⏪ −10 сек"
-            panelTick++
-            true
+    fun handleRemoteKey(keyCode: Int): Boolean {
+        // MX-блокировка: пока включена, пульт мёртв; OK — разблокировка
+        if (locked) {
+            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                locked = false
+                seekInfo = "🔓 Разблокировано"
+                panelTick++
+            } else {
+                seekInfo = "🔒 Экран заблокирован — нажмите OK"
+            }
+            return true
         }
-        KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
+        val panelVisible = showPanel || showFiles || showGear || showTrackMenu
+        return when (keyCode) {
+        // Панель видна: стрелки двигают фокус по кнопкам (как в MX),
+        // скрыта: стрелки = перемотка ±10 сек.
+        // При видимой панели обновляем panelTick — таймер авто-скрытия
+        // продлевается, пока пользователь идёт по кнопкам
+        KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+            if (panelVisible) { panelTick++; false }
+            else {
+                val delta = if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) 10_000L else -10_000L
+                val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
+                player.seekTo((player.currentPosition + delta).coerceIn(0L, dur))
+                seekInfo = if (delta > 0) "⏩ +10 сек" else "⏪ −10 сек"
+                panelTick++
+                true
+            }
+        }
+        // Панель видна: OK нажимает кнопку в фокусе; скрыта: OK показывает панель
+        KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+            if (panelVisible) false
+            else { panelTick++; true }
+        }
         KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
             if (player.isPlaying) player.pause() else player.play()
             seekInfo = if (player.isPlaying) "▶ Продолжаем" else "⏸ Пауза"
@@ -475,18 +518,31 @@ private fun VideoPlayer(
         KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { player.seekTo(player.currentPosition + 30_000L); seekInfo = "⏩ +30 сек"; panelTick++; true }
         KeyEvent.KEYCODE_MEDIA_REWIND -> { player.seekTo((player.currentPosition - 30_000L).coerceAtLeast(0)); seekInfo = "⏪ −30 сек"; panelTick++; true }
         KeyEvent.KEYCODE_MENU -> { showTrackMenu = !showTrackMenu; true }
+        // BACK при открытой панели прячет панель, при скрытой — выход из плеера
+        // (меню дорожек не трогаем: его закрывает свой BackHandler в оверлее)
+        KeyEvent.KEYCODE_BACK -> {
+            if (showFiles || showGear) {
+                showFiles = false; showGear = false; panelTick++; true
+            } else if (showPanel) {
+                showPanel = false; true
+            } else false
+        }
         else -> false
+        }
+    }
+
+    // Регистрация обработчика в Activity: пульт работает при любом фокусе.
+    // BACK не перехватываем, пока экран не заблокирован (при блокировке
+    // handleRemoteKey сам вернёт true и выход не сработает).
+    DisposableEffect(player) {
+        MainActivity.remoteKeyHandler = { keyCode -> handleRemoteKey(keyCode) }
+        onDispose { MainActivity.remoteKeyHandler = null }
     }
 
     Box(
         Modifier
             .fillMaxSize()
-            .background(Color.Black)
-            .onPreviewKeyEvent { e ->
-                // Панель «как MX» реагирует на пульт при любом фокусе
-                if (e.nativeKeyEvent.action == android.view.KeyEvent.ACTION_UP) handleRemoteKey(e.nativeKeyEvent.keyCode)
-                else false
-            },
+            .background(Color.Black),
     ) {
         AndroidView(
             factory = { ctx ->
@@ -500,10 +556,25 @@ private fun VideoPlayer(
                         if (event.action != KeyEvent.ACTION_UP) return@setOnKeyListener false
                         handleRemoteKey(keyCode)
                     }
+                    pv = this
                 }
             },
             modifier = Modifier.fillMaxSize(),
         )
+
+        // 🔒 Индикатор блокировки (как в MX — замок в углу)
+        if (locked) {
+            androidx.tv.material3.Text(
+                "🔒 Нажмите OK для разблокировки",
+                color = Color.White,
+                fontSize = 14.sp,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 18.dp)
+                    .background(Color(0xCC1F2430), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+            )
+        }
 
         // «⏭ Пропустить титры» — в последние 3 минуты (поверх панели)
         if (showSkip) {
@@ -555,6 +626,15 @@ private fun VideoPlayer(
                     .background(Color(0xCC0A0E14))
                     .padding(horizontal = 24.dp, vertical = 12.dp),
             ) {
+                // Заголовок — как в MX: название и серия над сикбаром
+                androidx.tv.material3.Text(
+                    item.title + (episode?.let { "  ·  ${it.code}" } ?: ""),
+                    color = Color(0xFFB8C0CC),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                )
+                Spacer(Modifier.height(8.dp))
                 // Сикбар во всю ширину: буфер + позиция + время
                 Box(
                     Modifier
@@ -645,6 +725,63 @@ private fun VideoPlayer(
                         ),
                     ) { Text("${speeds[speedIdx]}×", fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
                     Spacer(Modifier.weight(1f))
+                    // ♪ Аудио — дорожки из mkv (как кнопка аудио в MX)
+                    androidx.tv.material3.Surface(
+                        onClick = { showTrackMenu = true },
+                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF1F2430),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContentColor = Color.Black,
+                        ),
+                    ) { Text("♪ Аудио", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
+                    Spacer(Modifier.width(8.dp))
+                    // 💬 Субтитры — те же дорожки, вкладка субтитров
+                    androidx.tv.material3.Surface(
+                        onClick = { showTrackMenu = true },
+                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF1F2430),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContentColor = Color.Black,
+                        ),
+                    ) { Text("💬 Субтитры", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
+                    Spacer(Modifier.width(8.dp))
+                    // ⛶ Масштаб картинки: Вписать → Растянуть → Заполнить (кнопка scale в MX)
+                    androidx.tv.material3.Surface(
+                        onClick = {
+                            scaleIdx = (scaleIdx + 1) % scales.size
+                            pv?.resizeMode = scales[scaleIdx].second
+                            seekInfo = "Масштаб: ${scales[scaleIdx].first}"
+                            panelTick++
+                        },
+                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF1F2430),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContentColor = Color.Black,
+                        ),
+                    ) { Text("⛶ ${scales[scaleIdx].first}", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
+                    Spacer(Modifier.width(8.dp))
+                    // 🔒 Блокировка экрана (как lock в MX): пульт мёртв, OK — разблок
+                    androidx.tv.material3.Surface(
+                        onClick = {
+                            locked = true
+                            showPanel = false; showFiles = false; showGear = false; showTrackMenu = false
+                            seekInfo = "🔒 Экран заблокирован"
+                        },
+                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF1F2430),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContentColor = Color.Black,
+                        ),
+                    ) { Text("🔒", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
+                    Spacer(Modifier.width(8.dp))
                     if (files.size > 1) {
                         androidx.tv.material3.Surface(
                             onClick = { showFiles = !showFiles; showGear = false },

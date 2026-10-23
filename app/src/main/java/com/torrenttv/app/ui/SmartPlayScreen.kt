@@ -96,45 +96,17 @@ fun SmartPlayScreen(
     var torrentsFound: List<com.torrenttv.app.data.TorrentResult> = emptyList()
 
     LaunchedEffect(item) {
-        val query = item.originalTitle.ifBlank { item.title }
+        // Служебный адрес страницы Рутрекера (@rt:...) не должен уходить в поиск
+        val rtPage = item.originalTitle.takeIf { it.startsWith("@rt:") }
+        val query = rtPage?.let { item.title } ?: item.originalTitle.ifBlank { item.title }
         val altQuery = item.title.takeIf { it.isNotBlank() && !it.equals(query, true) }
         val isTv = item.type != "movie"
         com.torrenttv.app.data.AppLog.log("smart", "sources: \"$query\" isTv=$isTv")
 
         val online = mutableListOf<SmartChoice>()
-        var fxIsSerial = false
 
-        // ---- Онлайн-источники параллельно ----
+        // ---- Торренты (онлайн-источники Filmix/HDRezka убраны: мертвы/платные) ----
         coroutineScope {
-            val fx = async(Dispatchers.IO) {
-                runCatching {
-                    val card = (OnlineService.search(store.filmixToken(), query) +
-                        (altQuery?.let { OnlineService.search(store.filmixToken(), it) } ?: emptyList()))
-                        .firstOrNull { m ->
-                            (m.originalTitle.equals(item.originalTitle, true) || m.title.equals(item.title, true)) &&
-                                (m.year.isBlank() || item.year.isBlank() || m.year == item.year)
-                        } ?: return@runCatching emptyList<OnlineService.OnlineLink>()
-                    if (card.isSerial) {
-                        fxIsSerial = true
-                        emptyList()
-                    } else {
-                        OnlineService.playerData(store.filmixToken(), card.filmixId)
-                    }
-                }.getOrDefault(emptyList())
-            }
-
-            val rz = async(Dispatchers.IO) {
-                runCatching {
-                    if (isTv) return@runCatching emptyList<OnlineService.OnlineLink>()
-                    val card = (RezkaService.search(query) + (altQuery?.let { RezkaService.search(it) } ?: emptyList()))
-                        .firstOrNull { c ->
-                            (c.originalTitle.equals(item.originalTitle, true) || c.title.equals(item.title, true)) &&
-                                (c.year.isBlank() || item.year.isBlank() || c.year == item.year)
-                        } ?: return@runCatching emptyList<OnlineService.OnlineLink>()
-                    if (card.isSerial) emptyList() else RezkaService.streams(card)
-                }.getOrDefault(emptyList())
-            }
-
             val torrents = async(Dispatchers.IO) {
                 runCatching {
                     TorrentSearch.searchDetailed(
@@ -149,31 +121,12 @@ fun SmartPlayScreen(
                 }.getOrDefault(emptyList())
             }
 
-            // Ждём онлайн и показываем; торренты подгрузятся отдельным блоком
-            fx.await().sortedByDescending { it.quality }.forEach { l ->
-                val who = "🌐 Filmix"
-                val tr = if (l.translation.isNotBlank()) " · ${l.translation}" else ""
-                val q = if (l.quality.isNotBlank()) " · ${l.quality}" else ""
-                val ep = if (l.episode > 0) " · S${l.season}E${l.episode}" else ""
-                online += SmartChoice.Online(l, "$who$tr$q$ep")
-            }
-            rz.await().sortedByDescending { it.quality }.forEach { l ->
-                val tr = if (l.translation.isNotBlank()) " · ${l.translation}" else ""
-                val q = if (l.quality.isNotBlank()) " · ${l.quality}" else ""
-                online += SmartChoice.Online(l, "🌐 HDRezka$tr$q")
-            }
-            if (fxIsSerial) online += SmartChoice.Serial("Filmix")
-            choices = online
-            done = online.isNotEmpty()
-            fxSerial = fxIsSerial
             // Торренты искались параллельно — забираем готовый результат
             torrentsFound = torrents.await()
         }
-
-        // ---- Торренты: результат уже посчитан параллельно с онлайн-источниками ----
         status = "Ищу торренты…"
         val found = torrentsFound
-        com.torrenttv.app.data.AppLog.log("smart", "sources: online=${choices.size} torrents=${found.size}")
+        com.torrenttv.app.data.AppLog.log("smart", "sources: online=0 torrents=${found.size}")
 
         val torrentChoices = found
             .sortedByDescending { it.seeds }

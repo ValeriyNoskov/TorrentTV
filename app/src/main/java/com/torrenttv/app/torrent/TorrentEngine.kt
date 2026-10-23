@@ -160,10 +160,18 @@ object TorrentEngine {
      * старте сессии не успевает за таймаут, трекеры дают пиры напрямую.
      */
     private fun enrichMagnet(source: String): String {
-        if (!source.startsWith("magnet:") || source.contains("&tr=")) return source
+        if (!source.startsWith("magnet:")) return source
+        // Добавляем ВСЕГДА трекеры из нашего списка, которых в magnet ещё нет:
+        // magnet-и из внешних каталогов содержат 1-2 своих трекера, и без
+        // дополнения раздача может часами не находить метаданные
+        val existing = Regex("[?&]tr=([^&]+)").findAll(source)
+            .map { java.net.URLDecoder.decode(it.groupValues[1], "UTF-8") }
+            .toSet()
+        val missing = com.torrenttv.app.data.TorrentSearch.TRACKERS.filter { it !in existing }
+        if (missing.isEmpty()) return source
         return buildString {
             append(source.trimEnd('&'))
-            for (t in com.torrenttv.app.data.TorrentSearch.TRACKERS) {
+            for (t in missing) {
                 append("&tr=")
                 append(java.net.URLEncoder.encode(t, "UTF-8"))
             }
