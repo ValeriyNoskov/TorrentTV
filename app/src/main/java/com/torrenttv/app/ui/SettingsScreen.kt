@@ -113,6 +113,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     var fxPoll by remember { mutableStateOf(0) } // тик запуска поллинга
     var kpKey by remember { mutableStateOf(store.kpApiKey()) }
     var tmdbKey by remember { mutableStateOf(store.tmdbApiKey()) }
+    var ghToken by remember { mutableStateOf(store.githubToken()) }
 
     fun openEdit(target: String, current: String, title: String) {
         editTmp = current
@@ -161,6 +162,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 "ts" -> store.setTorrServeHost(editTmp)
                 "kpkey" -> { store.setKpApiKey(editTmp); kpKey = editTmp }
                 "tmdbkey" -> { store.setTmdbApiKey(editTmp); tmdbKey = editTmp }
+                "ghtoken" -> { store.setGithubToken(editTmp); ghToken = editTmp }
             }
         }
         editTarget = null
@@ -239,11 +241,11 @@ fun SettingsScreen(onBack: () -> Unit) {
 
         // ---------- Параметры (справа) ----------
         Column(Modifier.weight(1f).fillMaxHeight()) {
-            Text(sTitle, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(sTitle, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
             Text(
                 sDesc,
                 color = Color.White.copy(alpha = 0.55f),
-                fontSize = 14.sp,
+                fontSize = 16.sp,
                 modifier = Modifier.padding(bottom = 8.dp),
             )
 
@@ -393,6 +395,11 @@ fun SettingsScreen(onBack: () -> Unit) {
                             value = if (tmdbKey.isNotBlank()) "•••••••• (свой)" else "Общий (вшит в приложение)",
                             valueOk = tmdbKey.isNotBlank(),
                         ) { openEdit("tmdbkey", tmdbKey, "Ключ TMDB") }
+                        SettingsRow(
+                            title = "GitHub-токен (логи мне)",
+                            value = if (ghToken.isNotBlank()) "•••••••• (вписан)" else "Не задан — логи уходят на pastebin",
+                            valueOk = ghToken.isNotBlank(),
+                        ) { openEdit("ghtoken", ghToken, "GitHub токен (право Gists)") }
                         if (kpKey.isNotBlank() || tmdbKey.isNotBlank()) {
                             SettingsRow(title = "🗑 Вернуть общие ключи", value = "", danger = true) {
                                 store.setKpApiKey(""); store.setTmdbApiKey("")
@@ -564,6 +571,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             "jkey" -> "API-ключ Jackett"
             "kpkey" -> "Ключ Кинопоиск API"
             "tmdbkey" -> "Ключ TMDB"
+            "ghtoken" -> "GitHub токен (право Gists)"
             "rt" -> "Cookie для RuTracker"
             "kz" -> "Cookie для Kinozal"
             "nnm" -> "Cookie для NNM-Club"
@@ -616,7 +624,7 @@ private fun SectionItem(title: String, selected: Boolean, onClick: () -> Unit) {
     ) {
         Text(
             text = (if (selected) "▸ " else "") + title,
-            fontSize = 15.sp,
+            fontSize = 17.sp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
         )
@@ -663,7 +671,7 @@ private fun SettingsRow(
             if (value.isNotBlank()) {
                 Text(
                     text = value,
-                    fontSize = 14.sp,
+                    fontSize = 16.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.width(240.dp),
@@ -685,7 +693,7 @@ private fun SettingsNote(text: String) {
     Text(
         text = text,
         color = Color.White.copy(alpha = 0.45f),
-        fontSize = 14.sp,
+        fontSize = 16.sp,
         modifier = Modifier.padding(horizontal = 6.dp, vertical = 10.dp),
     )
 }
@@ -821,6 +829,7 @@ private fun NetCheckScreen(onClose: () -> Unit) {
     var uploadUrl by remember { mutableStateOf("") }
     var uploading by remember { mutableStateOf(false) }
     val ctx = androidx.compose.ui.platform.LocalContext.current
+    val store = remember { com.torrenttv.app.data.LocalStore(ctx) }
     val targets = remember {
         buildList {
             addAll(listOf(
@@ -917,12 +926,12 @@ private fun NetCheckScreen(onClose: () -> Unit) {
             Spacer(Modifier.width(16.dp))
             Text(
                 "Проверка сети",
-                color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+                color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold,
             )
         }
         Text(
             "Крестик = источник заблокирован вашим провайдером (это не поломка приложения)",
-            color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp,
+            color = Color.White.copy(alpha = 0.5f), fontSize = 16.sp,
             modifier = Modifier.padding(top = 8.dp),
         )
         Spacer(Modifier.height(12.dp))
@@ -947,7 +956,7 @@ private fun NetCheckScreen(onClose: () -> Unit) {
                                 false -> Color(0xFFEF7B6D)
                                 null -> Color.White.copy(alpha = 0.4f)
                             },
-                            fontSize = 20.sp,
+                            fontSize = 24.sp,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.width(40.dp),
                         )
@@ -973,7 +982,7 @@ private fun NetCheckScreen(onClose: () -> Unit) {
                 rows.size < 8 -> ""
                 else -> "Проверка завершена: доступно ${rows.count { it.ok == true }} из ${rows.size}"
             },
-            color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp,
+            color = Color.White.copy(alpha = 0.6f), fontSize = 16.sp,
         )
         Spacer(Modifier.height(14.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -984,7 +993,7 @@ private fun NetCheckScreen(onClose: () -> Unit) {
                         uploadState = "Отправляю лог…"
                         uploadUrl = ""
                         kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-                            val url = com.torrenttv.app.data.AppLog.sendToPastebin()
+                            val url = com.torrenttv.app.data.AppLog.sendToPastebin(store.githubToken().ifBlank { null })
                             com.torrenttv.app.data.AppLog.log("upload", if (url.isNotBlank()) "sent -> $url" else "send FAILED")
                             uploadUrl = url
                             uploadState = if (url.isNotBlank()) "" else
@@ -997,18 +1006,18 @@ private fun NetCheckScreen(onClose: () -> Unit) {
             ) { Text(if (uploading) "⏳ Отправляю…" else "📤 Отправить лог разработчику") }
             if (uploadState.isNotBlank()) {
                 Spacer(Modifier.width(16.dp))
-                Text(uploadState, color = Color(0xFFF5B942), fontSize = 15.sp)
+                Text(uploadState, color = Color(0xFFF5B942), fontSize = 17.sp)
             }
         }
         if (uploadUrl.isNotBlank()) {
             Spacer(Modifier.height(10.dp))
             Text(
                 "Назовите разработчику этот адрес:",
-                color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp,
+                color = Color.White.copy(alpha = 0.6f), fontSize = 16.sp,
             )
             Text(
                 uploadUrl.trim(),
-                color = Color(0xFF8AB4F8), fontSize = 20.sp, fontWeight = FontWeight.Bold,
+                color = Color(0xFF8AB4F8), fontSize = 24.sp, fontWeight = FontWeight.Bold,
             )
         }
     }
@@ -1041,7 +1050,7 @@ private fun SubscreenGenres(
             Text(
                 "Скрытые жанры (золотые чипы — исключены)",
                 color = Color.White,
-                fontSize = 20.sp,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
             )
         }
@@ -1051,12 +1060,12 @@ private fun SubscreenGenres(
                 .verticalScroll(rememberScrollState())
                 .padding(top = 12.dp),
         ) {
-            Text("Фильмы:", color = Color.White.copy(alpha = 0.7f), fontSize = 15.sp)
+            Text("Фильмы:", color = Color.White.copy(alpha = 0.7f), fontSize = 17.sp)
             GenreChipsMulti(movieGenres, excluded, onToggle)
             Text(
                 "Сериалы:",
                 color = Color.White.copy(alpha = 0.7f),
-                fontSize = 15.sp,
+                fontSize = 17.sp,
                 modifier = Modifier.padding(top = 14.dp),
             )
             GenreChipsMulti(tvGenres, excluded, onToggle)
@@ -1084,7 +1093,7 @@ private fun SubscreenCountries(
             Text(
                 "Скрытые страны (☑ — исключены)",
                 color = Color.White,
-                fontSize = 20.sp,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
             )
         }
@@ -1092,7 +1101,7 @@ private fun SubscreenCountries(
             Text(
                 "Список стран загрузится после первого открытия каталогов",
                 color = Color.White.copy(alpha = 0.35f),
-                fontSize = 15.sp,
+                fontSize = 17.sp,
                 modifier = Modifier.padding(top = 16.dp),
             )
             return@Column
@@ -1102,7 +1111,7 @@ private fun SubscreenCountries(
             Text(
                 "${page * COUNTRIES_PAGE + 1}–${page * COUNTRIES_PAGE + countries.drop(page * COUNTRIES_PAGE).take(COUNTRIES_PAGE).size} из ${countries.size}",
                 color = Color.White.copy(alpha = 0.55f),
-                fontSize = 14.sp,
+                fontSize = 16.sp,
                 modifier = Modifier.width(120.dp),
             )
             Button(onClick = { if (page > 0) page-- }, enabled = page > 0) { Text("←") }
@@ -1144,7 +1153,7 @@ private fun SubscreenKeywords(
             Text(
                 "Стоп-слова (нажмите на слово — удалится)",
                 color = Color.White,
-                fontSize = 20.sp,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
             )
         }
@@ -1158,7 +1167,7 @@ private fun SubscreenKeywords(
             Text(
                 "Пока нет стоп-слов",
                 color = Color.White.copy(alpha = 0.35f),
-                fontSize = 15.sp,
+                fontSize = 17.sp,
                 modifier = Modifier.padding(top = 12.dp),
             )
         }
@@ -1205,7 +1214,7 @@ private fun KeywordChip(word: String, onRemove: () -> Unit) {
         Text(
             text = "✕  $word",
             color = Color(0xFF0E1116),
-            fontSize = 15.sp,
+            fontSize = 17.sp,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
         )
     }

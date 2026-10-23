@@ -64,6 +64,12 @@ sealed class SmartChoice {
         override val label: String = "🧲 ${r.name}"
         override val sub: String = "${r.provider} · ${r.seeds} сидов · ${r.sizeLabel()}"
     }
+
+    /** «Играть сразу»: лучшая раздача, выбранная автоматически. */
+    data class Instant(val r: TorrentResult) : SmartChoice() {
+        override val label: String = "⚡ Играть сразу — ${r.name}"
+        override val sub: String = "лучшая раздача · ${r.seeds} сидов · ${r.sizeLabel()}"
+    }
 }
 
 /**
@@ -128,12 +134,23 @@ fun SmartPlayScreen(
         val found = torrentsFound
         com.torrenttv.app.data.AppLog.log("smart", "sources: online=0 torrents=${found.size}")
 
+        // Лучшая раздача для «Играть сразу»: сиды × бонус качества
+        // (1080p — золотая середина, 2160p весит десятки ГБ, SD — компромисс)
+        val best = found.maxByOrNull { r ->
+            r.seeds * when (r.resolution) {
+                "1080p" -> 3
+                "2160p" -> 2
+                "720p" -> 2
+                else -> 1
+            }
+        }
         val torrentChoices = found
             .sortedByDescending { it.seeds }
             .take(10)
             .map { SmartChoice.Torrent(it) }
 
-        choices = choices + torrentChoices
+        choices = (best?.let { listOf(SmartChoice.Instant(it)) } ?: emptyList()) +
+            choices + torrentChoices
         done = choices.isNotEmpty()
         failed = choices.isEmpty()
         status = if (failed) {
@@ -171,7 +188,7 @@ fun SmartPlayScreen(
                             if (!uploading) {
                                 uploading = true
                                 kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-                                    val url = com.torrenttv.app.data.AppLog.sendToPastebin()
+                                    val url = com.torrenttv.app.data.AppLog.sendToPastebin(store.githubToken().ifBlank { null })
                                     com.torrenttv.app.data.AppLog.log("upload", if (url.isNotBlank()) "sent -> $url" else "send FAILED")
                                     uploadUrl = url
                                     uploading = false
@@ -209,6 +226,7 @@ fun SmartPlayScreen(
                         androidx.tv.material3.Surface(
                             onClick = {
                                 when (c) {
+                                    is SmartChoice.Instant -> playTorrent(c.r)
                                     is SmartChoice.Online -> onPlayOnline(c.link)
                                     is SmartChoice.Serial -> onOpenOnline()
                                     is SmartChoice.Torrent -> playTorrent(c.r)

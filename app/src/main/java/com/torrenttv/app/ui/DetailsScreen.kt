@@ -64,6 +64,11 @@ fun DetailsScreen(
     val onlineAvailable = remember { store.filmixToken().isNotBlank() }
     var fav by remember { mutableStateOf(store.isFavorite(item)) }
     var later by remember { mutableStateOf(store.isWatchLater(item)) }
+    // Статус: Смотрю / Буду смотреть / Просмотрено (цикл кнопкой)
+    var statusTag by remember { mutableStateOf(store.itemStatus(item)) }
+    fun statusLabel(s: String) = when (s) {
+        "watching" -> "👁 Смотрю"; "want" -> "📋 Буду смотреть"; "done" -> "✔ Просмотрено"; else -> "🔖 Отметить"
+    }
     var magnet by remember { mutableStateOf(store.getMagnet(item) != null) }
     var status by remember { mutableStateOf("") }
     var similar by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
@@ -203,6 +208,13 @@ fun DetailsScreen(
                         Spacer(Modifier.width(12.dp))
                         Button(onClick = { later = store.toggleWatchLater(item); menu = false }) {
                             Text(if (later) "✓ Смотреть позже" else "＋ Смотреть позже")
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Button(onClick = {
+                            statusTag = store.cycleItemStatus(item)
+                            menu = false
+                        }) {
+                            Text(statusLabel(statusTag))
                         }
                     }
                 }

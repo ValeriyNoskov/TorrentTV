@@ -84,6 +84,47 @@ class LocalStore(context: Context) {
         return !existed
     }
 
+    // ---------- Статусы: Смотрю / Буду смотреть / Просмотрено ----------
+
+    /** Статус фильма: "" — не отмечен, "watching", "want", "done". */
+    fun itemStatus(item: MediaItem): String =
+        prefs.getString("status:" + item.storeKey, "") ?: ""
+
+    fun setItemStatus(item: MediaItem, status: String) {
+        val key = "status:" + item.storeKey
+        if (status.isBlank()) {
+            prefs.edit().remove(key).remove("statusitem:" + item.storeKey).apply()
+        } else {
+            prefs.edit()
+                .putString(key, status)
+                .putString("statusitem:" + item.storeKey, item.toJson().toString())
+                .apply()
+        }
+    }
+
+    /** Следующий статус по циклу: нет → Смотрю → Буду смотреть → Просмотрено → нет. */
+    fun cycleItemStatus(item: MediaItem): String {
+        val next = when (itemStatus(item)) {
+            "" -> "watching"; "watching" -> "want"; "want" -> "done"; else -> ""
+        }
+        setItemStatus(item, next)
+        return next
+    }
+
+    /** Все фильмы с данным статусом (в порядке недавнего обновления). */
+    fun itemsWithStatus(status: String): List<MediaItem> =
+        prefs.all.entries
+            .filter { it.key.startsWith("status:") && it.value == status }
+            .mapNotNull { entry ->
+                // storeKey вида "movie-706094223": ищем item в прогрессе/избранном,
+                // иначе восстанавливаем по id из ключа нельзя — храним сериализованный item
+                runCatching {
+                    val json = prefs.getString("statusitem:" + entry.key.removePrefix("status:"), null)
+                    json?.let { MediaItem.fromJson(org.json.JSONObject(it)) }
+                }.getOrNull()
+            }
+            .reversed()
+
     // ---------- Прогресс просмотра ----------
 
     fun continueWatching(): List<WatchEntry> {
@@ -167,6 +208,13 @@ class LocalStore(context: Context) {
 
     /** Личные ключи баз фильмов (перекрывают вшитые; бесплатно: KP — kinopoiskapiunofficial.tech, TMDB — themoviedb.org). */
     fun kpApiKey(): String = prefs.getString("kp_api_key", "").orEmpty()
+
+    /** GitHub-токен (права только gists) — для отправки логов мне в Gist. */
+    fun githubToken(): String = prefs.getString("github_token", "").orEmpty()
+
+    fun setGithubToken(v: String) {
+        prefs.edit().putString("github_token", v.trim()).apply()
+    }
 
     fun setKpApiKey(v: String) {
         prefs.edit().putString("kp_api_key", v).apply()

@@ -1,6 +1,7 @@
 package com.torrenttv.app.data
 
 import android.content.Context
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -80,12 +81,48 @@ object AppLog {
     }
 
     /**
-     * Выложить лог на pastebin и вернуть URL. Приоритет:
-     * dpaste.org → paste.rs → 0x0.st → tmpfiles.org.
+     * Выложить лог и вернуть URL. Приоритет:
+     * GitHub Gist (если задан токен) → dpaste.org → paste.rs → 0x0.st → tmpfiles.org.
+     * Gist — секретный: открывается по ссылке без пароля, но не виден в профиле.
+     * Токен хранится в Настройках ТВ (не в APK) с правами только на gists.
      */
-    fun sendToPastebin(): String {
+    fun sendToPastebin(githubToken: String? = null): String {
         val content = dump().toByteArray(Charsets.UTF_8)
         val client = TorrentHttp.client
+
+        // 0) GitHub Gist от имени владельца токена: я (разработчик) читаю его сам
+        if (!githubToken.isNullOrBlank()) {
+            runCatching {
+                val stamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm").format(java.util.Date())
+                val fileContent = org.json.JSONObject.quote(String(content, Charsets.UTF_8))
+                val payload = org.json.JSONObject()
+                    .put("description", "ВНосКино лог $stamp")
+                    .put("public", false)
+                    .put("files", org.json.JSONObject()
+                        .put("vnoskino_log.txt", org.json.JSONObject().put("content", String(content, Charsets.UTF_8))))
+                    .toString()
+                val body = okhttp3.RequestBody.create(
+                    "application/json; charset=utf-8".toMediaTypeOrNull(),
+                    payload,
+                )
+                client.newCall(
+                    okhttp3.Request.Builder()
+                        .url("https://api.github.com/gists")
+                        .header("Authorization", "Bearer $githubToken")
+                        .header("Accept", "application/vnd.github+json")
+                        .post(body)
+                        .build()
+                ).execute().use { resp ->
+                    if (resp.isSuccessful) {
+                        val raw = resp.body?.string().orEmpty()
+                        // html_url — адрес для человека; raw_url — прямая выгрузка
+                        val html = Regex("\"html_url\"\\s*:\\s*\"([^\"]+gists?[^\"]+)\"").find(raw)?.groupValues?.get(1)
+                        val direct = Regex("\"raw_url\"\\s*:\\s*\"([^\"]+)\"").find(raw)?.groupValues?.get(1)
+                        return direct ?: html ?: return@runCatching
+                    }
+                }
+            }
+        }
 
         // 1) dpaste.org: form-encoded, ответ — URL
         runCatching {

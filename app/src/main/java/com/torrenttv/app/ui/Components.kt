@@ -243,10 +243,112 @@ fun PosterCard(item: MediaItem, onClick: () -> Unit) {
     }
 }
 
+/**
+ * Лента «Продолжить просмотр»: карточка с постером, полосой прогресса
+ * (как в HD VideoBox / Lampa) и меткой эпизода.
+ */
+@Composable
+fun ContinueRow(
+    title: String,
+    entries: List<com.torrenttv.app.data.WatchEntry>,
+    onClick: (com.torrenttv.app.data.MediaItem) -> Unit,
+) {
+    Column(Modifier.padding(vertical = 10.dp)) {
+        Text(
+            text = title,
+            color = Color.White,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = 32.dp, vertical = 6.dp),
+        )
+        LazyRow(contentPadding = PaddingValues(horizontal = 28.dp)) {
+            items(entries.size) { i ->
+                val e = entries[i]
+                val frac = if (e.durationSec > 0)
+                    (e.positionSec.toFloat() / e.durationSec).coerceIn(0.02f, 1f) else 0f
+                Surface(
+                    onClick = { onClick(e.item) },
+                    modifier = Modifier
+                        .width(190.dp)
+                        .padding(6.dp),
+                    shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color(0xFF1F2430),
+                        focusedContainerColor = Color(0xFF2A3140),
+                    ),
+                ) {
+                    Column {
+                        Box {
+                            if (e.item.posterUrl.isBlank()) {
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .height(120.dp)
+                                        .background(Color(0xFF1F2430)),
+                                    contentAlignment = Alignment.Center,
+                                ) { Text("нет\nпостера", color = Color.White.copy(alpha = 0.4f), textAlign = TextAlign.Center) }
+                            } else {
+                                AsyncImage(
+                                    model = e.item.posterUrl,
+                                    contentDescription = e.item.title,
+                                    modifier = Modifier.fillMaxWidth().height(120.dp),
+                                    contentScale = ContentScale.Crop,
+                                )
+                            }
+                            if (e.episodeLabel.isNotBlank()) {
+                                Text(
+                                    e.episodeLabel,
+                                    color = Color.Black,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier
+                                        .align(Alignment.TopStart)
+                                        .padding(6.dp)
+                                        .background(Color(0xFFF5B942), RoundedCornerShape(6.dp))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                                )
+                            }
+                        }
+                        // Прогресс-полоса: досмотрено — жёлтым
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 6.dp)
+                                .height(5.dp)
+                                .background(Color(0xFF3A4250), RoundedCornerShape(3.dp)),
+                        ) {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth(frac)
+                                    .fillMaxHeight()
+                                    .background(Color(0xFFF5B942), RoundedCornerShape(3.dp)),
+                            )
+                        }
+                        Text(
+                            e.item.title,
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(8.dp, 0.dp, 8.dp, 0.dp),
+                        )
+                        val left = (e.durationSec - e.positionSec).coerceAtLeast(0)
+                        Text(
+                            if (left > 60) "осталось ${left / 60} мин" else "почти закончился",
+                            color = Color.White.copy(alpha = 0.5f),
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(8.dp, 2.dp, 8.dp, 8.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 /** Горизонтальная полоса каталога. */
 @Composable
-fun MediaRow(
-    title: String,
+fun MediaRow(    title: String,
     items: List<MediaItem>,
     onClick: (MediaItem) -> Unit,
     emptyText: String? = null,

@@ -90,11 +90,10 @@ fun HomeScreen(
             }
             if (progress.isNotEmpty()) {
                 item {
-                    // Эпизоды одного сериала — отдельные карточки с меткой S01E05
-                    MediaRow(
+                    // Карточки с прогресс-барами: досмотрено, серия, «осталось N мин»
+                    ContinueRow(
                         title = "Продолжить просмотр",
-                        // разные эпизоды одного сериала — разные карточки
-                        items = progress.distinctBy { it.sourceKey }.map { it.item },
+                        entries = progress.distinctBy { it.sourceKey },
                         onClick = onOpenDetails,
                     )
                 }
@@ -106,6 +105,16 @@ fun HomeScreen(
                     onClick = onOpenDetails,
                     emptyText = "Пока пусто — отмечайте фильмы кнопкой «＋ Смотреть позже» в карточке",
                 )
+            }
+            // Лента из статусов «Буду смотреть» (кнопка 🔖 в карточке)
+            if (store.itemsWithStatus("want").isNotEmpty()) {
+                item {
+                    MediaRow(
+                        title = "📋 Буду смотреть",
+                        items = store.itemsWithStatus("want"),
+                        onClick = onOpenDetails,
+                    )
+                }
             }
             item {
                 MediaRow(

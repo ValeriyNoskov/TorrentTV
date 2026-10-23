@@ -17,6 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.tv.material3.MaterialTheme
+import com.torrenttv.app.ui.AppTypography
 import com.torrenttv.app.data.IptvChannel
 import com.torrenttv.app.data.MediaItem
 import com.torrenttv.app.ui.CatalogScreen
@@ -109,7 +110,7 @@ class MainActivity : ComponentActivity() {
             start()
         }
         setContent {
-            MaterialTheme {
+            MaterialTheme(typography = AppTypography) {
                 App()
             }
         }
