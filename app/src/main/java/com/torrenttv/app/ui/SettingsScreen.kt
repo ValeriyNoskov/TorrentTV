@@ -320,6 +320,41 @@ fun SettingsScreen(onBack: () -> Unit) {
                     }
 
                     "player" -> {
+                        // Проверка обновлений вручную (обычно она автоматом при старте)
+                        var updInfo by remember { mutableStateOf<com.torrenttv.app.update.UpdateManager.UpdateInfo?>(null) }
+                        var updMsg by remember { mutableStateOf("") }
+                        var updBusy by remember { mutableStateOf(false) }
+                        SettingsRow(
+                            title = "⬆ Проверить обновления",
+                            value = when {
+                                updBusy -> "Проверяю…"
+                                updInfo != null -> "Доступна v${updInfo!!.version} — нажмите для установки"
+                                updMsg.isNotBlank() -> updMsg
+                                else -> "Текущая: v" + com.torrenttv.app.BuildConfig.VERSION_NAME
+                            },
+                            valueOk = updInfo != null,
+                        ) {
+                            if (updInfo != null) {
+                                val info = updInfo!!
+                                updBusy = true
+                                com.torrenttv.app.update.UpdateManager.downloadAndInstall(
+                                    context,
+                                    info,
+                                    onProgress = { updMsg = it },
+                                    onError = { updMsg = it; updBusy = false },
+                                )
+                            } else if (!updBusy) {
+                                updBusy = true
+                                updMsg = ""
+                                com.torrenttv.app.update.UpdateManager.checkForUpdate(
+                                    com.torrenttv.app.BuildConfig.VERSION_NAME,
+                                ) { info ->
+                                    updInfo = info
+                                    updBusy = false
+                                    updMsg = if (info == null) "✓ У вас последняя версия" else ""
+                                }
+                            }
+                        }
                         SettingsRow(
                             title = if (extPlayer) "✅ Всегда внешний плеер" else "⬜ Всегда внешний плеер",
                             value = if (extPlayer) "ВКЛ — видео открывается в VLC/MX Player" else "ВЫКЛ — встроенный плеер",
