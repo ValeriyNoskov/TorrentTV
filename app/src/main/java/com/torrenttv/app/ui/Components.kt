@@ -176,25 +176,41 @@ fun PosterCard(item: MediaItem, onClick: () -> Unit) {
         ),
     ) {
         Column {
-            if (item.posterUrl.isBlank()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(250.dp)
-                        .background(Color(0xFF1F2430)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("нет\nпостера", color = Color.White.copy(alpha = 0.4f), textAlign = TextAlign.Center)
+            Box {
+                if (item.posterUrl.isBlank()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(250.dp)
+                            .background(Color(0xFF1F2430)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("нет\nпостера", color = Color.White.copy(alpha = 0.4f), textAlign = TextAlign.Center)
+                    }
+                } else {
+                    AsyncImage(
+                        model = item.posterUrl,
+                        contentDescription = item.title,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(250.dp),
+                        contentScale = ContentScale.Crop,
+                    )
                 }
-            } else {
-                AsyncImage(
-                    model = item.posterUrl,
-                    contentDescription = item.title,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(250.dp),
-                    contentScale = ContentScale.Crop,
-                )
+                // Заметный бейдж рейтинга поверх постера
+                if (item.rating > 0.0) {
+                    Text(
+                        text = "★ ${"%.1f".format(item.rating)}",
+                        color = Color(0xFF0E1116),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(8.dp)
+                            .background(Color(0xFFF5B942), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                    )
+                }
             }
             Text(
                 text = item.title,

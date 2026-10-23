@@ -66,6 +66,24 @@ class LocalStore(context: Context) {
         return !existed
     }
 
+    // ---------- Смотреть позже ----------
+
+    fun watchLater(): List<MediaItem> = readList("watch_later")
+
+    fun isWatchLater(item: MediaItem): Boolean =
+        watchLater().any { it.storeKey == item.storeKey }
+
+    /** Переключить; вернуть новое состояние (true = добавлено). */
+    fun toggleWatchLater(item: MediaItem): Boolean {
+        val list = watchLater().toMutableList()
+        val existed = list.removeAll { it.storeKey == item.storeKey }
+        if (!existed) list.add(0, item)
+        prefs.edit()
+            .putString("watch_later", JSONArray(list.map { it.toJson() }).toString())
+            .apply()
+        return !existed
+    }
+
     // ---------- Прогресс просмотра ----------
 
     fun continueWatching(): List<WatchEntry> {

@@ -50,6 +50,7 @@ fun DetailsScreen(
     val store = remember { LocalStore(context) }
     val onlineAvailable = remember { store.filmixToken().isNotBlank() }
     var fav by remember { mutableStateOf(store.isFavorite(item)) }
+    var later by remember { mutableStateOf(store.isWatchLater(item)) }
     var magnet by remember { mutableStateOf(store.getMagnet(item) != null) }
     var status by remember { mutableStateOf("") }
     var similar by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
@@ -138,6 +139,10 @@ fun DetailsScreen(
                     Spacer(Modifier.width(16.dp))
                     Button(onClick = { fav = store.toggleFavorite(item) }) {
                         Text(if (fav) "★ В избранном" else "☆ В избранное")
+                    }
+                    Spacer(Modifier.width(16.dp))
+                    Button(onClick = { later = store.toggleWatchLater(item) }) {
+                        Text(if (later) "✓ Смотреть позже" else "＋ Смотреть позже")
                     }
                 }
 

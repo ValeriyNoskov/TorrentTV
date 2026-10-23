@@ -42,6 +42,7 @@ fun HomeScreen(
     val store = remember { LocalStore(context) }
 
     var favorites by remember { mutableStateOf(store.favorites()) }
+    var watchLater by remember { mutableStateOf(store.watchLater()) }
     var progress by remember { mutableStateOf(store.continueWatching()) }
     var heroItem by remember { mutableStateOf<MediaItem?>(null) }
     var updateInfo by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
@@ -84,6 +85,14 @@ fun HomeScreen(
                         onClick = onOpenDetails,
                     )
                 }
+            }
+            item {
+                MediaRow(
+                    title = "Смотреть позже",
+                    items = watchLater,
+                    onClick = onOpenDetails,
+                    emptyText = "Пока пусто — отмечайте фильмы кнопкой «＋ Смотреть позже» в карточке",
+                )
             }
             item {
                 MediaRow(
