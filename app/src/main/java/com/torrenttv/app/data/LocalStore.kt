@@ -138,6 +138,26 @@ class LocalStore(context: Context) {
         return true
     }
 
+    // ---------- Jackett (опциональный провайдер поиска) ----------
+
+    fun jackettUrl(): String = prefs.getString("jackett_url", "") ?: ""
+
+    fun setJackettUrl(v: String) {
+        prefs.edit().putString("jackett_url", v.trim()).apply()
+    }
+
+    fun jackettApiKey(): String = prefs.getString("jackett_key", "") ?: ""
+
+    fun setJackettApiKey(v: String) {
+        prefs.edit().putString("jackett_key", v.trim()).apply()
+    }
+
+    /** Конфигурация Jackett для автопоиска; null, если не настроен. */
+    fun jackettConfig(): JackettProvider.Config? {
+        val c = JackettProvider.Config(jackettUrl(), jackettApiKey())
+        return if (c.isConfigured) c else null
+    }
+
     // ---------- Внутреннее ----------
 
     private fun readList(key: String): List<MediaItem> {

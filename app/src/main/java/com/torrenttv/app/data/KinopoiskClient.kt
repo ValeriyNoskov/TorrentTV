@@ -109,6 +109,7 @@ object KinopoiskClient {
             genreIds = genreIds,
             countryIds = countryIds,
             overview = o.optString("description", ""),
+            imdbId = o.optString("imdbId", ""),
         )
     }
 

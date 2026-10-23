@@ -30,15 +30,16 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
+import com.torrenttv.app.data.ReleaseQuality
 import com.torrenttv.app.data.TorrentResult
 import com.torrenttv.app.data.TorrentSearch
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.net.URLEncoder
 
 /**
- * Автопоиск торрентов по названию карточки: «название + год»,
- * сортировка по сидам. Выбор результата привязывает magnet к карточке.
+ * Автопоиск торрентов по названию карточки («название + год») через все
+ * доступные провайдеры (apibay, Torrentio, Jackett). Скраббер: чипы
+ * фильтра по качеству (2160p/1080p/720p/SD), сортировка по сидам.
+ * Выбор результата привязывает magnet к карточке.
  */
 @Composable
 fun TorrentSearchScreen(item: MediaItem, onDone: () -> Unit, onBack: () -> Unit) {
@@ -47,21 +48,33 @@ fun TorrentSearchScreen(item: MediaItem, onDone: () -> Unit, onBack: () -> Unit)
 
     var status by remember { mutableStateOf("Ищу торренты…") }
     var results by remember { mutableStateOf<List<TorrentResult>>(emptyList()) }
+    var quality by remember { mutableStateOf<String?>(null) } // null = все
 
     val query = remember(item) {
         if (item.year.isNotBlank()) "${item.title} ${item.year}" else item.title
     }
 
     LaunchedEffect(item) {
-        val found = withContext(Dispatchers.IO) {
-            TorrentSearch.search(query, isTvShow = item.type != "movie", excludedKeywords = store.excludedKeywords().toSet())
-        }
+        val found = TorrentSearch.searchAll(
+            query = query,
+            isTvShow = item.type != "movie",
+            imdbId = item.imdbId,
+            jackett = store.jackettConfig(),
+            excludedKeywords = store.excludedKeywords().toSet(),
+        )
         results = found
         status = if (found.isEmpty()) {
             "Ничего не найдено — попробуйте «Указать magnet» вручную"
         } else {
             "Найдено: ${found.size}. Выберите раздачу (больше сидов — быстрее)"
         }
+    }
+
+    val availableQualities = remember(results) {
+        ReleaseQuality.KNOWN.filter { res -> results.any { it.resolution == res } }
+    }
+    val shown = remember(results, quality) {
+        if (quality == null) results else results.filter { it.resolution == quality }
     }
 
     BackHandler { onBack() }
@@ -76,10 +89,21 @@ fun TorrentSearchScreen(item: MediaItem, onDone: () -> Unit, onBack: () -> Unit)
         Text(item.title, color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
         Text(status, color = Color.White.copy(alpha = 0.6f), fontSize = 15.sp, modifier = Modifier.padding(top = 6.dp))
 
-        Spacer(Modifier.height(18.dp))
+        // ---------- Чипы качества (скраббер) ----------
+        if (availableQualities.isNotEmpty()) {
+            Row(Modifier.padding(top = 10.dp)) {
+                QualityChip(label = "Все", selected = quality == null) { quality = null }
+                for (res in availableQualities) {
+                    Spacer(Modifier.width(8.dp))
+                    QualityChip(label = res, selected = quality == res) { quality = res }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
 
         LazyColumn(Modifier.weight(1f)) {
-            items(results) { r ->
+            items(shown) { r ->
                 Surface(
                     onClick = {
                         store.saveMagnet(item, TorrentSearch.toMagnet(r))
@@ -115,9 +139,24 @@ fun TorrentSearchScreen(item: MediaItem, onDone: () -> Unit, onBack: () -> Unit)
                             )
                             Spacer(Modifier.width(16.dp))
                             Text(
-                                text = if (r.sizeMb >= 1024) "%.1f ГБ".format(r.sizeMb / 1024f) else "${r.sizeMb} МБ",
+                                text = r.sizeLabel(),
                                 color = Color(0xFFF5B942),
                                 fontSize = 14.sp,
+                            )
+                            if (r.resolution.isNotBlank()) {
+                                Spacer(Modifier.width(16.dp))
+                                Text(
+                                    text = r.resolution,
+                                    color = Color(0xFF64B5F6),
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                            Spacer(Modifier.weight(1f))
+                            Text(
+                                text = r.provider,
+                                color = Color.White.copy(alpha = 0.35f),
+                                fontSize = 12.sp,
                             )
                         }
                     }
@@ -132,5 +171,32 @@ fun TorrentSearchScreen(item: MediaItem, onDone: () -> Unit, onBack: () -> Unit)
     }
 }
 
-/** Экранирование для запроса (на будущее — URLEncoder используется в TorrentSearch). */
+/** Чип выбора качества. */
+@Composable
+private fun QualityChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.mouseClick(onClick),
+        shape = clickableSurfaceShape(RoundedCornerShape(20.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = if (selected) Color(0xFFF5B942) else Color(0xFF1F2430),
+            contentColor = if (selected) Color(0xFF0E1116) else Color.White,
+            focusedContainerColor = Color(0xFF31435A),
+            focusedContentColor = Color.White,
+            pressedContainerColor = Color(0xFF273548),
+            pressedContentColor = Color.White,
+            disabledContainerColor = Color(0xFF1F2430),
+            disabledContentColor = Color.White,
+        ),
+    ) {
+        Text(
+            text = label,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+        )
+    }
+}
+
+/** Экранирование для запроса (на будущее — URLEncoder используется в провайдерах). */
 private fun encodeQuery(q: String): String = URLEncoder.encode(q, "UTF-8")

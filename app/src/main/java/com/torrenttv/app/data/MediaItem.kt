@@ -15,6 +15,7 @@ data class MediaItem(
     val genreIds: List<Int> = emptyList(),
     val countryIds: List<Int> = emptyList(),
     val overview: String = "",
+    val imdbId: String = "",
 ) {
     /** Ключ для локального хранения (прогресс/избранное). */
     val storeKey: String get() = "$type-$id"
@@ -32,6 +33,7 @@ data class MediaItem(
         .put("genreIds", JSONArray(genreIds))
         .put("countryIds", JSONArray(countryIds))
         .put("overview", overview)
+        .put("imdbId", imdbId)
 
     companion object {
         fun fromJson(o: JSONObject): MediaItem = MediaItem(
@@ -49,6 +51,7 @@ data class MediaItem(
                 (0 until arr.length()).map { arr.optInt(it) }
             } ?: emptyList(),
             overview = o.optString("overview", ""),
+            imdbId = o.optString("imdbId", ""),
         )
     }
 }

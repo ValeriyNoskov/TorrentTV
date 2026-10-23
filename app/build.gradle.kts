@@ -60,6 +60,9 @@ dependencies {
     // Сеть (TMDB, GitHub-обновления)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
+    // Unit-тесты
+    testImplementation("junit:junit:4.13.2")
+
     // Торрент-движок (jlibtorrent = JNI-обёртка над libtorrent)
     val jlibtorrent = "2.0.12.9"
     implementation("com.frostwire:jlibtorrent:$jlibtorrent")

@@ -1,33 +1,25 @@
 package com.torrenttv.app.data
 
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import org.json.JSONArray
-import java.net.URLEncoder
-
-/** Результат автопоиска торрентов. */
-data class TorrentResult(
-    val name: String,
-    val infoHash: String,
-    val seeds: Int,
-    val sizeBytes: Long,
-) {
-    val sizeMb: Int
-        get() = (sizeBytes / 1024 / 1024).toInt()
-}
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 
 /**
- * Автопоиск торрентов по названию через открытые API без ключей.
+ * Автопоиск торрентов: агрегатор провайдеров.
  *
- * Провайдер: apibay.org — публичное JSON-зеркало ThePirateBay
- * (категории: 201 — фильмы, 205 — сериалы). Из info_hash собирается
- * magnet-ссылка с набором публичных трекеров.
+ * Провайдеры:
+ *  - apibay.org (ThePirateBay) — всегда, по названию;
+ *  - Torrentio — по IMDb-id карточки (только фильмы);
+ *  - Jackett — опционально, если настроен URL и API-ключ в настройках.
+ *
+ * Результаты сливаются, дедуплицируются по info_hash (остаётся раздача
+ * с максимумом сидов), сортируются по сидам.
  */
 object TorrentSearch {
 
-    private val http = OkHttpClient()
-
-    private val TRACKERS = listOf(
+    val TRACKERS = listOf(
         "udp://tracker.opentrackr.org:1337/announce",
         "udp://open.demonii.com:1337/announce",
         "udp://open.stealth.si:80/announce",
@@ -37,48 +29,50 @@ object TorrentSearch {
     )
 
     /**
-     * Найти раздачи. Возвращает живые раздачи (seeds > 0),
-     * отсортированные по количеству сидов.
+     * Найти раздачи у всех доступных провайдеров параллельно.
+     * @param imdbId  IMDb id карточки (для Torrentio), может быть пустым
+     * @param jackett конфигурация Jackett из настроек, null если выключена
+     * @param excludedKeywords стоп-слова из настроек (блокируют раздачу по названию)
      */
-    fun search(query: String, isTvShow: Boolean, excludedKeywords: Set<String> = emptySet()): List<TorrentResult> {
-        val cat = if (isTvShow) "205" else "201"
-        val url = "https://apibay.org/q.php?q=${URLEncoder.encode(query, "UTF-8")}&cat=$cat"
-        val body: String = try {
-            http.newCall(Request.Builder().url(url).build()).execute().use { resp ->
-                resp.body?.string() ?: return emptyList()
+    suspend fun searchAll(
+        query: String,
+        isTvShow: Boolean,
+        imdbId: String = "",
+        jackett: JackettProvider.Config? = null,
+        excludedKeywords: Set<String> = emptySet(),
+        limit: Int = 50,
+    ): List<TorrentResult> = withContext(Dispatchers.IO) {
+        val partial = coroutineScope {
+            val jobs = buildList {
+                add(async { ApibayProvider.search(query, isTvShow) })
+                if (!isTvShow && imdbId.isNotBlank()) {
+                    add(async { TorrentioProvider.search(imdbId) })
+                }
+                if (jackett?.isConfigured == true) {
+                    add(async { JackettProvider.search(jackett, query) })
+                }
             }
-        } catch (_: Exception) {
-            return emptyList()
+            jobs.awaitAll()
         }
+        merge(partial, excludedKeywords).take(limit)
+    }
 
-        val arr = try {
-            JSONArray(body)
-        } catch (_: Exception) {
-            return emptyList()
-        }
-
+    /** Слить выдачи провайдеров: фильтр по сидам/стоп-словам, дедуп по info_hash. */
+    fun merge(
+        results: List<List<TorrentResult>>,
+        excludedKeywords: Set<String> = emptySet(),
+    ): List<TorrentResult> {
         val banned = excludedKeywords.map { it.lowercase() }
-        val out = mutableListOf<TorrentResult>()
-        for (i in 0 until arr.length()) {
-            val o = arr.getJSONObject(i)
-            val hash = o.optString("info_hash")
-            if (hash.length != 40) continue
-            val name = o.optString("name")
-            if (banned.any { name.lowercase().contains(it) }) continue
-            out += TorrentResult(
-                name = name,
-                infoHash = hash.lowercase(),
-                seeds = o.optString("seeders").toIntOrNull() ?: 0,
-                sizeBytes = o.optString("size").toLongOrNull() ?: 0L,
-            )
-        }
-        return out.filter { it.seeds > 0 }.sortedByDescending { it.seeds }.take(25)
+        return results.asSequence()
+            .flatten()
+            .filter { it.seeds > 0 }
+            .filter { banned.none { kw -> it.name.lowercase().contains(kw) } }
+            .groupBy { it.infoHash }
+            .map { (_, group) -> group.maxBy { it.seeds } }
+            .sortedByDescending { it.seeds }
+            .toList()
     }
 
     /** Собрать magnet-ссылку из info_hash с публичными трекерами. */
-    fun toMagnet(r: TorrentResult): String {
-        val dn = URLEncoder.encode(r.name, "UTF-8")
-        val tr = TRACKERS.joinToString("") { "&tr=${URLEncoder.encode(it, "UTF-8")}" }
-        return "magnet:?xt=urn:btih:${r.infoHash}&dn=$dn$tr"
-    }
+    fun toMagnet(r: TorrentResult): String = ApibayProvider.toMagnet(r)
 }

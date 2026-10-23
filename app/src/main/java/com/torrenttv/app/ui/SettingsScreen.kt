@@ -53,6 +53,10 @@ fun SettingsScreen(onBack: () -> Unit) {
     var tvGenres by remember { mutableStateOf<List<Genre>>(emptyList()) }
     var countries by remember { mutableStateOf<List<Genre>>(emptyList()) }
     var kw by remember { mutableStateOf("") }
+    var jackettUrl by remember { mutableStateOf(store.jackettUrl()) }
+    var jackettKey by remember { mutableStateOf(store.jackettApiKey()) }
+    // Активное поле для экранной клавиатуры: "kw" | "jurl" | "jkey"
+    var editTarget by remember { mutableStateOf("kw") }
     val kbFocus = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
@@ -183,33 +187,109 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
         }
 
+        // ---------- Jackett ----------
         Text(
-            text = if (kw.isBlank()) "Новое стоп-слово…" else kw,
-            color = if (kw.isBlank()) Color.White.copy(alpha = 0.35f) else Color(0xFFF5B942),
-            fontSize = 20.sp,
+            text = "JACKETT — дополнительный провайдер автопоиска (опционально). " +
+                "Укажите адрес сервера и API-ключ, поиск пойдёт по всем вашим индексерам",
+            color = Color.White.copy(alpha = 0.55f),
+            fontSize = 14.sp,
+            modifier = Modifier.padding(top = 20.dp, bottom = 4.dp),
+        )
+        val jackettOk = jackettUrl.isNotBlank() && jackettKey.isNotBlank()
+        Text(
+            text = when {
+                jackettOk -> "Подключён: $jackettUrl"
+                jackettUrl.isNotBlank() -> "Не хватает API-ключа"
+                else -> "Не настроен (работает встроенный apibay + Torrentio)"
+            },
+            color = if (jackettOk) Color(0xFF9CCC65) else Color.White.copy(alpha = 0.4f),
+            fontSize = 14.sp,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+            Button(onClick = { editTarget = "jurl"; kw = ""; kbFocus.requestFocus() }) {
+                Text(if (jackettUrl.isBlank()) "🔗 Указать адрес" else "🔗 Изменить адрес")
+            }
+            Spacer(Modifier.width(16.dp))
+            Button(onClick = { editTarget = "jkey"; kw = ""; kbFocus.requestFocus() }) {
+                Text(if (jackettKey.isBlank()) "🔑 Указать ключ" else "🔑 Изменить ключ")
+            }
+            if (jackettOk || jackettUrl.isNotBlank()) {
+                Spacer(Modifier.width(16.dp))
+                Button(onClick = {
+                    jackettUrl = ""; jackettKey = ""
+                    store.setJackettUrl(""); store.setJackettApiKey("")
+                }) { Text("🗑 Убрать") }
+            }
+        }
+
+        Text(
+            text = if (editTarget == "kw") {
+                if (kw.isBlank()) "Новое стоп-слово…" else kw
+            } else {
+                val cur = if (editTarget == "jurl") jackettUrl else jackettKey
+                if (cur.isBlank()) {
+                    if (editTarget == "jurl") "Адрес Jackett, напр. http://192.168.1.10:9117" else "API-ключ Jackett"
+                } else cur
+            },
+            color = when {
+                editTarget != "kw" && editTarget.isNotEmpty() -> Color(0xFF64B5F6)
+                kw.isBlank() -> Color.White.copy(alpha = 0.35f)
+                else -> Color(0xFFF5B942)
+            },
+            fontSize = 18.sp,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(top = 12.dp),
         )
 
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
-            Button(onClick = {
-                val w = kw.trim()
-                if (w.isNotBlank() && w !in keywords) {
-                    keywords = keywords + w
-                    store.setExcludedKeywords(keywords)
-                    kw = ""
-                }
-            }) { Text("➕ Добавить") }
-            Spacer(Modifier.width(16.dp))
-            Button(onClick = { kw = "" }) { Text("Очистить поле") }
+            if (editTarget == "kw") {
+                Button(onClick = {
+                    val w = kw.trim()
+                    if (w.isNotBlank() && w !in keywords) {
+                        keywords = keywords + w
+                        store.setExcludedKeywords(keywords)
+                        kw = ""
+                    }
+                }) { Text("➕ Добавить") }
+                Spacer(Modifier.width(16.dp))
+                Button(onClick = { kw = "" }) { Text("Очистить поле") }
+            } else {
+                Button(onClick = {
+                    val v = if (editTarget == "jurl") jackettUrl else jackettKey
+                    if (v.isNotBlank()) {
+                        if (editTarget == "jurl") store.setJackettUrl(v) else store.setJackettApiKey(v)
+                    }
+                    editTarget = "kw"
+                }) { Text("💾 Сохранить") }
+                Spacer(Modifier.width(16.dp))
+                Button(onClick = { editTarget = "kw" }) { Text("Отмена") }
+            }
         }
 
         Spacer(Modifier.height(8.dp))
 
         TvKeyboard(
-            onChar = { kw += it },
-            onBackspace = { if (kw.isNotEmpty()) kw = kw.dropLast(1) },
-            onClear = { kw = "" },
+            onChar = { ch ->
+                when (editTarget) {
+                    "jurl" -> jackettUrl += ch
+                    "jkey" -> jackettKey += ch
+                    else -> kw += ch
+                }
+            },
+            onBackspace = {
+                when (editTarget) {
+                    "jurl" -> if (jackettUrl.isNotEmpty()) jackettUrl = jackettUrl.dropLast(1)
+                    "jkey" -> if (jackettKey.isNotEmpty()) jackettKey = jackettKey.dropLast(1)
+                    else -> if (kw.isNotEmpty()) kw = kw.dropLast(1)
+                }
+            },
+            onClear = {
+                when (editTarget) {
+                    "jurl" -> jackettUrl = ""
+                    "jkey" -> jackettKey = ""
+                    else -> kw = ""
+                }
+            },
             firstKeyFocus = kbFocus,
         )
     }
