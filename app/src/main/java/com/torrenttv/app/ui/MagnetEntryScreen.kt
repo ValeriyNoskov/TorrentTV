@@ -24,6 +24,9 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.Text
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Ввод magnet-ссылки для карточки (экранная клавиатура).
@@ -36,6 +39,7 @@ fun MagnetEntryScreen(item: MediaItem, onDone: () -> Unit, onBack: () -> Unit) {
     var magnet by remember { mutableStateOf(store.getMagnet(item) ?: "") }
     var error by remember { mutableStateOf("") }
     val kbFocus = remember { FocusRequester() }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     Column(
         Modifier
@@ -52,7 +56,7 @@ fun MagnetEntryScreen(item: MediaItem, onDone: () -> Unit, onBack: () -> Unit) {
         )
 
         Text(
-            text = if (magnet.isBlank()) "magnet:?xt=…" else magnet,
+            text = "magnet:?xt=… или прямая ссылка на .torrent файл (http…torrent)",
             color = if (magnet.isBlank()) Color.White.copy(alpha = 0.35f) else Color(0xFFF5B942),
             fontSize = 18.sp,
             maxLines = 3,
@@ -67,14 +71,33 @@ fun MagnetEntryScreen(item: MediaItem, onDone: () -> Unit, onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(top = 10.dp),
         ) {
-            Button(onClick = {
-                if (magnet.startsWith("magnet:")) {
-                    store.saveMagnet(item, magnet)
-                    onDone()
-                } else {
-                    error = "Ссылка должна начинаться с «magnet:»"
-                }
-            }) { Text("Сохранить и смотреть") }
+            Button(
+                onClick = {
+                    val t = magnet.trim()
+                    when {
+                        t.startsWith("magnet:") -> {
+                            store.saveMagnet(item, t)
+                            onDone()
+                        }
+                        t.startsWith("http") -> {
+                            error = "Скачиваю .torrent…"
+                            scope.launch {
+                                val m = withContext(Dispatchers.IO) {
+                                    val bytes = com.torrenttv.app.data.TorrentHttp.getBytes(t)
+                                    bytes?.let { com.torrenttv.app.data.TorrentFileParser.parse(it) }
+                                }
+                                if (m != null) {
+                                    store.saveMagnet(item, com.torrenttv.app.data.TorrentFileParser.toMagnet(m))
+                                    onDone()
+                                } else {
+                                    error = "Не удалось прочитать .torrent — проверьте ссылку"
+                                }
+                            }
+                        }
+                        else -> error = "Ссылка должна начинаться с «magnet:» или «http»"
+                    }
+                },
+            ) { Text("Сохранить и смотреть") }
             Spacer(Modifier.width(16.dp))
             Button(onClick = onBack) { Text("← Назад") }
         }
