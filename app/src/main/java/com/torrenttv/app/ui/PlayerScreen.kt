@@ -367,6 +367,7 @@ private fun VideoPlayer(
                             val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
                             player.seekTo((player.currentPosition + delta).coerceIn(0L, dur))
                             seekInfo = if (delta > 0) "⏩ +10 сек" else "⏪ −10 сек"
+                            showController() // панель: сикбар, время, кнопки
                             true
                         } else if (event.action == KeyEvent.ACTION_UP &&
                             (keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
@@ -376,6 +377,7 @@ private fun VideoPlayer(
                             // ОК на пульте — пауза/продолжить
                             if (player.isPlaying) player.pause() else player.play()
                             seekInfo = if (player.isPlaying) "▶ Продолжаем" else "⏸ Пауза"
+                            showController()
                             true
                         } else if (event.action == KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_MENU) {
                             showTrackMenu = !showTrackMenu

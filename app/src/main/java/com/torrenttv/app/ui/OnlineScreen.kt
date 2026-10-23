@@ -559,6 +559,8 @@ fun OnlinePlayerScreen(link: OnlineService.OnlineLink, title: String, onBack: ()
                             val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
                             player.seekTo((player.currentPosition + delta).coerceIn(0L, dur))
                             seekInfo = if (delta > 0) "⏩ +10 сек" else "⏪ −10 сек"
+                            // Показываем панель: сикбар, время, кнопки перемотки
+                            showController()
                             true
                         } else if (event.action == android.view.KeyEvent.ACTION_UP &&
                             (keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER ||
@@ -568,6 +570,8 @@ fun OnlinePlayerScreen(link: OnlineService.OnlineLink, title: String, onBack: ()
                             // ОК на пульте — пауза/продолжить
                             if (player.isPlaying) player.pause() else player.play()
                             seekInfo = if (player.isPlaying) "▶ Продолжаем" else "⏸ Пауза"
+                            // Панель с контролами при действии пульта
+                            showController()
                             true
                         } else {
                             false
