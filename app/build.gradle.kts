@@ -11,8 +11,8 @@ android {
         applicationId = "com.torrenttv.app"
         minSdk = 29          // Android 10 — минимальная версия Android TV по требованию
         targetSdk = 34
-        versionCode = 29
-        versionName = "0.7.13"
+        versionCode = 30
+        versionName = "0.7.14"
         // Ключи метаданных задаются в gradle.properties: kpApiKey=... (kinopoisk.dev) или tmdbApiKey=...
         buildConfigField("String", "KP_API_KEY", "\"${findProperty("kpApiKey") ?: ""}\"")
         buildConfigField("String", "TMDB_API_KEY", "\"${findProperty("tmdbApiKey") ?: ""}\"")
@@ -98,5 +98,6 @@ dependencies {
     // Плеер (Media3 / ExoPlayer)
     implementation("androidx.media3:media3-exoplayer:1.4.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.4.1")  // IPTV-потоки (.m3u8)
+    implementation("androidx.media3:media3-exoplayer-dash:1.4.1") // Filmix отдаёт .mpd (DASH) — без него краш ClassNotFoundException
     implementation("androidx.media3:media3-ui:1.4.1")
 }
