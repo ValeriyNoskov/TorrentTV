@@ -1,8 +1,11 @@
 name: Release
 
-# Мердж в release -> сборка APK и публикация GitHub Release.
+# Мердж в release -> сборка ПОДПИСАННОГО APK (release-ключ) и публикация GitHub Release.
 # Приложение на устройствах само находит этот релиз через GitHub API
 # и предлагает обновление (UpdateManager.kt).
+#
+# Подпись: секрет KEYSTORE_B64 (base64 keystore) + пароли; без подписи
+# обновление конфликтует с ранее установленной версией по подписи.
 on:
   push:
     branches: [release]
@@ -33,13 +36,26 @@ jobs:
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "Версия приложения: $V"
 
-      - name: Сборка APK
-        run: ./gradlew assembleDebug --stacktrace
+      - name: Восстановить ключ подписи
+        run: |
+          mkdir -p keystore
+          echo "$KEYSTORE_B64" | base64 -d > keystore/release-keystore.jks
+          ls -la keystore/
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+
+      - name: Сборка подписанного APK
+        run: ./gradlew assembleRelease --stacktrace
+        env:
+          VNOSKINO_KEYSTORE: ${{ github.workspace }}/keystore/release-keystore.jks
+          VNOSKINO_STORE_PASSWORD: ${{ secrets.KS_STORE_PASSWORD }}
+          VNOSKINO_KEY_PASSWORD: ${{ secrets.KS_KEY_PASSWORD }}
+          VNOSKINO_KEY_ALIAS: vnoskino
 
       - name: Переименовать APK
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/debug/*.apk dist/VNosKino-${{ steps.version.outputs.version }}.apk
+          cp app/build/outputs/apk/release/*.apk dist/VNosKino-${{ steps.version.outputs.version }}.apk
 
       - name: Опубликовать GitHub Release
         uses: softprops/action-gh-release@v2

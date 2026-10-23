@@ -11,17 +11,37 @@ android {
         applicationId = "com.torrenttv.app"
         minSdk = 29          // Android 10 — минимальная версия Android TV по требованию
         targetSdk = 34
-        versionCode = 6
-        versionName = "0.6.0"
+        versionCode = 7
+        versionName = "0.6.1"
         // Ключи метаданных задаются в gradle.properties: kpApiKey=... (kinopoisk.dev) или tmdbApiKey=...
         buildConfigField("String", "KP_API_KEY", "\"${findProperty("kpApiKey") ?: ""}\"")
         buildConfigField("String", "TMDB_API_KEY", "\"${findProperty("tmdbApiKey") ?: ""}\"")
+    }
+
+    // Подпись релиза: ключ берётся из переменных окружения (CI) или gradle.properties;
+    // если ключа нет (локальная сборка без настройки) — fallback на debug-подпись
+    signingConfigs {
+        create("release") {
+            val ksPath = System.getenv("VNOSKINO_KEYSTORE")
+                ?: (findProperty("vnoskinoKeystore") as String?)
+            if (ksPath != null && file(ksPath).exists()) {
+                storeFile = file(ksPath)
+                storePassword = System.getenv("VNOSKINO_STORE_PASSWORD")
+                    ?: (findProperty("vnoskinoStorePassword") as String? ?: "")
+                keyAlias = System.getenv("VNOSKINO_KEY_ALIAS")
+                    ?: (findProperty("vnoskinoKeyAlias") as String? ?: "vnoskino")
+                keyPassword = System.getenv("VNOSKINO_KEY_PASSWORD")
+                    ?: (findProperty("vnoskinoKeyPassword") as String? ?: "")
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            val ks = signingConfigs.getByName("release")
+            signingConfig = if (ks.storeFile?.exists() == true) ks else signingConfigs.getByName("debug")
         }
     }
 
