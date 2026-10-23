@@ -71,7 +71,7 @@ fun SearchScreen(
     /** Раздача выбрана прямо из поиска: magnet сохранён — открыть плеер. */
     onPlayTorrent: (MediaItem) -> Unit = {},
     /** Раздача из поиска: полный список раздач запроса (сорт. «лучшая сверху»). */
-    onOpenResults: (MediaItem, String, List<com.torrenttv.app.data.TorrentResult>) -> Unit = { _, _, _ -> },
+    onOpenResults: (MediaItem, String, List<com.torrenttv.app.data.TorrentResult>, Map<String, String>) -> Unit = { _, _, _, _ -> },
 ) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
@@ -250,12 +250,23 @@ fun SearchScreen(
         }
         // ---------- Раздачи: сразу в результатах, с постером ----------
         if (torrents.isNotEmpty()) {
-            Text(
-                text = "🧲 Раздачи: ${torrents.size}" + if (loading) " (обновление…)" else "",
-                color = Color.White.copy(alpha = 0.6f),
-                fontSize = 15.sp,
-                modifier = Modifier.padding(top = 10.dp),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 10.dp)) {
+                Text(
+                    text = "🧲 Раздачи: ${torrents.size}" + if (loading) " (обновление…)" else "",
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 15.sp,
+                    modifier = Modifier.weight(1f),
+                )
+                Button(onClick = {
+                    val anyCard = results.firstOrNull { it.posterUrl.isNotBlank() }
+                    onOpenResults(
+                        anyCard ?: MediaItem(id = query.hashCode(), type = "movie", title = query),
+                        query,
+                        torrents,
+                        torrentMeta.mapValues { it.value.first },
+                    )
+                }) { Text("Все раздачи (${torrents.size}) →") }
+            }
             LazyRow(contentPadding = PaddingValues(vertical = 6.dp)) {
                 items(torrents.size) { i ->
                     val r = torrents[i]
@@ -267,7 +278,7 @@ fun SearchScreen(
                     Surface(
                         onClick = {
                             // Полный список раздач запроса: «лучшая сверху», пиры/сиды
-                            onOpenResults(card, query, torrents)
+                            onOpenResults(card, query, torrents, torrentMeta.mapValues { it.value.first })
                         },
                         modifier = Modifier.width(170.dp).padding(6.dp),
                         shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),

@@ -69,6 +69,7 @@ sealed interface Screen {
         val query: String,
         val results: List<com.torrenttv.app.data.TorrentResult>,
         val poster: String = "",
+        val posterMap: Map<String, String> = emptyMap(),
     ) : Screen
     data class IptvPlayer(val channel: IptvChannel) : Screen
 
@@ -139,8 +140,8 @@ private fun App() {
                 Screen.Search -> SearchScreen(
                     onBack = { screen = Screen.Home },
                     onOpenDetails = { screen = Screen.Details(it) },
-                    onOpenResults = { card, q, list ->
-                        screen = Screen.TorrentResults(card, q, list, poster = card.posterUrl)
+                    onOpenResults = { card, q, list, pmap ->
+                        screen = Screen.TorrentResults(card, q, list, poster = card.posterUrl, posterMap = pmap)
                     },
                     onTorrentSearch = { q ->
                         // Прямой торрент-поиск по запросу: фиктивная карточка

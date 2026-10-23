@@ -47,19 +47,22 @@ fun TorrentResultsScreen(
     query: String,
     results: List<com.torrenttv.app.data.TorrentResult>,
     poster: String,
+    /** Постеры раздач со страниц Рутрекера: ключ — название раздачи. */
+    posterMap: Map<String, String> = emptyMap(),
     onPickTorrent: (com.torrenttv.app.data.TorrentResult) -> Unit,
     onBack: () -> Unit,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     androidx.activity.compose.BackHandler { onBack() }
 
-    // Лучшая раздача сверху: качество → сиды → пиры
+    // Лучшая раздача сверху: максимум сидов → пиров → качество
+    // (быстрее всего стартует; самая большая по размеру ≠ лучшая)
     val qOrder = mapOf("2160p" to 4, "1080p" to 3, "720p" to 2, "SD" to 1)
     val sorted = remember(results) {
         results.sortedWith(
-            compareByDescending<com.torrenttv.app.data.TorrentResult> { qOrder[it.resolution] ?: 0 }
-                .thenByDescending { it.seeds }
-                .thenByDescending { it.peers },
+            compareByDescending<com.torrenttv.app.data.TorrentResult> { it.seeds }
+                .thenByDescending { it.peers }
+                .thenByDescending { qOrder[it.resolution] ?: 0 },
         )
     }
     val best = sorted.firstOrNull { it.seeds > 0 }
@@ -107,9 +110,10 @@ fun TorrentResultsScreen(
                         Modifier.padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (poster.isNotBlank()) {
+                        val rowPoster = posterMap[r.name]?.takeIf { it.isNotBlank() } ?: poster
+                        if (rowPoster.isNotBlank()) {
                             coil.compose.AsyncImage(
-                                model = poster,
+                                model = rowPoster,
                                 contentDescription = null,
                                 modifier = Modifier.width(64.dp).height(92.dp),
                                 contentScale = androidx.compose.ui.layout.ContentScale.Crop,
