@@ -29,6 +29,7 @@ import com.torrenttv.app.ui.OnlineScreen
 import com.torrenttv.app.ui.PlayerScreen
 import com.torrenttv.app.ui.SearchScreen
 import com.torrenttv.app.ui.SettingsScreen
+import com.torrenttv.app.ui.SmartPlayScreen
 import com.torrenttv.app.ui.TopTabBar
 import com.torrenttv.app.ui.TorrentSearchScreen
 
@@ -51,6 +52,7 @@ sealed interface Screen {
         /** Zona-режим: сразу подобрать лучшую раздачу и начать просмотр. */
         val autoStart: Boolean = true,
     ) : Screen
+    data class Watch(val item: MediaItem) : Screen
     data class Online(val item: MediaItem) : Screen
     data class OnlinePlayer(val item: MediaItem, val link: com.torrenttv.app.data.OnlineService.OnlineLink) : Screen
     data class Player(val item: MediaItem, val episode: com.torrenttv.app.data.Episode? = null) : Screen
@@ -125,12 +127,21 @@ private fun App() {
                 onBack = { screen = Screen.Home },
                 onWatch = { screen = Screen.Player(s.item) },
                 onEnterMagnet = { screen = Screen.MagnetEntry(s.item) },
-                // Zona-флоу: «Смотреть» без magnet → авто-подбор раздачи и сразу плеер
+                // Zona-флоу: «Смотреть» → онлайн (Filmix→HDRezka) → торрент, автоматически
+                onWatchSmart = { screen = Screen.Watch(s.item) },
                 onAutoSearch = { screen = Screen.TorrentSearch(s.item, autoStart = true) },
                 onManualSearch = { screen = Screen.TorrentSearch(s.item, autoStart = false) },
                 onOpenDetails = { screen = Screen.Details(it) },
                 onEpisodes = { screen = Screen.Episodes(s.item) },
                 onOnline = { screen = Screen.Online(s.item) },
+            )
+
+            is Screen.Watch -> SmartPlayScreen(
+                item = s.item,
+                onBack = { screen = Screen.Details(s.item) },
+                onPlayOnline = { link -> screen = Screen.OnlinePlayer(s.item, link) },
+                onOpenOnline = { screen = Screen.Online(s.item) },
+                onPlayTorrent = { screen = Screen.Player(s.item) },
             )
 
             is Screen.Episodes -> EpisodesScreen(

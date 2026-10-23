@@ -34,6 +34,9 @@ object RezkaService {
         "https://rezka.ag",
         "https://hdrezka-home.tv",
         "https://hdrezka.la",
+        "https://hdrezka.rest",
+        "https://hdrezka.cm",
+        "https://rezka.city",
     )
 
     private val UA =

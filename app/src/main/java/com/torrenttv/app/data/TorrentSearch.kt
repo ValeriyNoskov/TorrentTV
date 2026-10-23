@@ -116,6 +116,17 @@ object TorrentSearch {
                         })
                     }
                 }
+                // Резервные публичные источники — когда основные недоступны из сети
+                add(async {
+                    runCatching { Call(Bt4gProvider.NAME, Bt4gProvider.search(query), null) }
+                        .getOrElse { Call(Bt4gProvider.NAME, emptyList(), it.message) }
+                })
+                if (!isTvShow) {
+                    add(async {
+                        runCatching { Call(YtsProvider.NAME, YtsProvider.search(query), null) }
+                            .getOrElse { Call(YtsProvider.NAME, emptyList(), it.message) }
+                    })
+                }
                 if (jackett?.isConfigured == true) {
                     add(async {
                         runCatching { Call(JackettProvider.NAME, JackettProvider.search(jackett, query), null) }

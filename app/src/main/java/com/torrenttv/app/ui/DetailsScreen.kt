@@ -43,6 +43,8 @@ fun DetailsScreen(
     onEnterMagnet: () -> Unit = {},
     /** Авто-подбор раздачи и сразу просмотр (Zona-флоу). */
     onAutoSearch: () -> Unit = {},
+    /** Умный просмотр: онлайн → торрент автоматически. */
+    onWatchSmart: () -> Unit = {},
     /** Ручной выбор из списка раздач. */
     onManualSearch: () -> Unit = {},
     onOpenDetails: (MediaItem) -> Unit = {},
@@ -57,6 +59,7 @@ fun DetailsScreen(
     var magnet by remember { mutableStateOf(store.getMagnet(item) != null) }
     var status by remember { mutableStateOf("") }
     var similar by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+    var menu by remember { mutableStateOf(false) }
 
     LaunchedEffect(item) {
         similar = withContext(Dispatchers.IO) { MediaApi.similar(item) }
@@ -115,6 +118,8 @@ fun DetailsScreen(
 
                 Spacer(Modifier.height(20.dp))
 
+                // Zona-стиль: одна главная кнопка «Смотреть» (приложение само
+                // решает — онлайн или торрент), ручной онлайн и меню «Ещё»
                 Row {
                     Button(onClick = {
                         if (magnet) {
@@ -122,31 +127,35 @@ fun DetailsScreen(
                             store.saveProgress(item, positionSec = 0, durationSec = 0)
                             onWatch()
                         } else {
-                            // Zona-флоу: раздача подберётся автоматически и сразу включится
-                            onAutoSearch()
+                            onWatchSmart()
                         }
                     }) { Text("▶ Смотреть") }
                     Spacer(Modifier.width(16.dp))
-                    Button(onClick = onManualSearch) { Text("🔍 Выбрать раздачу") }
-                    if (item.type == "tv") {
-                        Spacer(Modifier.width(16.dp))
-                        Button(onClick = onEpisodes) { Text("🎬 Эпизоды") }
-                    }
-                    if (onlineAvailable) {
-                        Spacer(Modifier.width(16.dp))
-                        Button(onClick = onOnline) { Text("🌐 Онлайн") }
-                    }
+                    Button(onClick = onOnline) { Text("🌐 Онлайн") }
                     Spacer(Modifier.width(16.dp))
-                    Button(onClick = onEnterMagnet) {
-                        Text(if (magnet) "🔗 Заменить magnet" else "🔗 Указать magnet")
-                    }
-                    Spacer(Modifier.width(16.dp))
-                    Button(onClick = { fav = store.toggleFavorite(item) }) {
-                        Text(if (fav) "★ В избранном" else "☆ В избранное")
-                    }
-                    Spacer(Modifier.width(16.dp))
-                    Button(onClick = { later = store.toggleWatchLater(item) }) {
-                        Text(if (later) "✓ Смотреть позже" else "＋ Смотреть позже")
+                    Button(onClick = { menu = !menu }) { Text("⋯ Ещё") }
+                }
+
+                if (menu) {
+                    Spacer(Modifier.height(10.dp))
+                    Row {
+                        if (item.type == "tv") {
+                            Button(onClick = { menu = false; onEpisodes() }) { Text("🎬 Эпизоды") }
+                            Spacer(Modifier.width(12.dp))
+                        }
+                        Button(onClick = { menu = false; onManualSearch() }) { Text("🔍 Выбрать раздачу") }
+                        Spacer(Modifier.width(12.dp))
+                        Button(onClick = { menu = false; onEnterMagnet() }) {
+                            Text(if (magnet) "🔗 Заменить magnet" else "🔗 Указать magnet")
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Button(onClick = { fav = store.toggleFavorite(item) }) {
+                            Text(if (fav) "★ В избранном" else "☆ В избранное")
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Button(onClick = { later = store.toggleWatchLater(item); menu = false }) {
+                            Text(if (later) "✓ Смотреть позже" else "＋ Смотреть позже")
+                        }
                     }
                 }
 
