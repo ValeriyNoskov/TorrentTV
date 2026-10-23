@@ -43,10 +43,12 @@ import coil.compose.AsyncImage
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
 import com.torrenttv.app.data.MediaApi
+import com.torrenttv.app.data.TorrentHttp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 // Раскладка экранной клавиатуры (ЙЦУКЕН)
 private val KEY_ROWS = listOf(
@@ -77,6 +79,8 @@ fun SearchScreen(
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var torrents by remember { mutableStateOf<List<com.torrenttv.app.data.TorrentResult>>(emptyList()) }
+    // Постер и описание раздач: ключ — название раздачи
+    var torrentMeta by remember { mutableStateOf<Map<String, Pair<String, String>>>(emptyMap()) }
     var loading by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
@@ -141,6 +145,35 @@ fun SearchScreen(
                 torrents = tr.await()
                     .sortedByDescending { it.seeds }
                     .take(16)
+                // Постер и описание раздач — со страниц Рутрекера (параллельно)
+                val toLoad = torrents.filter { it.pageUrl.isNotBlank() }.take(12)
+                if (toLoad.isNotEmpty()) {
+                    val meta = withContext(Dispatchers.IO) {
+                        val pool = java.util.concurrent.Executors.newFixedThreadPool(6)
+                        try {
+                            toLoad.map { r ->
+                                pool.submit<Pair<String, Pair<String, String>>> {
+                                    val html = runCatching {
+                                        TorrentHttp.get(r.pageUrl, mapOf("User-Agent" to "Mozilla/5.0 Chrome/120"))
+                                    }.getOrNull() ?: return@submit r.name to ("" to "")
+                                    val poster = Regex("""<img[^>]+src="([^"]*uploads/posts/[^"]+)"""")
+                                        .find(html)?.groupValues?.get(1)
+                                        ?.let { if (it.startsWith("http")) it else "https://rutrackerr.ru" + it } ?: ""
+                                    // Описание из meta description: срезаем шаблонный префикс
+                                    var desc = Regex("""<meta name="description" content="([^"]{20,600})"""")
+                                        .find(html)?.groupValues?.get(1) ?: ""
+                                    desc = desc.replace(Regex("""^.*?у нас на портале\.\s*"""), "")
+                                        .replace(Regex("""\s+Рутрекер[^.]*\."""), "")
+                                        .trim()
+                                    r.name to (poster to desc)
+                                }
+                            }.map { it.get() }.toMap()
+                        } finally {
+                            pool.shutdown()
+                        }
+                    }
+                    torrentMeta = meta
+                }
             }
             // пустой ответ при ошибке API (сеть/лимит) — показываем «Повторить»
             failed = results.isEmpty() && MediaApi.lastSearchFailed
@@ -226,7 +259,10 @@ fun SearchScreen(
             LazyRow(contentPadding = PaddingValues(vertical = 6.dp)) {
                 items(torrents.size) { i ->
                     val r = torrents[i]
-                    val (tItem, poster) = posterFor(r.name)
+                    val (tItem, cardPoster) = posterFor(r.name)
+                    val meta = torrentMeta[r.name]
+                    val poster = meta?.first?.takeIf { it.isNotBlank() } ?: cardPoster
+                    val desc = meta?.second.orEmpty()
                     val card = tItem.copy(posterUrl = poster)
                     Surface(
                         onClick = {
@@ -255,9 +291,19 @@ fun SearchScreen(
                                 r.name.substringBefore('[').substringBefore('(').trim().ifBlank { r.name },
                                 color = Color.White,
                                 fontSize = 14.sp,
-                                maxLines = if (poster.isNotBlank()) 2 else 5,
+                                maxLines = if (poster.isNotBlank()) 2 else 4,
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                             )
+                            if (desc.isNotBlank()) {
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    desc,
+                                    color = Color.White.copy(alpha = 0.55f),
+                                    fontSize = 12.sp,
+                                    maxLines = 3,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                )
+                            }
                             Spacer(Modifier.height(4.dp))
                             Text(
                                 "🧲 ${r.seeds} · ${

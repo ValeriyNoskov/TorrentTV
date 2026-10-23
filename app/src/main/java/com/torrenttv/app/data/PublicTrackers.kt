@@ -217,6 +217,8 @@ object RutrackerrProvider {
         for (r in rows) {
             val hash = Regex("urn:btih:([0-9a-fA-F]{40})").find(r)?.groupValues?.get(1)?.lowercase() ?: continue
             val name = Regex("""<td><b>([^<]{4,})</b></td>""").find(r)?.groupValues?.get(1)?.trim() ?: continue
+            val pageUrl = Regex("""href="((?:https://rutrackerr\.ru)?/\d+[^"]*tor\.html)"""")
+                .find(r)?.groupValues?.get(1)?.let { if (it.startsWith("http")) it else "https://rutrackerr.ru" + it } ?: ""
             val seeds = Regex("""&nbsp;(\d+)""").find(r)?.groupValues?.get(1)?.toIntOrNull() ?: 0
             val size = Regex("([0-9.]+)\\s*(ТБ|TB|ГБ|GB|МБ|MB|КБ|KB)").find(r)?.let { m ->
                 val v = m.groupValues[1].toDoubleOrNull() ?: 0.0
@@ -236,6 +238,7 @@ object RutrackerrProvider {
                 sizeBytes = size,
                 provider = NAME,
                 resolution = ReleaseQuality.parse(name),
+                pageUrl = pageUrl,
             )
         }
         return out
