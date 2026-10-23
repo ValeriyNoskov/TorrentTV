@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -56,8 +57,9 @@ private val SECTIONS = listOf(
     Triple("search", "🔍 Поиск и фильтры", "Что скрывать из каталогов и поиска"),
     Triple("jackett", "🔗 Jackett", "Дополнительный провайдер автопоиска торрентов"),
     Triple("trackers", "🔑 Частные трекеры", "RuTracker, Kinozal, NNM-Club — без Jackett"),
-    Triple("filmix", "🌐 Filmix", "Онлайн-просмотр без торрентов"),
-    Triple("epg", "📆 Телепрограмма", "EPG для телеканалов (XMLTV)"),
+    Triple("filmix", "🌐 Онлайн-источники", "Filmix и HDRezka — просмотр без торрентов"),
+    Triple("epg", "📆 Телеканалы", "Каналы IPTV и телепрограмма"),
+    Triple("netcheck", "🩺 Проверка сети", "Какие источники доступны с этого устройства"),
 )
 
 @Composable
@@ -81,11 +83,12 @@ fun SettingsScreen(onBack: () -> Unit) {
     var fxToken by remember { mutableStateOf(store.filmixToken()) }
     var fxLogin by remember { mutableStateOf("") }
     var epgUrl by remember { mutableStateOf(store.epgUrl()) }
+    var iptvAll by remember { mutableStateOf(store.iptvAllGroups()) }
 
     // Полноэкранный редактор текста: target = "jurl"|"jkey"|"rt"|"kz"|"nnm"|"epg"
     var editTarget by remember { mutableStateOf<String?>(null) }
     var editTmp by remember { mutableStateOf("") }
-    // Под-экраны выбора (жанры/страны/стоп-слова)
+    // Под-экраны выбора (жанры/страны/стоп-слова/проверка сети)
     var subscreen by remember { mutableStateOf<String?>(null) }
     // Ожидание активации кода Filmix
     var fxWaiting by remember { mutableStateOf<String?>(null) } // user_code
@@ -272,11 +275,34 @@ fun SettingsScreen(onBack: () -> Unit) {
                             value = epgUrl.ifBlank { "teleguide.info (Россия) — по умолчанию" },
                             valueOk = true,
                         ) { openEdit("epg", epgUrl, "URL XMLTV-источника") }
+                        SettingsRow(
+                            title = "Показывать все группы каналов",
+                            value = if (iptvAll) "Все" else "Только тематические (без мусора)",
+                            valueOk = !iptvAll,
+                        ) {
+                            iptvAll = !iptvAll
+                            store.setIptvAllGroups(iptvAll)
+                        }
                         SettingsNote(
-                            "Программа («Сейчас/Далее») показывается в списке телеканалов " +
-                                "и плашкой в плеере; обновляется раз в 6 часов. Можно указать " +
-                                "свой XMLTV-источник (файл xmltv.xml.gz), например для другой " +
-                                "страны. Оставить пустым — вернётся teleguide.info."
+                            "По умолчанию показываются федеральные и тематические каналы " +
+                                "(кино, сериалы, детские, спорт, музыка, познавательные) — " +
+                                "без регионального мусора. Включите «Все группы», если " +
+                                "нужны каналы, которых нет в списке. Программа («Сейчас/Далее») " +
+                                "обновляется раз в 6 часов; источник можно поменять выше."
+                        )
+                    }
+
+                    "netcheck" -> {
+                        SettingsRow(
+                            title = "🩺 Запустить проверку",
+                            value = "Проверить 7 источников",
+                            valueOk = true,
+                        ) { subscreen = "netcheck" }
+                        SettingsNote(
+                            "Проверка показывает, какие источники (торренты, онлайн, ТВ, " +
+                                "обновления) доступны с этого устройства. Если напротив " +
+                                "источника крестик — его блокирует ваш провайдер: это не " +
+                                "неисправность приложения. Перешлите результат в поддержку."
                         )
                     }
 
@@ -312,6 +338,8 @@ fun SettingsScreen(onBack: () -> Unit) {
     subscreen?.let { sub ->
         BackHandler { subscreen = null }
         when (sub) {
+            "netcheck" -> NetCheckScreen(onClose = { subscreen = null })
+
             "genres" -> SubscreenGenres(
                 movieGenres, tvGenres, excluded,
                 onToggle = { id ->
@@ -564,6 +592,115 @@ private fun FilmixCodeScreen(code: String, msg: String, onCancel: () -> Unit) {
 }
 
 // ---------- Под-экраны выбора ----------
+
+/** Результат проверки одного источника. */
+private data class NetCheckRow(val name: String, val hint: String, val ok: Boolean?, val ms: Long)
+
+/** Проверка доступности источников: торренты, онлайн, ТВ, обновления. */
+@Composable
+private fun NetCheckScreen(onClose: () -> Unit) {
+    var rows by remember { mutableStateOf<List<NetCheckRow>>(emptyList()) }
+    var running by remember { mutableStateOf(false) }
+
+    suspend fun checkAll() {
+        running = true
+        rows = emptyList()
+        val targets = listOf(
+            "apibay (торренты)" to "https://apibay.org/q.php?q=test&cat=201",
+            "Torrentio (торренты)" to "https://torrentio.strem.fun/stream/movie/tt0133093.json",
+            "bt4g (торренты)" to "https://bt4gprx.com/api/search?q=test",
+            "YTS (торренты)" to "https://yts.mx/api/v2/list_movies.json?query_term=test",
+            "Filmix (онлайн)" to "http://filmixapp.cyou/api/v2/token_request?user_dev_apk=2.0.1&user_dev_id=&user_dev_name=Xiaomi&user_dev_os=11&user_dev_token=&user_dev_vendor=Xiaomi",
+            "HDRezka (онлайн)" to "https://hdrezka.ag/",
+            "IPTV-плейлист (ТВ)" to "https://iptv-org.github.io/iptv/countries/ru.m3u",
+            "GitHub (обновления)" to "https://api.github.com/repos/ValeriyNoskov/TorrentTV/releases/latest",
+        )
+        for ((name, url) in targets) {
+            val t0 = System.currentTimeMillis()
+            val ok = withContext(Dispatchers.IO) {
+                runCatching {
+                    com.torrenttv.app.data.TorrentHttp.client.newCall(
+                        okhttp3.Request.Builder().url(url)
+                            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                            .build()
+                    ).execute().use { it.isSuccessful }
+                }.getOrDefault(false)
+            }
+            rows = rows + NetCheckRow(name, url.substringAfter("//").substringBefore("/"), ok, System.currentTimeMillis() - t0)
+        }
+        running = false
+    }
+
+    LaunchedEffect(Unit) { checkAll() }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0E1116))
+            .padding(28.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = onClose) { Text("← Готово") }
+            Spacer(Modifier.width(16.dp))
+            Text(
+                "Проверка сети",
+                color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+            )
+        }
+        Text(
+            "Крестик = источник заблокирован вашим провайдером (это не поломка приложения)",
+            color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        Spacer(Modifier.height(12.dp))
+        LazyColumn(Modifier.weight(1f)) {
+            for (r in rows) {
+                item {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF161C26), RoundedCornerShape(10.dp))
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            when {
+                                r.ok == true -> "✓"
+                                r.ok == false -> "✗"
+                                else -> "…"
+                            },
+                            color = when (r.ok) {
+                                true -> Color(0xFF9CCC65)
+                                false -> Color(0xFFEF7B6D)
+                                null -> Color.White.copy(alpha = 0.4f)
+                            },
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.width(40.dp),
+                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(r.name, color = Color.White, fontSize = 16.sp)
+                            Text(r.hint, color = Color.White.copy(alpha = 0.4f), fontSize = 13.sp)
+                        }
+                        if (r.ok == true) {
+                            Text(
+                                "${r.ms} мс",
+                                color = Color.White.copy(alpha = 0.5f), fontSize = 13.sp,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            if (running) "Проверяю…" else if (rows.size < 8) "" else "Проверка завершена",
+            color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp,
+        )
+    }
+}
+
 
 /** Выбор скрываемых жанров: фильмы и сериалы. */
 @Composable

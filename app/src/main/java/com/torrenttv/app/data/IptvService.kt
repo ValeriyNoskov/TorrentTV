@@ -25,10 +25,10 @@ object IptvService {
     @Volatile private var cacheTime = 0L
 
     /** Загрузить (или взять из кэша) список каналов. */
-    fun channels(forceRefresh: Boolean = false): List<IptvChannel> {
+    fun channels(forceRefresh: Boolean = false, allGroups: Boolean = false): List<IptvChannel> {
         val cached = cache
         if (!forceRefresh && cached != null && System.currentTimeMillis() - cacheTime < TTL_MS) {
-            return cached
+            return if (allGroups) cached else cached.filter { it.group in SHOWN_GROUPS || it.group == FEDERAL_GROUP }
         }
         // Федеральные: только RU из большого плейлиста Free-TV, группа своя
         val federal = TorrentHttp.get(FEDERAL_URL)
@@ -65,8 +65,20 @@ object IptvService {
             cache = parsed
             cacheTime = System.currentTimeMillis()
         }
-        return parsed
+        return if (allGroups) parsed
+        else parsed.filter { it.group in SHOWN_GROUPS || it.group == FEDERAL_GROUP }
     }
+
+    /**
+     * Группы, которые показываем по умолчанию. General/Undefined (рассадник
+     * региональных и мусорных каналов) скрыты; «Показывать все группы» — в настройках.
+     */
+    val SHOWN_GROUPS = setOf(
+        "movies", "series", "entertainment", "kids", "family", "sports",
+        "music", "documentary", "science", "culture", "lifestyle", "travel",
+        "outdoor", "cooking", "comedy", "classic", "education", "auto",
+        "news", "business", "religious",
+    )
 
     /** Нормализация названия для дедупликации каналов. */
     internal fun dedupName(name: String): String = name

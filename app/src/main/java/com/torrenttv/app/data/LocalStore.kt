@@ -262,6 +262,13 @@ class LocalStore(context: Context) {
         prefs.edit().putString("epg_url", v.trim()).apply()
     }
 
+    /** Показывать в IPTV вообще все группы (по умолчанию — только тематический белый список). */
+    fun iptvAllGroups(): Boolean = prefs.getBoolean("iptv_all_groups", false)
+
+    fun setIptvAllGroups(v: Boolean) {
+        prefs.edit().putBoolean("iptv_all_groups", v).apply()
+    }
+
     // ---------- Внутреннее ----------
 
     private fun readList(key: String): List<MediaItem> {

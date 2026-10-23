@@ -62,7 +62,7 @@ fun IptvScreen(onPlay: (IptvChannel) -> Unit) {
     var epgTick by remember { mutableStateOf(0) }
 
     LaunchedEffect(Unit) {
-        val loaded = withContext(Dispatchers.IO) { IptvService.channels() }
+        val loaded = withContext(Dispatchers.IO) { IptvService.channels(allGroups = store.iptvAllGroups()) }
         channels = loaded
         loading = false
         error = loaded.isEmpty()
