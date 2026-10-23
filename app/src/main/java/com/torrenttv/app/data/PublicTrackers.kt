@@ -125,6 +125,67 @@ object BtdigProvider {
     }
 }
 
+/**
+ * RuTor — открытый русский индексатор раздач: регистрация не нужна,
+ * magnet отдаётся прямо в списке результатов. Лучший источник русских
+ * сериалов/фильмов среди публичных (apibay/EZTV — почти только англоязычное).
+ * Зеркала перебираем: основной домен часто меняется.
+ */
+object RutorProvider {
+
+    const val NAME = "rutor"
+
+    private val MIRRORS = listOf(
+        "https://rutor.info",
+        "https://rutor.is",
+        "https://rutor.org",
+        "https://rutor.black",
+    )
+
+    fun search(query: String): List<TorrentResult> {
+        val q = URLEncoder.encode(query, "UTF-8")
+        for (base in MIRRORS) {
+            val html = TorrentHttp.get("$base/search/0/0/100/2/$q") ?: continue
+            val out = parse(html)
+            if (out.isNotEmpty()) return out
+        }
+        return emptyList()
+    }
+
+    private fun parse(html: String): List<TorrentResult> {
+        val out = mutableListOf<TorrentResult>()
+        // Строки результатов: <tr class="gai|tum"> ... magnet ... название ... сиды
+        val rows = html.split("<tr class=\"gai\">", "<tr class=\"tum\">")
+        for (r in rows.drop(1)) {
+            val hash = Regex("urn:btih:([0-9a-fA-F]{40})").find(r)?.groupValues?.get(1)?.lowercase() ?: continue
+            // Название: ссылка на страницу раздачи (/torrent/NNN или с текстом)
+            val name = Regex("""href="[^"]*/torrent/[^"]*"[^>]*>([^<]{4,})</a>""").find(r)
+                ?.groupValues?.get(1)?.trim() ?: continue
+            val seeds = Regex("▲\\s*([0-9 ]+)|class=\"[^\"]*green[^\"]*\"[^>]*>\\s*([0-9 ]+)")
+                .find(r)?.groupValues?.let { g -> (g[1].ifBlank { g[2] }).replace(" ", "").toIntOrNull() } ?: 0
+            val size = Regex("([0-9.]+)\\s*(ТБ|TB|ГБ|GB|МБ|MB)").find(r)?.let { m ->
+                val v = m.groupValues[1].toDoubleOrNull() ?: 0.0
+                val u = m.groupValues[2]
+                val mult = when {
+                    u.startsWith("Т") || u == "TB" -> 1024L * 1024 * 1024 * 1024
+                    u.startsWith("Г") || u == "GB" -> 1024L * 1024 * 1024
+                    else -> 1024L * 1024
+                }
+                (v * mult).toLong()
+            } ?: 0L
+            out += TorrentResult(
+                name = name,
+                infoHash = hash,
+                seeds = seeds,
+                sizeBytes = size,
+                provider = NAME,
+                resolution = ReleaseQuality.parse(name),
+            )
+        }
+        return out
+    }
+}
+
 object KnabenProvider {
 
     const val NAME = "knaben"

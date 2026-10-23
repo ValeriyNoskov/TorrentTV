@@ -151,6 +151,14 @@ object TorrentSearch {
                     runCatching { Call(KnabenProvider.NAME, KnabenProvider.search(query), null) }
                         .getOrElse { Call(KnabenProvider.NAME, emptyList(), it.message) }
                 })
+                // RuTor — открытый русский индексатор: русские сериалы/фильмы без регистрации
+                add(async {
+                    runCatching {
+                        Call(RutorProvider.NAME, RutorProvider.search(query) +
+                            (altQuery?.takeIf { it.isNotBlank() && !it.equals(query, true) }
+                                ?.let { RutorProvider.search(it) } ?: emptyList()), null)
+                    }.getOrElse { Call(RutorProvider.NAME, emptyList(), it.message) }
+                })
                 if (jackett?.isConfigured == true) {
                     add(async {
                         runCatching { Call(JackettProvider.NAME, JackettProvider.search(jackett, query), null) }
