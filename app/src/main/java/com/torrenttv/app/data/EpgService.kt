@@ -62,7 +62,8 @@ object EpgService {
     /** Скачать свежую программу; вернуть число каналов с программой. */
     fun refresh(context: Context, channels: List<IptvChannel>): Int {
         val url = LocalStore(context).epgUrl().ifBlank { DEFAULT_URL }
-        val progs = downloadAndParse(url, channels)
+        // сетевые/XML-ошибки не должны ронять приложение
+        val progs = runCatching { downloadAndParse(url, channels) }.getOrDefault(emptyMap())
         if (progs.isNotEmpty()) {
             memory = progs
             writeCache(cacheFile(context), progs)

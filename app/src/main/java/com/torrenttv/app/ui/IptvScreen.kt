@@ -143,14 +143,15 @@ fun IptvScreen(onPlay: (IptvChannel) -> Unit) {
                 LazyColumn(Modifier.weight(1f)) {
                     if (selectedGroup == null && favs.isNotEmpty()) {
                         item(key = "hdr_fav") { ListHeader("★ Избранные") }
-                        items(favs, key = { "fav_" + it.key }) { ch ->
+                        items(favs, key = { "row_fav_${it.key}" }) { ch ->
                             ChannelListRow(ch, fav = true, epgTick, onPlay) { focused = ch }
                         }
                     }
                     for (g in orderedGroups) {
                         val list = byGroup[g].orEmpty()
-                        item(key = "hdr_$g") { ListHeader(IptvService.groupLabel(g, list.size)) }
-                        items(list, key = { it.key }) { ch ->
+                        // ключ с группой: один канал может входить в несколько групп
+                        item(key = "hdr_${g}_${list.size}") { ListHeader(IptvService.groupLabel(g, list.size)) }
+                        items(list, key = { "row_${g}_${it.key}" }) { ch ->
                             ChannelListRow(ch, fav = ch.key in favKeys, epgTick, onPlay) { focused = ch }
                         }
                     }

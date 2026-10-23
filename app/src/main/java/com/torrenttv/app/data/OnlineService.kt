@@ -20,6 +20,7 @@ object OnlineService {
     /** Публичные зеркала API (порядок = приоритет). Живое — filmixapp.cyou (http). */
     val MIRRORS = listOf(
         "http://filmixapp.cyou",
+        "https://filmixapp.cyou",
         "https://filmix.app",
         "https://filmix.ac",
         "https://filmix.my",
@@ -49,15 +50,24 @@ object OnlineService {
 
     private var activeMirror: String? = null
 
-    /** Базовый URL зеркала: сначала кэш, затем перебор. */
-    private fun mirror(): String? {
-        activeMirror?.let { return it }
+    /** Ответ похож на API (JSON), а не на заглушку/HTML-ошибку. */
+    private fun looksLikeApi(body: String): Boolean {
+        val t = body.trimStart()
+        return t.startsWith("{") || t.startsWith("[")
+    }
+
+    /** GET к API с перебором зеркал: рабочее запоминаем. Вернёт (зеркало, тело) или null. */
+    private fun apiGet(path: String): Pair<String, String>? {
+        activeMirror?.let { m ->
+            val body = TorrentHttp.get(m + path, headers())
+            if (body != null && looksLikeApi(body)) return m to body
+            activeMirror = null // кэш протух — перебираем заново
+        }
         for (m in MIRRORS) {
-            // Проверка живости: поиск отвечает массивом карточек с alt_name
-            val probe = TorrentHttp.get("$m/api/v2/search?story=test&" + devParams(""))
-            if (probe != null && probe.contains("alt_name")) {
+            val body = TorrentHttp.get(m + path, headers()) ?: continue
+            if (looksLikeApi(body)) {
                 activeMirror = m
-                return m
+                return m to body
             }
         }
         return null
@@ -65,9 +75,7 @@ object OnlineService {
 
     /** Запросить код устройства для привязки аккаунта Filmix. */
     fun requestDeviceCode(): DeviceCode? {
-        val base = mirror() ?: return null
-        val body = TorrentHttp.get("$base/api/v2/token_request?" + devParams(""), headers())
-            ?: return null
+        val (_, body) = apiGet("/api/v2/token_request?" + devParams("")) ?: return null
         val json = runCatching { JSONObject(body) }.getOrNull() ?: return null
         if (json.optString("status") != "ok") return null
         val token = json.optString("code", "")
@@ -79,30 +87,21 @@ object OnlineService {
     /** Профиль по токену: null — токен ещё не активирован/не работает. */
     fun profile(token: String): JSONObject? {
         if (token.isBlank()) return null
-        val base = mirror() ?: return null
-        val body = TorrentHttp.get("$base/api/v2/user_profile?" + devParams(token), headers())
-            ?: return null
+        val (_, body) = apiGet("/api/v2/user_profile?" + devParams(token)) ?: return null
         val json = runCatching { JSONObject(body) }.getOrNull() ?: return null
         return json.optJSONObject("user_data")
     }
 
     /** Поиск карточки по названию. Блокирующий — из фонового потока. */
     fun search(token: String, query: String): List<OnlineMatch> {
-        val base = mirror() ?: return emptyList()
-        val body = TorrentHttp.get(
-            "$base/api/v2/search?story=" + Uri.encode(query) + "&" + devParams(token),
-            headers(),
-        ) ?: return emptyList()
+        val (_, body) = apiGet("/api/v2/search?story=" + Uri.encode(query) + "&" + devParams(token))
+            ?: return emptyList()
         return parseSearch(body)
     }
 
     /** Карточка Filmix по id (в Lampa — «post»); содержит player_links. Блокирующий. */
     fun playerData(token: String, filmixId: String): List<OnlineLink> {
-        val base = mirror() ?: return emptyList()
-        val body = TorrentHttp.get(
-            "$base/api/v2/post/$filmixId?" + devParams(token),
-            headers(),
-        ) ?: return emptyList()
+        val (_, body) = apiGet("/api/v2/post/$filmixId?" + devParams(token)) ?: return emptyList()
         return runCatching { parsePlayerData(body) }.getOrDefault(emptyList())
     }
 
