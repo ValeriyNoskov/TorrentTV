@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -24,6 +25,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -31,11 +34,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem as ExoMediaItem
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.datasource.DataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Button
+import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Text
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaApi
@@ -396,43 +401,56 @@ private fun VideoPlayer(
     BackHandler { onBack() }
 
     var showTrackMenu by remember { mutableStateOf(false) }
+    var showFiles by remember { mutableStateOf(false) }
+    var showGear by remember { mutableStateOf(false) }
+    var gearMsg by remember { mutableStateOf("") }
+    // Скорость воспроизведения: живёт вне панели, чтобы выбор не сбрасывался
+    val speeds = listOf(0.75f, 1f, 1.25f, 1.5f, 2f)
+    var speedIdx by remember { mutableStateOf(1) }
+
+    // ---------- Панель «как MX»: показывается при действии пульта ----------
+    var panelTick by remember { mutableStateOf(0) }
+    var showPanel by remember { mutableStateOf(false) }
+    val playFocus = remember { FocusRequester() }
+    LaunchedEffect(panelTick) {
+        if (panelTick > 0 && !showFiles && !showGear && !showTrackMenu) {
+            showPanel = true
+            kotlinx.coroutines.delay(4500)
+            if (!showFiles && !showGear && !showTrackMenu) showPanel = false
+        }
+    }
+    LaunchedEffect(showPanel) { if (showPanel) playFocus.requestFocus() }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
                     this.player = player
-                    useController = true
-                    // Контролы скрываются через 10 секунд бездействия пульта
-                    controllerShowTimeoutMs = 10_000
-                    // MENU пульта — оверлей выбора аудиодорожек/субтитров
-                    // (встроенный контроллер Media3 аудио выбирать не умеет)
+                    // Нативные контролы выключены — своя панель «как MX»
+                    useController = false
                     setOnKeyListener { _, keyCode, event ->
-                        // Влево/вправо — перемотка ±10 сек пультом
-                        if (event.action == KeyEvent.ACTION_UP &&
-                            (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)
-                        ) {
-                            val delta = if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) 10_000L else -10_000L
-                            val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
-                            player.seekTo((player.currentPosition + delta).coerceIn(0L, dur))
-                            seekInfo = if (delta > 0) "⏩ +10 сек" else "⏪ −10 сек"
-                            showController() // панель: сикбар, время, кнопки
-                            true
-                        } else if (event.action == KeyEvent.ACTION_UP &&
-                            (keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
-                                keyCode == KeyEvent.KEYCODE_ENTER ||
-                                keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
-                        ) {
-                            // ОК на пульте — пауза/продолжить
-                            if (player.isPlaying) player.pause() else player.play()
-                            seekInfo = if (player.isPlaying) "▶ Продолжаем" else "⏸ Пауза"
-                            showController()
-                            true
-                        } else if (event.action == KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_MENU) {
-                            showTrackMenu = !showTrackMenu
-                            true
-                        } else {
-                            false
+                        if (event.action != KeyEvent.ACTION_UP) return@setOnKeyListener false
+                        when (keyCode) {
+                            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                                val delta = if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) 10_000L else -10_000L
+                                val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
+                                player.seekTo((player.currentPosition + delta).coerceIn(0L, dur))
+                                seekInfo = if (delta > 0) "⏩ +10 сек" else "⏪ −10 сек"
+                                panelTick++
+                                true
+                            }
+                            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
+                            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+                                if (player.isPlaying) player.pause() else player.play()
+                                seekInfo = if (player.isPlaying) "▶ Продолжаем" else "⏸ Пауза"
+                                panelTick++
+                                true
+                            }
+                            KeyEvent.KEYCODE_MENU -> {
+                                showTrackMenu = !showTrackMenu
+                                true
+                            }
+                            else -> false
                         }
                     }
                 }
@@ -440,43 +458,17 @@ private fun VideoPlayer(
             modifier = Modifier.fillMaxSize(),
         )
 
-        // «⏭ Пропустить титры» — в последние 3 минуты: к следующей серии (сериал)
-        // или к закрытию плеера (фильм)
+        // «⏭ Пропустить титры» — в последние 3 минуты (поверх панели)
         if (showSkip) {
-            Box(Modifier.fillMaxSize()) {
-                Button(
-                    onClick = {
-                        showSkip = false
-                        // Прыжок к самому концу: STATE_ENDED запустит переход к следующей серии
-                        player.seekTo((player.duration - 3000).coerceAtLeast(0))
-                        player.play()
-                    },
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(32.dp),
-                    colors = androidx.tv.material3.ButtonDefaults.colors(
-                        containerColor = Color(0xCC1F2430),
-                        contentColor = Color.White,
-                        focusedContainerColor = Color(0xFFF5B942),
-                        focusedContentColor = Color.Black,
-                    ),
-                ) {
-                    Text(
-                        if (episode != null) "⏭ Пропустить титры → следующая серия" else "⏭ Пропустить титры",
-                        fontSize = 15.sp,
-                    )
-                }
-            }
-        }
-
-        // «☰ Серии» — выбор другой серии/файла внутри торрента
-        var showFiles by remember { mutableStateOf(false) }
-        if (files.size > 1) {
-            androidx.tv.material3.Button(
-                onClick = { showFiles = !showFiles },
+            Button(
+                onClick = {
+                    showSkip = false
+                    player.seekTo((player.duration - 3000).coerceAtLeast(0))
+                    player.play()
+                },
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(24.dp),
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 28.dp, bottom = if (showPanel || showGear || showFiles) 150.dp else 28.dp),
                 colors = androidx.tv.material3.ButtonDefaults.colors(
                     containerColor = Color(0xCC1F2430),
                     contentColor = Color.White,
@@ -484,7 +476,152 @@ private fun VideoPlayer(
                     focusedContentColor = Color.Black,
                 ),
             ) {
-                Text(if (showFiles) "✕ Серии" else "☰ Серии (${files.size})", fontSize = 15.sp)
+                Text(
+                    if (episode != null) "⏭ Пропустить титры → следующая серия" else "⏭ Пропустить титры",
+                    fontSize = 15.sp,
+                )
+            }
+        }
+
+        // ---------- Панель «как MX»: сикбар во всю ширину + кнопки ----------
+        if (showPanel || showFiles || showGear || showTrackMenu) {
+            var posText by remember { mutableStateOf("") }
+            var posFrac by remember { mutableStateOf(0f) }
+            var bufFrac by remember { mutableStateOf(0f) }
+            LaunchedEffect(panelTick) {
+                while (true) {
+                    val dur = player.duration
+                    val p = player.currentPosition
+                    posText = "%d:%02d / %s".format(
+                        p / 60000, (p / 1000) % 60,
+                        if (dur > 0) "%d:%02d".format(dur / 60000, (dur / 1000) % 60) else "—",
+                    )
+                    if (dur > 0) posFrac = (p.toFloat() / dur).coerceIn(0f, 1f)
+                    bufFrac = player.bufferedPercentage / 100f
+                    kotlinx.coroutines.delay(400)
+                }
+            }
+            Column(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(Color(0xCC0A0E14))
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
+            ) {
+                // Сикбар во всю ширину: буфер + позиция + время
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(14.dp),
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth(bufFrac.coerceAtLeast(posFrac))
+                            .height(5.dp)
+                            .align(Alignment.CenterStart)
+                            .background(Color(0xFF4A5568), RoundedCornerShape(3.dp)),
+                    )
+                    Box(
+                        Modifier
+                            .fillMaxWidth(posFrac)
+                            .height(8.dp)
+                            .align(Alignment.CenterStart)
+                            .background(Color(0xFFF5B942), RoundedCornerShape(4.dp)),
+                    )
+                    Text(
+                        posText,
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        modifier = Modifier.align(Alignment.CenterEnd),
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // play/pause — фокус приходит сюда при показе панели
+                    androidx.tv.material3.Surface(
+                        onClick = { if (player.isPlaying) player.pause() else player.play() },
+                        modifier = Modifier.focusRequester(playFocus),
+                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF1F2430),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContentColor = Color.Black,
+                        ),
+                    ) { Text("⏸ / ▶", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) }
+                    Spacer(Modifier.width(8.dp))
+                    androidx.tv.material3.Surface(
+                        onClick = {
+                            val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
+                            player.seekTo((player.currentPosition - 10_000L).coerceIn(0L, dur))
+                            seekInfo = "⏪ −10 сек"; panelTick++
+                        },
+                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF1F2430),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContentColor = Color.Black,
+                        ),
+                    ) { Text("⏪ 10с", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
+                    Spacer(Modifier.width(8.dp))
+                    androidx.tv.material3.Surface(
+                        onClick = {
+                            val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
+                            player.seekTo((player.currentPosition + 10_000L).coerceIn(0L, dur))
+                            seekInfo = "⏩ +10 сек"; panelTick++
+                        },
+                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF1F2430),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContentColor = Color.Black,
+                        ),
+                    ) { Text("⏩ 10с", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
+                    Spacer(Modifier.width(8.dp))
+                    // Скорость: 0.75× → 1× → 1.25× → 1.5× → 2× по кругу
+                    LaunchedEffect(Unit) { player.setPlaybackParameters(player.playbackParameters.withSpeed(speeds[speedIdx])) }
+                    androidx.tv.material3.Surface(
+                        onClick = {
+                            speedIdx = (speedIdx + 1) % speeds.size
+                            player.setPlaybackParameters(player.playbackParameters.withSpeed(speeds[speedIdx]))
+                            seekInfo = "Скорость ${speeds[speedIdx]}×"
+                            panelTick++
+                        },
+                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF1F2430),
+                            contentColor = Color(0xFFF5B942),
+                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContentColor = Color.Black,
+                        ),
+                    ) { Text("${speeds[speedIdx]}×", fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
+                    Spacer(Modifier.weight(1f))
+                    if (files.size > 1) {
+                        androidx.tv.material3.Surface(
+                            onClick = { showFiles = !showFiles; showGear = false },
+                            shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
+                            colors = ClickableSurfaceDefaults.colors(
+                                containerColor = Color(0xFF1F2430),
+                                contentColor = Color.White,
+                                focusedContainerColor = Color(0xFFF5B942),
+                                focusedContentColor = Color.Black,
+                            ),
+                        ) { Text(if (showFiles) "✕ Серии" else "☰ Серии (${files.size})", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    androidx.tv.material3.Surface(
+                        onClick = { showGear = !showGear; showFiles = false },
+                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF1F2430),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContentColor = Color.Black,
+                        ),
+                    ) { Text(if (showGear) "✕" else "⚙", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) }
+                }
             }
         }
         if (showFiles) {
@@ -527,30 +664,13 @@ private fun VideoPlayer(
             }
         }
 
-        // ⚙ — качество (выбор раздачи) и внешний плеер
-        var showGear by remember { mutableStateOf(false) }
-        var gearMsg by remember { mutableStateOf("") }
-        Column(
-            Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 24.dp, bottom = if (showSkip) 110.dp else 24.dp),
-            horizontalAlignment = Alignment.End,
-        ) {
-            androidx.tv.material3.Button(
-                onClick = { showGear = !showGear },
-                colors = androidx.tv.material3.ButtonDefaults.colors(
-                    containerColor = Color(0xCC1F2430),
-                    contentColor = Color.White,
-                    focusedContainerColor = Color(0xFFF5B942),
-                    focusedContentColor = Color.Black,
-                ),
-            ) { Text(if (showGear) "✕" else "⚙", fontSize = 16.sp) }
-        }
+        // ⚙-меню: «Другое качество» и «Внешний плеер» — раскрывается из панели,
+        // показывается над панелью
         if (showGear) {
             Column(
                 Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(end = 24.dp, bottom = if (showSkip) 162.dp else 76.dp)
+                    .padding(end = 24.dp, bottom = if (showSkip) 230.dp else 150.dp)
                     .background(Color(0xF0151B26), androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
                     .padding(10.dp),
                 horizontalAlignment = Alignment.End,

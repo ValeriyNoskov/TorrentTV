@@ -47,6 +47,7 @@ import com.torrenttv.app.data.TorrentHttp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -124,60 +125,64 @@ fun SearchScreen(
             loading = true
             failed = false
             delay(500)
-            kotlinx.coroutines.coroutineScope {
-                val films = async(Dispatchers.IO) {
-                    MediaApi.search(query).filter { store.isAllowed(it) }
-                }
-                val tr = async(Dispatchers.IO) {
-                    runCatching {
-                        com.torrenttv.app.data.TorrentSearch.searchDetailed(
-                            query = query,
-                            altQuery = null,
-                            isTvShow = false,
-                            imdbId = "",
-                            jackett = store.jackettConfig(),
-                            privateTrackers = store.privateTrackers(),
-                            excludedKeywords = store.excludedKeywords().toSet(),
-                        ).first
-                    }.getOrDefault(emptyList())
-                }
-                results = films.await()
-                torrents = tr.await()
-                    .sortedByDescending { it.seeds }
-                    .take(16)
-                // Постер и описание раздач — со страниц Рутрекера (параллельно)
-                val toLoad = torrents.filter { it.pageUrl.isNotBlank() }.take(12)
-                if (toLoad.isNotEmpty()) {
-                    val meta = withContext(Dispatchers.IO) {
-                        val pool = java.util.concurrent.Executors.newFixedThreadPool(6)
-                        try {
-                            toLoad.map { r ->
-                                pool.submit<Pair<String, Pair<String, String>>> {
-                                    val html = runCatching {
-                                        TorrentHttp.get(r.pageUrl, mapOf("User-Agent" to "Mozilla/5.0 Chrome/120"))
-                                    }.getOrNull() ?: return@submit r.name to ("" to "")
-                                    val poster = Regex("""<img[^>]+src="([^"]*uploads/posts/[^"]+)"""")
-                                        .find(html)?.groupValues?.get(1)
-                                        ?.let { if (it.startsWith("http")) it else "https://rutrackerr.ru" + it } ?: ""
-                                    // Описание из meta description: срезаем шаблонный префикс
-                                    var desc = Regex("""<meta name="description" content="([^"]{20,600})"""")
-                                        .find(html)?.groupValues?.get(1) ?: ""
-                                    desc = desc.replace(Regex("""^.*?у нас на портале\.\s*"""), "")
-                                        .replace(Regex("""\s+Рутрекер[^.]*\."""), "")
-                                        .trim()
-                                    r.name to (poster to desc)
-                                }
-                            }.map { it.get() }.toMap()
-                        } finally {
-                            pool.shutdown()
-                        }
+            // Прямо в scope LaunchedEffect: фоновые корутины не задерживают выход
+            val films = async(Dispatchers.IO) {
+                MediaApi.search(query).filter { store.isAllowed(it) }
+            }
+            val tr = async(Dispatchers.IO) {
+                runCatching {
+                    com.torrenttv.app.data.TorrentSearch.searchDetailed(
+                        query = query,
+                        altQuery = null,
+                        isTvShow = false,
+                        imdbId = "",
+                        jackett = store.jackettConfig(),
+                        privateTrackers = store.privateTrackers(),
+                        excludedKeywords = store.excludedKeywords().toSet(),
+                    ).first
+                }.getOrDefault(emptyList())
+            }
+            // Раздачи показываем сразу, не дожидаясь фильмов
+            torrents = tr.await()
+                .sortedByDescending { it.seeds }
+                .take(16)
+            loading = false
+            // Постер и описание раздач — со страниц Рутрекера ФОНОМ:
+            // карточки уже видны, постеры появляются по мере загрузки
+            val toLoad = torrents.filter { it.pageUrl.isNotBlank() }.take(12)
+            if (toLoad.isNotEmpty()) {
+                val querySnapshot = query
+                launch(Dispatchers.IO) {
+                    val pool = java.util.concurrent.Executors.newFixedThreadPool(6)
+                    try {
+                        val meta = toLoad.map { r ->
+                            pool.submit<Pair<String, Pair<String, String>>> {
+                                val html = runCatching {
+                                    TorrentHttp.get(r.pageUrl, mapOf("User-Agent" to "Mozilla/5.0 Chrome/120"))
+                                }.getOrNull() ?: return@submit r.name to ("" to "")
+                                val poster = Regex("""<img[^>]+src="([^"]*uploads/posts/[^"]+)"""")
+                                    .find(html)?.groupValues?.get(1)
+                                    ?.let { if (it.startsWith("http")) it else "https://rutrackerr.ru" + it } ?: ""
+                                // Описание из meta description: срезаем шаблонный префикс
+                                var desc = Regex("""<meta name="description" content="([^"]{20,600})"""")
+                                    .find(html)?.groupValues?.get(1) ?: ""
+                                desc = desc.replace(Regex("""^.*?у нас на портале\.\s*"""), "")
+                                    .replace(Regex("""\s+Рутрекер[^.]*\."""), "")
+                                    .trim()
+                                r.name to (poster to desc)
+                            }
+                        }.map { it.get() }.toMap()
+                        // Запрос мог смениться, пока грузились страницы — не затирать
+                        if (kotlin.coroutines.coroutineContext.isActive && querySnapshot == query) torrentMeta = meta
+                    } finally {
+                        pool.shutdown()
                     }
-                    torrentMeta = meta
                 }
             }
+            // Фильмы догружаются параллельно — карточки появятся сами
+            results = films.await()
             // пустой ответ при ошибке API (сеть/лимит) — показываем «Повторить»
             failed = results.isEmpty() && MediaApi.lastSearchFailed
-            loading = false
         } else {
             results = emptyList()
             torrents = emptyList()
