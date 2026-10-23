@@ -138,6 +138,31 @@ class LocalStore(context: Context) {
         return true
     }
 
+    // ---------- Избранные телеканалы ----------
+
+    fun favChannels(): List<IptvChannel> {
+        val arr = runCatching { org.json.JSONArray(prefs.getString("fav_channels", "[]")) }
+            .getOrDefault(org.json.JSONArray())
+        return (0 until arr.length()).mapNotNull { i ->
+            val o = arr.optJSONObject(i) ?: return@mapNotNull null
+            IptvChannel.fromJson(o).takeIf { it.url.isNotBlank() && it.name.isNotBlank() }
+        }
+    }
+
+    fun isFavChannel(ch: IptvChannel): Boolean =
+        favChannels().any { it.key == ch.key }
+
+    /** Переключить; вернуть новое состояние (true = добавлен). */
+    fun toggleFavChannel(ch: IptvChannel): Boolean {
+        val list = favChannels().toMutableList()
+        val existed = list.removeAll { it.key == ch.key }
+        if (!existed) list.add(0, ch)
+        prefs.edit()
+            .putString("fav_channels", org.json.JSONArray(list.map { it.toJson() }).toString())
+            .apply()
+        return !existed
+    }
+
     // ---------- Jackett (опциональный провайдер поиска) ----------
 
     fun jackettUrl(): String = prefs.getString("jackett_url", "") ?: ""

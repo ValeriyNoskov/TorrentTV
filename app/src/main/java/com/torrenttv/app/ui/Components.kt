@@ -404,10 +404,11 @@ fun TopTabBar(active: Screen, onTab: (Screen) -> Unit) {
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
         )
-        Spacer(Modifier.width(28.dp))
+        Spacer(Modifier.width(20.dp))
         TabButton("🏠 Главная", Screen.Home, active, onTab)
         TabButton("🎬 Фильмы", Screen.Movies, active, onTab)
         TabButton("📺 Сериалы", Screen.TvShows, active, onTab)
+        TabButton("📡 ТВ-каналы", Screen.Iptv, active, onTab)
         TabButton("🔍 Поиск", Screen.Search, active, onTab)
         TabButton("⚙ Настройки", Screen.Settings, active, onTab)
     }
@@ -434,9 +435,10 @@ fun TabButton(label: String, target: Screen, active: Screen, onTab: (Screen) -> 
         Text(
             text = label,
             color = if (isActive) Color(0xFF0E1116) else Color.White,
-            fontSize = 16.sp,
+            fontSize = 15.sp,
             fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+            maxLines = 1,
+            modifier = Modifier.padding(horizontal = 13.dp, vertical = 10.dp),
         )
     }
 }
