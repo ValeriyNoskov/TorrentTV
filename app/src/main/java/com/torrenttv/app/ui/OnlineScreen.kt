@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -466,6 +468,19 @@ fun OnlinePlayerScreen(link: OnlineService.OnlineLink, title: String, onBack: ()
     var showSettings by remember { mutableStateOf(false) }
     var maxQuality by remember { mutableStateOf<Int?>(null) } // null = авто
     var seekInfo by remember { mutableStateOf("") }           // «⏩ +10 сек» при перемотке пультом
+    // Панель контролов при действии пульта (счётчик действий — триггер показа)
+    var panelTick by remember { mutableStateOf(0) }
+    var showPanel by remember { mutableStateOf(false) }
+    val gearFocus = remember { FocusRequester() }
+    LaunchedEffect(panelTick) {
+        if (panelTick > 0 && !showSettings && !showQuality) {
+            showPanel = true
+            kotlinx.coroutines.delay(4000)
+            if (!showSettings && !showQuality) showPanel = false
+        }
+    }
+    // При открытой панели фокус сразу на шестерёнке — пульт её находит
+    LaunchedEffect(showPanel) { if (showPanel) gearFocus.requestFocus() }
 
     val player = remember(link.url) {
         // CDN проверяет Referer: у Filmix — filmix.ac, у HDRezka — её зеркало.
@@ -513,6 +528,7 @@ fun OnlinePlayerScreen(link: OnlineService.OnlineLink, title: String, onBack: ()
 
     BackHandler(enabled = showQuality) { showQuality = false }
     BackHandler(enabled = showSettings) { showSettings = false }
+    BackHandler(enabled = showPanel && !showSettings && !showQuality) { showPanel = false }
     BackHandler { onBack() }
 
     // Галочка «Всегда внешний плеер»: сразу открываем во внешнем плеере и выходим
@@ -545,10 +561,11 @@ fun OnlinePlayerScreen(link: OnlineService.OnlineLink, title: String, onBack: ()
             factory = { ctx ->
                 PlayerView(ctx).apply {
                     this.player = player
-                    useController = true
-                    controllerShowTimeoutMs = 10_000
+                    // Нативные контролы выключены: перехватывают пульт и мешают
+                    // дойти до нашей панели (⚙ Качество). Панель — своя, Compose.
+                    useController = false
                     // Пульт: влево/вправо — перемотка ±10 сек (с индикатором),
-                    // обычное поведение контроллера (фокус-навигация) не подходит ТВ
+                    // ОК — пауза, MENU — шестерёнка
                     setOnKeyListener { _, keyCode, event ->
                         // Влево/вправо — перемотка ±10 сек
                         if (event.action == android.view.KeyEvent.ACTION_UP &&
@@ -559,8 +576,7 @@ fun OnlinePlayerScreen(link: OnlineService.OnlineLink, title: String, onBack: ()
                             val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
                             player.seekTo((player.currentPosition + delta).coerceIn(0L, dur))
                             seekInfo = if (delta > 0) "⏩ +10 сек" else "⏪ −10 сек"
-                            // Показываем панель: сикбар, время, кнопки перемотки
-                            showController()
+                            panelTick++
                             true
                         } else if (event.action == android.view.KeyEvent.ACTION_UP &&
                             (keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER ||
@@ -570,8 +586,12 @@ fun OnlinePlayerScreen(link: OnlineService.OnlineLink, title: String, onBack: ()
                             // ОК на пульте — пауза/продолжить
                             if (player.isPlaying) player.pause() else player.play()
                             seekInfo = if (player.isPlaying) "▶ Продолжаем" else "⏸ Пауза"
-                            // Панель с контролами при действии пульта
-                            showController()
+                            panelTick++
+                            true
+                        } else if (event.action == android.view.KeyEvent.ACTION_UP &&
+                            keyCode == android.view.KeyEvent.KEYCODE_MENU
+                        ) {
+                            showSettings = !showSettings
                             true
                         } else {
                             false
@@ -608,14 +628,48 @@ fun OnlinePlayerScreen(link: OnlineService.OnlineLink, title: String, onBack: ()
             )
         }
 
-        // Шестерёнка внизу справа (рядом с контролами — как в MX Player)
-        Column(
-            Modifier
-                .align(Alignment.BottomEnd)
-                .padding(24.dp),
-            horizontalAlignment = Alignment.End,
-        ) {
-            PlayerChip(if (showSettings) "✕" else "⚙") { showSettings = !showSettings }
+        // Панель контролов «как MX»: появляется при действии пульта,
+        // исчезает через 4 сек; шестерёнка ⚙ — качество и внешний плеер
+        if (showPanel || showSettings || showQuality) {
+            var posText by remember { mutableStateOf("") }
+            LaunchedEffect(panelTick) {
+                while (true) {
+                    val p = player.currentPosition / 1000
+                    val d = (player.duration / 1000).takeIf { it > 0 }
+                    posText = "%d:%02d / %s".format(p / 60, p % 60, d?.let { "${it / 60}:${"%02d".format(it % 60)}" } ?: "—")
+                    kotlinx.coroutines.delay(500)
+                }
+            }
+            Row(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(Color(0xB3000000))
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(posText, color = Color.White, fontSize = 15.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    PlayerChip("⏸") { if (player.isPlaying) player.pause() else player.play() }
+                    Spacer(Modifier.width(8.dp))
+                    PlayerChip("⏪10с") {
+                        val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
+                        player.seekTo((player.currentPosition - 10_000L).coerceIn(0L, dur))
+                        seekInfo = "⏪ −10 сек"
+                        panelTick++
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    PlayerChip("⏩10с") {
+                        val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
+                        player.seekTo((player.currentPosition + 10_000L).coerceIn(0L, dur))
+                        seekInfo = "⏩ +10 сек"
+                        panelTick++
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    PlayerChip(if (showSettings) "✕" else "⚙", focusRequester = gearFocus) { showSettings = !showSettings }
+                }
+            }
         }
 
         // Меню шестерёнки — раскрывается вверх от кнопки
@@ -699,10 +753,12 @@ fun OnlinePlayerScreen(link: OnlineService.OnlineLink, title: String, onBack: ()
 
 /** Небольшая кнопка поверх видео. */
 @Composable
-private fun PlayerChip(label: String, onClick: () -> Unit) {
+private fun PlayerChip(label: String, focusRequester: FocusRequester? = null, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        modifier = Modifier.mouseClick { onClick() },
+        modifier = Modifier
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .mouseClick { onClick() },
         shape = clickableSurfaceShape(RoundedCornerShape(8.dp)),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color(0x990E1116),
