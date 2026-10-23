@@ -1,5 +1,6 @@
 package com.torrenttv.app.ui
 
+import android.view.KeyEvent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -210,6 +211,8 @@ private fun VideoPlayer(
 
     BackHandler { onBack() }
 
+    var showTrackMenu by remember { mutableStateOf(false) }
+
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         AndroidView(
             factory = { ctx ->
@@ -218,9 +221,23 @@ private fun VideoPlayer(
                     useController = true
                     // Контролы скрываются через 10 секунд бездействия пульта
                     controllerShowTimeoutMs = 10_000
+                    // MENU пульта — оверлей выбора аудиодорожек/субтитров
+                    // (встроенный контроллер Media3 аудио выбирать не умеет)
+                    setOnKeyListener { _, keyCode, event ->
+                        if (event.action == KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_MENU) {
+                            showTrackMenu = !showTrackMenu
+                            true
+                        } else {
+                            false
+                        }
+                    }
                 }
             },
             modifier = Modifier.fillMaxSize(),
         )
+
+        if (showTrackMenu) {
+            TrackMenuOverlay(player = player, onDismiss = { showTrackMenu = false })
+        }
     }
 }
