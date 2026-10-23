@@ -20,6 +20,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,11 +38,13 @@ import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Button
 import androidx.tv.material3.Text
 import com.torrenttv.app.data.LocalStore
+import com.torrenttv.app.data.MediaApi
 import com.torrenttv.app.data.MediaItem
 import com.torrenttv.app.torrent.TorrentDataSource
 import com.torrenttv.app.torrent.TorrentEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -51,9 +54,16 @@ import java.io.File
  * Позиция просмотра сохраняется каждые 5 секунд в «Продолжить просмотр».
  */
 @Composable
-fun PlayerScreen(item: MediaItem, episode: com.torrenttv.app.data.Episode? = null, onBack: () -> Unit) {
+fun PlayerScreen(
+    item: MediaItem,
+    episode: com.torrenttv.app.data.Episode? = null,
+    onBack: () -> Unit,
+    /** Серия закончилась — перейти к следующей (автоплей сериала). */
+    onPlayNext: (com.torrenttv.app.data.Episode) -> Unit = {},
+) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
+    val scope = rememberCoroutineScope()
     // Источник эпизода хранится с суффиксом (":s01e05") — у каждой серии свой
     val sourceSuffix = episode?.sourceSuffix ?: ""
     val sourceKey = item.storeKey + sourceSuffix
@@ -175,7 +185,33 @@ fun PlayerScreen(item: MediaItem, episode: com.torrenttv.app.data.Episode? = nul
 
     val st = stream
     if (st != null && bufferedPct >= 100) {
-        VideoPlayer(stream = st, item = item, episode = episode, store = store, onBack = onBack)
+        VideoPlayer(
+            stream = st,
+            item = item,
+            episode = episode,
+            store = store,
+            onBack = onBack,
+            onEnded = {
+                val ep = episode
+                if (ep != null) {
+                    // Автоплей: следующая серия по метаданным (кэш метабазы работает без сети)
+                    scope.launch {
+                        val seasons = withContext(Dispatchers.IO) {
+                            runCatching { MediaApi.seasons(item) }.getOrDefault(emptyList())
+                        }
+                        val next = seasons
+                            .firstOrNull { it.number == ep.season }
+                            ?.episodes?.firstOrNull { it.episode == ep.episode + 1 }
+                            ?: seasons
+                                .firstOrNull { it.number == ep.season + 1 }
+                                ?.episodes?.firstOrNull()
+                        if (next != null) onPlayNext(next) else onBack()
+                    }
+                } else {
+                    onBack()
+                }
+            },
+        )
     } else {
         // Экран буферизации
         BackHandler { onBack() }
@@ -232,6 +268,8 @@ private fun VideoPlayer(
     episode: com.torrenttv.app.data.Episode?,
     store: LocalStore,
     onBack: () -> Unit,
+    /** Видео дочитано до конца (титры прошёл или «Пропустить титры»). */
+    onEnded: () -> Unit,
 ) {
     val context = LocalContext.current
     val sourceKey = item.storeKey + (episode?.sourceSuffix ?: "")
@@ -264,13 +302,14 @@ private fun VideoPlayer(
             }
     }
 
-    // Конец фильма: автозакрытие плеера (файл удалится при выходе)
+    // Конец видео: обработчик снаружи (автозакрытие фильма / следующая серия)
+    var showSkip by remember { mutableStateOf(false) } // «Пропустить титры» доступна
     DisposableEffect(player) {
         val listener = object : androidx.media3.common.Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == androidx.media3.common.Player.STATE_ENDED) {
                     player.seekTo(player.duration)
-                    onBack()
+                    onEnded()
                 }
             }
         }
@@ -278,7 +317,7 @@ private fun VideoPlayer(
         onDispose { player.removeListener(listener) }
     }
 
-    // Автосохранение позиции каждые 5 секунд
+    // Автосохранение позиции каждые 5 секунд + показ «Пропустить титры» в последние 3 минуты
     LaunchedEffect(player) {
         while (true) {
             delay(5000)
@@ -290,6 +329,7 @@ private fun VideoPlayer(
                     sourceKey = sourceKey,
                     episodeLabel = episode?.code ?: "",
                 )
+                showSkip = player.duration - player.currentPosition < 3 * 60_000L
             }
         }
     }
@@ -329,6 +369,35 @@ private fun VideoPlayer(
             },
             modifier = Modifier.fillMaxSize(),
         )
+
+        // «⏭ Пропустить титры» — в последние 3 минуты: к следующей серии (сериал)
+        // или к закрытию плеера (фильм)
+        if (showSkip) {
+            Box(Modifier.fillMaxSize()) {
+                Button(
+                    onClick = {
+                        showSkip = false
+                        // Прыжок к самому концу: STATE_ENDED запустит переход к следующей серии
+                        player.seekTo((player.duration - 3000).coerceAtLeast(0))
+                        player.play()
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(32.dp),
+                    colors = androidx.tv.material3.ButtonDefaults.colors(
+                        containerColor = Color(0xCC1F2430),
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContentColor = Color.Black,
+                    ),
+                ) {
+                    Text(
+                        if (episode != null) "⏭ Пропустить титры → следующая серия" else "⏭ Пропустить титры",
+                        fontSize = 15.sp,
+                    )
+                }
+            }
+        }
 
         if (showTrackMenu) {
             TrackMenuOverlay(player = player, onDismiss = { showTrackMenu = false })

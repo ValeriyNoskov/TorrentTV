@@ -192,6 +192,8 @@ private fun App() {
                     screen = if (s.episode != null) Screen.Episodes(s.item)
                     else Screen.Details(s.item)
                 },
+                // Автоплей: серия закончилась → сразу следующая
+                onPlayNext = { next -> screen = Screen.Player(s.item, next) },
             )
 
             is Screen.Online -> OnlineScreen(
