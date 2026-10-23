@@ -57,6 +57,27 @@ object TorrentEngine {
             0L
         }
 
+        /** Число подключённых пиров (для диагностики на экране буферизации). */
+        fun peers(): Int = try {
+            handle.status().numPeers()
+        } catch (_: Exception) {
+            0
+        }
+
+        /** Скорость загрузки, байт/с (payload). */
+        fun speedBps(): Long = try {
+            handle.status().downloadPayloadRate().toLong()
+        } catch (_: Exception) {
+            0L
+        }
+
+        /** Общий прогресс торрента, 0..1. */
+        fun progress(): Float = try {
+            handle.status().progress()
+        } catch (_: Exception) {
+            0f
+        }
+
         /**
          * Приоритет кусков вокруг абсолютной позиции в торренте — чтобы перемотка
          * в середину фильма не ждала, пока последовательно скачается всё до неё.

@@ -27,6 +27,12 @@ object TorrentSearch {
         "udp://tracker.torrent.eu.org:451/announce",
         "udp://exodus.desync.com:6969/announce",
         "udp://tracker.tiny-vps.com:6969/announce",
+        // http/https-анонсы: udp-трекеры в некоторых сетях (в т.ч. в РФ) режутся —
+        // эти работают по обычному HTTP и повышают шанс найти пиры
+        "http://tracker.gbitt.info:80/announce",
+        "https://tracker.gbitt.info:443/announce",
+        "http://open.acgnxtracker.com:80/announce",
+        "https://tracker.nanoha.org:443/announce",
     )
 
     /**

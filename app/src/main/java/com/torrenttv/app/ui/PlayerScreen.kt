@@ -61,6 +61,7 @@ fun PlayerScreen(item: MediaItem, episode: com.torrenttv.app.data.Episode? = nul
 
     var status by remember { mutableStateOf(if (magnet == null) "Нет magnet-ссылки" else "Подготовка…") }
     var bufferedPct by remember { mutableStateOf(0) }
+    var netInfo by remember { mutableStateOf("") }
     var stream by remember { mutableStateOf<TorrentEngine.StreamSession?>(null) }
 
     LaunchedEffect(magnet) {
@@ -96,8 +97,23 @@ fun PlayerScreen(item: MediaItem, episode: com.torrenttv.app.data.Episode? = nul
 
         // Порог старта: 4 МБ или ~3% файла (чтобы плеер прочитал заголовки/индекс)
         val threshold = maxOf(4L * 1024 * 1024, st.fileSize / 33)
+        // Диагностика и таймаут: если за 3 минуты не скачалось — говорим прямо,
+        // вместо вечного «Буферизация»
+        val deadline = System.currentTimeMillis() + 180_000
         while (st.headBytes() < threshold) {
             bufferedPct = ((st.headBytes() * 100) / threshold).toInt().coerceIn(0, 100)
+            val mb = st.headBytes() / 1024 / 1024
+            val speed = st.speedBps() / 1024
+            netInfo = if (st.peers() > 0) {
+                "Пиры: ${st.peers()} · Скачано: $mb МБ · ${speed} КБ/с"
+            } else {
+                "Пиры не найдены — трекеры/DHT недоступны из этой сети"
+            }
+            if (System.currentTimeMillis() > deadline) {
+                status = "Раздача не отвечает: пиры недоступны из вашей сети. " +
+                    "Попробуйте другую раздачу, VPN или Jackett"
+                return@LaunchedEffect
+            }
             delay(500)
         }
         bufferedPct = 100
@@ -124,6 +140,10 @@ fun PlayerScreen(item: MediaItem, episode: com.torrenttv.app.data.Episode? = nul
             }
             Spacer(Modifier.height(16.dp))
             Text(status, color = Color(0xFFF5B942), fontSize = 18.sp)
+            if (netInfo.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text(netInfo, color = Color.White.copy(alpha = 0.6f), fontSize = 15.sp)
+            }
 
             if (bufferedPct > 0 && bufferedPct < 100) {
                 Spacer(Modifier.height(16.dp))

@@ -23,6 +23,9 @@ class TorrentDataSource(private val st: TorrentEngine.StreamSession) : DataSourc
 
     override fun open(dataSpec: DataSpec): Long {
         absPos = st.fileOffset + dataSpec.position
+        // Seek в середину: поднимаем приоритет кусков вокруг новой позиции,
+        // иначе sequential-загрузка будет ползти с начала и read заблокируется
+        if (dataSpec.position > 0) st.boostPiecesAround(absPos)
         raf = RandomAccessFile(st.videoFile, "r")
         return if (dataSpec.length != C.LENGTH_UNSET.toLong()) {
             dataSpec.length
@@ -35,9 +38,15 @@ class TorrentDataSource(private val st: TorrentEngine.StreamSession) : DataSourc
         if (length == 0) return 0
         val f = raf ?: throw IOException("DataSource closed")
 
-        // Ждём, пока последовательная загрузка доберётся до нужного диапазона
+        // Ждём, пока загрузка доберётся до нужного диапазона. Таймаут 90 с:
+        // без него заблокированный поток ExoPlayer зависает молча (чёрный экран)
         val end = absPos + length
+        val deadline = System.currentTimeMillis() + 90_000
         while (st.headBytes() < end) {
+            if (!TorrentEngine.session.isRunning) throw IOException("Торрент-сессия остановлена")
+            if (System.currentTimeMillis() > deadline) {
+                throw IOException("Куски не загружаются — пиры недоступны")
+            }
             Thread.sleep(250)
         }
 
