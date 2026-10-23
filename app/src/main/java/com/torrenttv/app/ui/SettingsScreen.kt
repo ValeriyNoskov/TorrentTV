@@ -79,7 +79,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
 
-    var section by remember { mutableStateOf("search") }
+    var section by remember { mutableStateOf(store.lastSettingsSection()) }
 
     var excluded by remember { mutableStateOf(store.excludedGenreIds()) }
     var excludedCountries by remember { mutableStateOf(store.excludedCountryIds()) }
@@ -212,35 +212,26 @@ fun SettingsScreen(onBack: () -> Unit) {
         Modifier
             .fillMaxSize()
             .background(Color(0xFF0E1116))
-            .padding(24.dp),
+            .padding(20.dp),
     ) {
-        // ---------- Разделы (слева) ----------
+        // ---------- Разделы (слева): компактно, всё видно без прокрутки ----------
         Column(
             Modifier
-                .width(300.dp)
+                .width(252.dp)
                 .fillMaxHeight()
                 .verticalScroll(rememberScrollState()),
         ) {
-            Button(onClick = onBack) { Text("← Назад") }
-            Text(
-                "Настройки",
-                color = Color.White,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 10.dp, bottom = 8.dp),
-            )
+            SectionItem("← Назад", false) { onBack() }
+            Spacer(Modifier.height(8.dp))
             for ((id, title, _) in SECTIONS) {
                 SectionItem(title, section == id) {
                     section = id
+                    store.setLastSettingsSection(id)
                     subscreen = null
                 }
             }
-            // Полный выход из приложения
-            Button(
-                onClick = { (context as? android.app.Activity)?.finishAffinity() },
-                modifier = Modifier.padding(top = 20.dp),
-            ) {
-                Text("⛔ Выход из приложения")
+            SectionItem("⛔ Выход", false) {
+                (context as? android.app.Activity)?.finishAffinity()
             }
         }
 
@@ -609,7 +600,7 @@ private fun SectionItem(title: String, selected: Boolean, onClick: () -> Unit) {
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 3.dp)
+            .padding(vertical = 2.dp)
             .mouseClick { onClick() },
         shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
         colors = ClickableSurfaceDefaults.colors(
@@ -625,9 +616,9 @@ private fun SectionItem(title: String, selected: Boolean, onClick: () -> Unit) {
     ) {
         Text(
             text = (if (selected) "▸ " else "") + title,
-            fontSize = 16.sp,
+            fontSize = 15.sp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
         )
     }
 }

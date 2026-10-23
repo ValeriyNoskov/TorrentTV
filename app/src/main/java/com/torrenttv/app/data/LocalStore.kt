@@ -305,6 +305,13 @@ class LocalStore(context: Context) {
         prefs.edit().putBoolean("external_keyboard", v).apply()
     }
 
+    /** Последняя открытая секция настроек — открываем её при входе. */
+    fun lastSettingsSection(): String = prefs.getString("settings_section", "search") ?: "search"
+
+    fun setLastSettingsSection(id: String) {
+        prefs.edit().putString("settings_section", id).apply()
+    }
+
     // ---------- Внутреннее ----------
 
     private fun readList(key: String): List<MediaItem> {

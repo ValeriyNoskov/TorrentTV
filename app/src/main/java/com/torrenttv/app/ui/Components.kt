@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -40,7 +42,9 @@ import androidx.tv.material3.ClickableSurfaceShape
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import androidx.compose.foundation.layout.Arrangement
 import com.torrenttv.app.data.Genre
+import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
 import com.torrenttv.app.MainActivity
 import com.torrenttv.app.Screen
@@ -433,57 +437,115 @@ fun GenreChipsMulti(
     }
 }
 
-/** Верхняя панель-табы: Главная · Фильмы · Сериалы · Поиск · Настройки. */
+/** Левый навигационный бар: логотип + вертикальные кнопки (иконка + подпись). */
 @Composable
-fun TopTabBar(active: Screen, onTab: (Screen) -> Unit) {
-    Row(
+fun SideNav(active: Screen, onTab: (Screen) -> Unit) {
+    Column(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 28.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .width(104.dp)
+            .fillMaxHeight()
+            .background(Color(0xFF12161F))
+            .padding(vertical = 14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Text(
-            text = "ВНосКино",
+            text = "ВНос\nКино",
             color = Color(0xFFF5B942),
-            fontSize = 24.sp,
+            fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            lineHeight = 18.sp,
+            modifier = Modifier.padding(bottom = 10.dp),
         )
-        Spacer(Modifier.width(20.dp))
-        TabButton("🏠 Главная", Screen.Home, active, onTab)
-        TabButton("🎬 Фильмы", Screen.Movies, active, onTab)
-        TabButton("📺 Сериалы", Screen.TvShows, active, onTab)
-        TabButton("🎪 Шоу", Screen.Shows, active, onTab)
-        TabButton("🔍 Поиск", Screen.Search, active, onTab)
-        TabButton("⚙ Настройки", Screen.Settings, active, onTab)
+        SideBarButton("🏠", "Главная", Screen.Home, active, onTab)
+        SideBarButton("🎬", "Фильмы", Screen.Movies, active, onTab)
+        SideBarButton("📺", "Сериалы", Screen.TvShows, active, onTab)
+        SideBarButton("🎪", "Шоу", Screen.Shows, active, onTab)
+        SideBarButton("⭐", "Избранное", Screen.Favorites, active, onTab)
+        SideBarButton("🔍", "Поиск", Screen.Search, active, onTab)
+        SideBarButton("⚙", "Настройки", Screen.Settings, active, onTab)
     }
 }
 
 @Composable
-fun TabButton(label: String, target: Screen, active: Screen, onTab: (Screen) -> Unit) {
+fun SideBarButton(
+    icon: String,
+    label: String,
+    target: Screen,
+    active: Screen,
+    onTab: (Screen) -> Unit,
+) {
     val isActive = active == target
     Surface(
         onClick = { onTab(target) },
-        modifier = Modifier.padding(4.dp).mouseClick { onTab(target) },
-        shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+        modifier = Modifier
+            .width(92.dp)
+            .mouseClick { onTab(target) },
+        shape = clickableSurfaceShape(RoundedCornerShape(12.dp)),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (isActive) Color(0xFFF5B942) else Color(0xFF1F2430),
+            containerColor = if (isActive) Color(0xFFF5B942) else Color.Transparent,
             contentColor = if (isActive) Color(0xFF0E1116) else Color.White,
             focusedContainerColor = Color(0xFFFFD07A),
             focusedContentColor = Color(0xFF0E1116),
             pressedContainerColor = Color(0xFFE0A82E),
             pressedContentColor = Color(0xFF0E1116),
-            disabledContainerColor = Color(0xFF1F2430),
-            disabledContentColor = Color.White,
         ),
     ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(vertical = 8.dp),
+        ) {
+            Text(text = icon, fontSize = 22.sp)
+            Text(
+                text = label,
+                fontSize = 11.sp,
+                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+/** Экран избранного: сетка карточек. */
+@Composable
+fun FavoritesScreen(onOpenDetails: (MediaItem) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val store = remember { LocalStore(context) }
+    var favs by remember { mutableStateOf(store.favorites()) }
+    androidx.compose.runtime.LaunchedEffect(Unit) { favs = store.favorites() }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0E1116)),
+    ) {
         Text(
-            text = label,
-            color = if (isActive) Color(0xFF0E1116) else Color.White,
-            fontSize = 15.sp,
-            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-            maxLines = 1,
-            modifier = Modifier.padding(horizontal = 13.dp, vertical = 10.dp),
+            text = "⭐ Избранное",
+            color = Color.White,
+            fontSize = 26.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 32.dp, vertical = 14.dp),
         )
+        if (favs.isEmpty()) {
+            Text(
+                "Пока пусто — добавляйте карточки кнопкой «☆ В избранное» в меню «⋯ Ещё»",
+                color = Color.White.copy(alpha = 0.55f),
+                fontSize = 15.sp,
+                modifier = Modifier.padding(horizontal = 32.dp),
+            )
+        } else {
+            androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(6),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 28.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                items(favs.size) { i ->
+                    PosterCard(favs[i]) { onOpenDetails(favs[i]) }
+                }
+            }
+        }
     }
 }
 

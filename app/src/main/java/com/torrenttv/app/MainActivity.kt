@@ -5,7 +5,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -20,6 +22,7 @@ import com.torrenttv.app.data.MediaItem
 import com.torrenttv.app.ui.CatalogScreen
 import com.torrenttv.app.ui.DetailsScreen
 import com.torrenttv.app.ui.EpisodesScreen
+import com.torrenttv.app.ui.FavoritesScreen
 import com.torrenttv.app.ui.HomeScreen
 import com.torrenttv.app.ui.IptvPlayerScreen
 import com.torrenttv.app.ui.IptvScreen
@@ -29,8 +32,8 @@ import com.torrenttv.app.ui.OnlineScreen
 import com.torrenttv.app.ui.PlayerScreen
 import com.torrenttv.app.ui.SearchScreen
 import com.torrenttv.app.ui.SettingsScreen
+import com.torrenttv.app.ui.SideNav
 import com.torrenttv.app.ui.SmartPlayScreen
-import com.torrenttv.app.ui.TopTabBar
 import com.torrenttv.app.ui.TorrentSearchScreen
 
 /** Экраны приложения. Верхние — вкладки с общей панелью табов. */
@@ -40,6 +43,7 @@ sealed interface Screen {
     data object TvShows : Screen
     data object Shows : Screen
     data object Iptv : Screen
+    data object Favorites : Screen
     data object Search : Screen
     data object Settings : Screen
 
@@ -60,7 +64,7 @@ sealed interface Screen {
     data class IptvPlayer(val channel: IptvChannel) : Screen
 
     companion object {
-        val TABS: List<Screen> = listOf(Home, Movies, TvShows, Shows, Search, Settings)
+        val TABS: List<Screen> = listOf(Home, Movies, TvShows, Shows, Favorites, Search, Settings)
     }
 }
 
@@ -99,14 +103,15 @@ private fun App() {
     }
 
     if (screen in Screen.TABS) {
-        // Вкладки: общая панель сверху + содержимое вкладки
-        Column(
+        // Вкладки: левый навигационный бар + содержимое вкладки
+        Row(
             Modifier
                 .fillMaxSize()
                 .background(Color(0xFF0E1116)),
         ) {
-            TopTabBar(active = screen) { screen = it }
-            when (screen) {
+            SideNav(active = screen) { screen = it }
+            Box(Modifier.weight(1f)) {
+                when (screen) {
                 Screen.Home -> HomeScreen(
                     currentVersion = BuildConfig.VERSION_NAME,
                     onOpenDetails = { screen = Screen.Details(it) },
@@ -115,6 +120,7 @@ private fun App() {
                 Screen.Movies -> CatalogScreen(mode = "movies", onOpenDetails = { screen = Screen.Details(it) })
                 Screen.TvShows -> CatalogScreen(mode = "tv", onOpenDetails = { screen = Screen.Details(it) })
                 Screen.Shows -> CatalogScreen(mode = "shows", onOpenDetails = { screen = Screen.Details(it) })
+                Screen.Favorites -> FavoritesScreen(onOpenDetails = { screen = Screen.Details(it) })
                 Screen.Iptv -> IptvScreen(
                     onPlay = { screen = Screen.IptvPlayer(it) },
                 )
@@ -133,6 +139,7 @@ private fun App() {
                     onBack = { screen = Screen.Home },
                 )
                 else -> Unit
+                }
             }
         }
     } else {
