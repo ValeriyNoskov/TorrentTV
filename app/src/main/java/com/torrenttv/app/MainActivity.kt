@@ -69,6 +69,10 @@ class MainActivity : ComponentActivity() {
         com.torrenttv.app.data.AppLog.init(this)
         // Дисковый кэш метаданных: экономит дневной лимит API и работает без сети
         com.torrenttv.app.data.KinopoiskClient.attachCache(cacheDir)
+        // Личные ключи баз фильмов (перекрывают вшитые общие)
+        val store0 = com.torrenttv.app.data.LocalStore(this)
+        com.torrenttv.app.data.KinopoiskClient.overrideApiKey = store0.kpApiKey()
+        com.torrenttv.app.data.TmdbClient.overrideApiKey = store0.tmdbApiKey()
         setContent {
             MaterialTheme {
                 App()

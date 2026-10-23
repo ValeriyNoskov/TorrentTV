@@ -69,6 +69,7 @@ private val SECTIONS = listOf(
     Triple("netcheck", "🩺 Проверка сети", "Какие источники доступны с этого устройства"),
     Triple("torrserve", "🚀 TorrServe", "Внешний движок торрентов — надёжнее внутреннего"),
     Triple("player", "📺 Плеер", "Встроенный или внешний плеер (VLC, MX Player)"),
+    Triple("mdbase", "🎞 База фильмов", "Свой ключ каталогов — свои лимиты, не общие"),
 )
 
 @Composable
@@ -107,6 +108,8 @@ fun SettingsScreen(onBack: () -> Unit) {
     var fxWaiting by remember { mutableStateOf<String?>(null) } // user_code
     var fxMsg by remember { mutableStateOf("") }
     var fxPoll by remember { mutableStateOf(0) } // тик запуска поллинга
+    var kpKey by remember { mutableStateOf(store.kpApiKey()) }
+    var tmdbKey by remember { mutableStateOf(store.tmdbApiKey()) }
 
     fun openEdit(target: String, current: String, title: String) {
         editTmp = current
@@ -153,6 +156,8 @@ fun SettingsScreen(onBack: () -> Unit) {
                 "nnm" -> { store.setTrackerCookie(PrivateTrackers.NNMCLUB, editTmp); nnmCookie = editTmp }
                 "epg" -> { store.setEpgUrl(editTmp); epgUrl = editTmp }
                 "ts" -> store.setTorrServeHost(editTmp)
+                "kpkey" -> { store.setKpApiKey(editTmp); kpKey = editTmp }
+                "tmdbkey" -> { store.setTmdbApiKey(editTmp); tmdbKey = editTmp }
             }
         }
         editTarget = null
@@ -331,6 +336,32 @@ fun SettingsScreen(onBack: () -> Unit) {
                         )
                     }
 
+                    "mdbase" -> {
+                        SettingsRow(
+                            title = "Ключ Кинопоиск API",
+                            value = if (kpKey.isNotBlank()) "•••••••• (свой)" else "Общий (вшит в приложение)",
+                            valueOk = kpKey.isNotBlank(),
+                        ) { openEdit("kpkey", kpKey, "Ключ Кинопоиск API") }
+                        SettingsRow(
+                            title = "Ключ TMDB",
+                            value = if (tmdbKey.isNotBlank()) "•••••••• (свой)" else "Общий (вшит в приложение)",
+                            valueOk = tmdbKey.isNotBlank(),
+                        ) { openEdit("tmdbkey", tmdbKey, "Ключ TMDB") }
+                        if (kpKey.isNotBlank() || tmdbKey.isNotBlank()) {
+                            SettingsRow(title = "🗑 Вернуть общие ключи", value = "", danger = true) {
+                                store.setKpApiKey(""); store.setTmdbApiKey("")
+                                kpKey = ""; tmdbKey = ""
+                            }
+                        }
+                        SettingsNote(
+                            "Каталоги и поиск фильмов берутся из базы Кинопоиска, при её сбое — из TMDB. " +
+                                "Вшитый ключ общий на всех, и его дневной лимит может кончаться. " +
+                                "Введите личный ключ (бесплатно): Кинопоиск — регистрация на kinopoiskapiunofficial.tech " +
+                                "(200 запросов/сутки на ваш ключ), TMDB — themoviedb.org (лимитов почти нет). " +
+                                "Со своим ключом каталоги перестанут зависеть от чужих лимитов."
+                        )
+                    }
+
                     "filmix" -> {
                         SettingsRow(
                             title = "Подключение аккаунта",
@@ -485,6 +516,8 @@ fun SettingsScreen(onBack: () -> Unit) {
         val title = when (target) {
             "jurl" -> "Адрес Jackett"
             "jkey" -> "API-ключ Jackett"
+            "kpkey" -> "Ключ Кинопоиск API"
+            "tmdbkey" -> "Ключ TMDB"
             "rt" -> "Cookie для RuTracker"
             "kz" -> "Cookie для Kinozal"
             "nnm" -> "Cookie для NNM-Club"

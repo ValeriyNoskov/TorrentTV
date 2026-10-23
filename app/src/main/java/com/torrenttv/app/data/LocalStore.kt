@@ -154,6 +154,21 @@ class LocalStore(context: Context) {
         prefs.edit().putString("excl_kw", kws.joinToString(",")).apply()
     }
 
+    /** Личные ключи баз фильмов (перекрывают вшитые; бесплатно: KP — kinopoiskapiunofficial.tech, TMDB — themoviedb.org). */
+    fun kpApiKey(): String = prefs.getString("kp_api_key", "").orEmpty()
+
+    fun setKpApiKey(v: String) {
+        prefs.edit().putString("kp_api_key", v).apply()
+        KinopoiskClient.overrideApiKey = v
+    }
+
+    fun tmdbApiKey(): String = prefs.getString("tmdb_api_key", "").orEmpty()
+
+    fun setTmdbApiKey(v: String) {
+        prefs.edit().putString("tmdb_api_key", v).apply()
+        TmdbClient.overrideApiKey = v
+    }
+
     /** Исключённые страны (id из /filters). */
     fun excludedCountryIds(): Set<Int> =
         prefs.getString("excl_countries", "")

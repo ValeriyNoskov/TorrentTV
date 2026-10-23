@@ -22,7 +22,8 @@ object KinopoiskClient {
 
     private const val BASE = "https://kinopoiskapiunofficial.tech"
 
-    val isConfigured: Boolean get() = BuildConfig.KP_API_KEY.isNotBlank()
+    val isConfigured: Boolean
+        get() = overrideApiKey.isNotBlank() || BuildConfig.KP_API_KEY.isNotBlank()
 
     // ---------- Дисковый кэш ответов (экономит дневной лимит API) ----------
 
@@ -87,8 +88,31 @@ object KinopoiskClient {
     @Volatile var lastFailed: Boolean = false
         private set
 
+    // ---------- Личный ключ пользователя (настройки) ----------
+
+    /** Ключ, введённый пользователем в настройках; перекрывает вшитый. */
+    @Volatile var overrideApiKey: String = ""
+        set(value) {
+            field = value.trim()
+            cooldownUntil = 0   // новый ключ — сбрасываем предохранитель
+        }
+
+    private val apiKey: String
+        get() = overrideApiKey.ifBlank { BuildConfig.KP_API_KEY }
+
+    // ---------- Предохранитель (circuit breaker) ----------
+
+    /** До этого времени (мс) не ходим в сеть: источник считаем лежащим. */
+    @Volatile private var cooldownUntil: Long = 0
+
+    private fun inCooldown(): Boolean = System.currentTimeMillis() < cooldownUntil
+
+    // ---------- Склейка одинаковых параллельных запросов ----------
+
+    private val inFlight = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.CompletableFuture<String>>()
+
     private fun get(path: String, params: Map<String, String> = emptyMap()): JSONObject? {
-        if (!isConfigured) return null
+        if (apiKey.isBlank()) return null
         val url = buildString {
             append(BASE).append(path)
             if (params.isNotEmpty()) {
@@ -100,34 +124,52 @@ object KinopoiskClient {
         }
         // Свежий кэш — без сети (экономит дневной лимит запросов)
         cacheFresh(url)?.let { return runCatching { JSONObject(it) }.getOrNull() }
-        return try {
-            http.newCall(
-                Request.Builder()
-                    .url(url)
-                    .header("X-API-KEY", BuildConfig.KP_API_KEY)
-                    .build()
-            ).execute().use { resp ->
-                lastFailed = !resp.isSuccessful
-                if (!resp.isSuccessful) {
-                    // Сеть не удалась — отдаём устаревший кэш, чтобы каталоги работали
-                    cacheStale(url)?.let { return runCatching { JSONObject(it) }.getOrNull() }
-                    null
-                } else {
-                    val body = resp.body!!.string()
-                    cache[url] = System.currentTimeMillis() to body
-                    persistCache()
-                    JSONObject(body)
-                }
-            }
+
+        // Предохранитель: источник лежит (лимит/ошибка) — только кэш, ноль запросов
+        if (inCooldown()) {
+            val stale = cacheStale(url)
+            lastFailed = stale == null
+            return stale?.let { s -> runCatching { JSONObject(s) }.getOrNull() }
+        }
+
+        // Одинаковые параллельные запросы делят один сетевой вызов (не жгут лимит)
+        val body: String? = try {
+            val fut = inFlight.computeIfAbsent(url) { u -> java.util.concurrent.CompletableFuture.supplyAsync { fetch(u) } }
+            fut.join().also { inFlight.remove(url) }
         } catch (e: Exception) {
-            lastFailed = true
-            // Нет сети — устаревший кэш лучше пустоты
-            cacheStale(url)?.let { s ->
-                lastFailed = false
-                return runCatching { JSONObject(s) }.getOrNull()
-            }
+            inFlight.remove(url)
             null
         }
+
+        lastFailed = body == null
+        val cached = body ?: cacheStale(url)?.also { lastFailed = false }
+        return cached?.let { s -> runCatching { JSONObject(s) }.getOrNull() }
+    }
+
+    /** Один сетевой вызов; возвращает тело или null. Кэширует успех. */
+    private fun fetch(url: String): String? = try {
+        http.newCall(
+            Request.Builder()
+                .url(url)
+                .header("X-API-KEY", apiKey)
+                .build()
+        ).execute().use { resp ->
+            if (!resp.isSuccessful) {
+                // Лимит/ключ: источник лежит — пауза 10 минут без запросов
+                if (resp.code == 429 || resp.code == 401 || resp.code == 403) {
+                    cooldownUntil = System.currentTimeMillis() + 10 * 60_000L
+                    com.torrenttv.app.data.AppLog.log("kp", "cooldown 10min (HTTP ${resp.code})")
+                }
+                null
+            } else {
+                val b = resp.body!!.string()
+                cache[url] = System.currentTimeMillis() to b
+                persistCache()
+                b
+            }
+        }
+    } catch (e: Exception) {
+        null
     }
 
     private fun mapType(kpType: String): String =

@@ -21,10 +21,19 @@ object TmdbClient {
     private const val IMAGE = "https://image.tmdb.org/t/p/w500"
     private const val IMAGE_BACKDROP = "https://image.tmdb.org/t/p/w1280"
 
-    private val apiKey: String get() = BuildConfig.TMDB_API_KEY
+    /** Ключ, введённый пользователем в настройках; перекрывает вшитый. */
+    @Volatile var overrideApiKey: String = ""
+        set(value) {
+            field = value.trim()
+            cooldownUntil = 0
+        }
+
+    private val apiKey: String
+        get() = overrideApiKey.ifBlank { BuildConfig.TMDB_API_KEY }
 
     /** Есть ли настроенный ключ — чтобы показать подсказку в UI. */
-    val isConfigured: Boolean get() = apiKey.isNotBlank()
+    val isConfigured: Boolean
+        get() = overrideApiKey.isNotBlank() || BuildConfig.TMDB_API_KEY.isNotBlank()
 
     private val http = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -35,8 +44,16 @@ object TmdbClient {
     @Volatile var lastFailed: Boolean = false
         private set
 
+    /** До этого времени (мс) не ходим в сеть: источник считаем лежащим. */
+    @Volatile private var cooldownUntil: Long = 0
+
     private fun get(path: String, params: Map<String, String> = emptyMap()): JSONObject? {
         if (!isConfigured) return null
+        // Предохранитель: после сбоя пауза — не долбим источник впустую
+        if (System.currentTimeMillis() < cooldownUntil) {
+            lastFailed = true
+            return null
+        }
         val url = buildString {
             append(BASE).append(path)
             append(if (path.contains('?')) '&' else '?')
@@ -47,6 +64,9 @@ object TmdbClient {
         return try {
             http.newCall(Request.Builder().url(url).build()).execute().use { resp ->
                 lastFailed = !resp.isSuccessful
+                if (resp.code == 429 || resp.code == 401) {
+                    cooldownUntil = System.currentTimeMillis() + 10 * 60_000L
+                }
                 if (!resp.isSuccessful) null else JSONObject(resp.body!!.string())
             }
         } catch (e: Exception) {
