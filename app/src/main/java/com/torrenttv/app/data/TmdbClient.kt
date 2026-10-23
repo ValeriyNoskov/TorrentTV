@@ -122,6 +122,10 @@ object TmdbClient {
     fun trending(page: Int = 1): List<MediaItem> =
         parseList(get("/trending/all/day", mapOf("page" to page.toString())))
 
+    /** Новинки: фильмы, которые ещё выходят в прокат. */
+    fun upcoming(): List<MediaItem> =
+        parseList(get("/movie/upcoming", mapOf("page" to "1")))
+
     fun popularMovies(page: Int = 1): List<MediaItem> =
         parseList(get("/movie/popular", mapOf("page" to page.toString())))
 

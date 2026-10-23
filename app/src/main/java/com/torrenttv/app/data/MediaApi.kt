@@ -45,6 +45,10 @@ object MediaApi {
     fun trending(page: Int = 1): List<MediaItem> =
         src({ KinopoiskClient.trending(page) }, { TmdbClient.trending(page) }, { RutrackerrCatalog.trending(page) })
 
+    /** Новинки/премьеры: КП премьеры → TMDB upcoming → тренды. */
+    fun newReleases(): List<MediaItem> =
+        src({ KinopoiskClient.premieres() }, { TmdbClient.upcoming() }, { trending(1) })
+
     fun popularMovies(page: Int = 1): List<MediaItem> =
         src({ KinopoiskClient.popularMovies(page) }, { TmdbClient.popularMovies(page) }, { RutrackerrCatalog.popularMovies(page) })
 

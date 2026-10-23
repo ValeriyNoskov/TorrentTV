@@ -257,6 +257,28 @@ object KinopoiskClient {
     /** Популярное сейчас: фильмы и сериалы вперемешку. */
     fun trending(page: Int = 1): List<MediaItem> = collection("TOP_POPULAR_ALL", page)
 
+    private val MONTHS = listOf(
+        "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
+        "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER",
+    )
+
+    /** Премьеры текущего месяца (новинки); если пусто — следующего. */
+    fun premieres(): List<MediaItem> {
+        val cal = java.util.Calendar.getInstance()
+        val y = cal.get(java.util.Calendar.YEAR)
+        val m = cal.get(java.util.Calendar.MONTH)
+        val cur = parseItems(
+            get("/api/v2.2/films/premieres", mapOf("year" to y.toString(), "month" to MONTHS[m])),
+            "items",
+        )
+        if (cur.isNotEmpty()) return cur
+        val (y2, m2) = if (m == 11) y + 1 to MONTHS[0] else y to MONTHS[m + 1]
+        return parseItems(
+            get("/api/v2.2/films/premieres", mapOf("year" to y2.toString(), "month" to m2)),
+            "items",
+        )
+    }
+
     fun popularMovies(page: Int = 1): List<MediaItem> = collection("TOP_POPULAR_MOVIES", page)
 
     fun popularTv(page: Int = 1): List<MediaItem> = byType(page, type = "TV_SERIES", order = "NUM_VOTE")

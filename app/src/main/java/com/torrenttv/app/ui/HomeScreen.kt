@@ -45,14 +45,18 @@ fun HomeScreen(
     var watchLater by remember { mutableStateOf(store.watchLater()) }
     var progress by remember { mutableStateOf(store.continueWatching()) }
     var heroItem by remember { mutableStateOf<MediaItem?>(null) }
+    var newReleases by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var updateInfo by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
     var updateStatus by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         UpdateManager.checkForUpdate(currentVersion) { updateInfo = it }
         heroItem = withContext(Dispatchers.IO) {
-            val trends = MediaApi.trending(1).filter { store.isAllowed(it) }
-            trends.firstOrNull { it.backdropUrl.isNotBlank() } ?: trends.firstOrNull()
+            // Hero — новинка месяца с широким кадром; фолбэк — тренды
+            val fresh = MediaApi.newReleases().filter { store.isAllowed(it) }
+            newReleases = fresh.take(20)
+            fresh.firstOrNull { it.backdropUrl.isNotBlank() } ?: fresh.firstOrNull()
+                ?: MediaApi.trending(1).filter { store.isAllowed(it) }.firstOrNull()
         }
     }
 
@@ -74,6 +78,15 @@ fun HomeScreen(
             }
             heroItem?.let { hero ->
                 item { HeroBanner(hero, onOpenDetails) }
+            }
+            if (newReleases.isNotEmpty()) {
+                item {
+                    MediaRow(
+                        title = "🆕 Новинки",
+                        items = newReleases,
+                        onClick = onOpenDetails,
+                    )
+                }
             }
             if (progress.isNotEmpty()) {
                 item {
