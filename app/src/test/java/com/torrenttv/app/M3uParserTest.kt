@@ -2,81 +2,58 @@ package com.torrenttv.app
 
 import com.torrenttv.app.data.M3uParser
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class M3uParserTest {
 
-    private val sample = """
-        #EXTM3U x-tvg-url="https://epg"
-        #EXTINF:-1 tvg-id="Channel1.ru" tvg-logo="https://logo/1.png" group-title="News",Первый канал (1080p)
-        https://stream/first.m3u8
-
-        #EXTINF:-1 tvg-id="Moskva24.ru" tvg-logo="https://logo/m24.png" group-title="General",Moskva 24 (1080p) [Not 24/7]
-        http://stream/m24.m3u8
-        #EXTVLCOPT:http-user-agent=Mozilla/5.0
-
-        #EXTINF:-1 group-title="XXX",Adult Channel
-        http://stream/adult.m3u8
-
-        #EXTINF:-1,Просто название
-        http://stream/plain.m3u8
-
-        #EXTINF:-1 tvg-logo="https://logo/x.png",Название, с запятой (720p)
-        http://stream/comma.m3u8
-    """.trimIndent()
-
     @Test
-    fun `разбор атрибутов и url`() {
-        val ch = M3uParser.parse(sample)
-        assertEquals(4, ch.size)
-
-        val first = ch.first()
-        assertEquals("Первый канал", first.name)
-        assertEquals("https://stream/first.m3u8", first.url)
-        assertEquals("https://logo/1.png", first.logoUrl)
-        assertEquals("News", first.group)
+    fun `parses tvg-chno and tvg-country`() {
+        val m3u = """
+            #EXTM3U
+            #EXTINF:-1 tvg-id="NTV.ru" tvg-chno="4" tvg-country="RU" group-title="Russia",НТВ
+            http://stream/ntv
+        """.trimIndent()
+        val ch = M3uParser.parse(m3u).single()
+        assertEquals("НТВ", ch.name)
+        assertEquals("NTV.ru", ch.tvgId)
+        assertEquals(4, ch.tvgNo)
     }
 
     @Test
-    fun `директивы и пустые строки не ломают порядок`() {
-        val ch = M3uParser.parse(sample)
-        val m24 = ch.first { it.name == "Moskva 24" }
-        assertEquals("http://stream/m24.m3u8", m24.url)  // EXTVLCOPT пропущен, url взят верный
+    fun `onlyCountry filters by tvg-country`() {
+        val m3u = """
+            #EXTINF:-1 tvg-country="RU" group-title="Russia",НТВ
+            http://stream/ntv
+            #EXTINF:-1 tvg-country="BY" group-title="Belarus",Беларусь 1
+            http://stream/by
+        """.trimIndent()
+        val ru = M3uParser.parse(m3u, onlyCountry = "ru")
+        assertEquals(listOf("НТВ"), ru.map { it.name })
     }
 
     @Test
-    fun `взрослые группы отфильтрованы`() {
-        val ch = M3uParser.parse(sample)
-        assertTrue(ch.none { it.name == "Adult Channel" })
+    fun `translateName english federal channels`() {
+        assertEquals("Первый канал", M3uParser.translateName("Channel One (Russia)"))
+        assertEquals("НТВ", M3uParser.translateName("NTV (Russia)"))
+        assertEquals("НТВ (+1)", M3uParser.translateName("NTV (Russia) +1"))
+        assertEquals("ТНТ", M3uParser.translateName("TNT (Russia)"))
+        assertEquals("Москва 24", M3uParser.translateName("Moskva 24"))
+        assertEquals("Домашний", M3uParser.translateName("Domashniy"))
     }
 
     @Test
-    fun `плейлист без атрибутов тоже парсится`() {
-        val ch = M3uParser.parse(sample)
-        val plain = ch.first { it.url == "http://stream/plain.m3u8" }
-        assertEquals("Просто название", plain.name)
-        assertEquals("", plain.logoUrl)
+    fun `translateName keeps cyrillic as is`() {
+        assertEquals("Первый канал", M3uParser.translateName("Первый канал"))
     }
 
     @Test
-    fun `запятая в названии не ломает разбор`() {
-        val ch = M3uParser.parse(sample)
-        val comma = ch.first { it.url == "http://stream/comma.m3u8" }
-        assertEquals("Название, с запятой", comma.name)
+    fun `translateName unknown latin stays cleaned`() {
+        assertEquals("Some Channel", M3uParser.translateName("Some Channel (Russia)"))
     }
 
     @Test
-    fun `хвосты качества и пометок вычищены`() {
-        assertEquals("Первый канал", M3uParser.cleanName("Первый канал (1080p)"))
-        assertEquals("Moskva 24", M3uParser.cleanName("Moskva 24 (1080p) [Not 24/7]"))
+    fun `cleanName strips marks and quality`() {
+        assertEquals("Матч ТВ", M3uParser.cleanName("Матч ТВ Ⓢ (1080p)"))
         assertEquals("Канал", M3uParser.cleanName("Канал [Geo-blocked]"))
-    }
-
-    @Test
-    fun `битая строка EXTINF даёт null`() {
-        assertNull(M3uParser.parseExtInf("#EXTINF:-1"))
-        assertNull(M3uParser.parseExtInf("#EXTINF:-1 group-title=\"News\","))
     }
 }

@@ -11,8 +11,8 @@ android {
         applicationId = "com.torrenttv.app"
         minSdk = 29          // Android 10 — минимальная версия Android TV по требованию
         targetSdk = 34
-        versionCode = 9
-        versionName = "0.6.3"
+        versionCode = 10
+        versionName = "0.6.4"
         // Ключи метаданных задаются в gradle.properties: kpApiKey=... (kinopoisk.dev) или tmdbApiKey=...
         buildConfigField("String", "KP_API_KEY", "\"${findProperty("kpApiKey") ?: ""}\"")
         buildConfigField("String", "TMDB_API_KEY", "\"${findProperty("tmdbApiKey") ?: ""}\"")
@@ -82,6 +82,10 @@ dependencies {
 
     // Unit-тесты
     testImplementation("junit:junit:4.13.2")
+    // XmlPullParserFactory в JVM-тестах (для EpgService / M3uParser)
+    testImplementation("net.sf.kxml:kxml2:2.3.0")
+    // org.json в JVM-тестах
+    testImplementation("org.json:json:20240303")
 
     // Торрент-движок (jlibtorrent = JNI-обёртка над libtorrent)
     val jlibtorrent = "2.0.12.9"

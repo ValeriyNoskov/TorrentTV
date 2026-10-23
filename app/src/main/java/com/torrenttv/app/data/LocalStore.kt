@@ -253,6 +253,15 @@ class LocalStore(context: Context) {
         prefs.edit().putString("filmix_token", v.trim()).apply()
     }
 
+    // ---------- EPG (телепрограмма IPTV) ----------
+
+    /** URL XMLTV-источника; пусто — встроенный teleguide.info. */
+    fun epgUrl(): String = prefs.getString("epg_url", "") ?: ""
+
+    fun setEpgUrl(v: String) {
+        prefs.edit().putString("epg_url", v.trim()).apply()
+    }
+
     // ---------- Внутреннее ----------
 
     private fun readList(key: String): List<MediaItem> {

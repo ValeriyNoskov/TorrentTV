@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,7 +63,8 @@ fun SettingsScreen(onBack: () -> Unit) {
     var kzCookie by remember { mutableStateOf(store.trackerCookie(PrivateTrackers.KINOZAL)) }
     var nnmCookie by remember { mutableStateOf(store.trackerCookie(PrivateTrackers.NNMCLUB)) }
     var fxToken by remember { mutableStateOf(store.filmixToken()) }
-    // Активное поле для экранной клавиатуры: "kw" | "jurl" | "jkey" | "rt" | "kz" | "nnm" | "fx"
+    var epgUrl by remember { mutableStateOf(store.epgUrl()) }
+    // Активное поле для экранной клавиатуры: "kw" | "jurl" | "jkey" | "rt" | "kz" | "nnm" | "fx" | "epg"
     var editTarget by remember { mutableStateOf("kw") }
     val kbFocus = remember { FocusRequester() }
 
@@ -72,6 +75,7 @@ fun SettingsScreen(onBack: () -> Unit) {
         "kz" -> kzCookie
         "nnm" -> nnmCookie
         "fx" -> fxToken
+        "epg" -> epgUrl
         else -> kw
     }
 
@@ -82,6 +86,7 @@ fun SettingsScreen(onBack: () -> Unit) {
         "kz" -> "Cookie для kinozal.tv, напр. uid=…; pass=…"
         "nnm" -> "Cookie для nnmclub.to"
         "fx" -> "Токен Filmix (профиль → Устройства)"
+        "epg" -> "URL XMLTV-программы; пусто = teleguide.info (RU)"
         else -> "Новое стоп-слово…"
     }
 
@@ -95,6 +100,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             "kz" -> store.setTrackerCookie(PrivateTrackers.KINOZAL, v)
             "nnm" -> store.setTrackerCookie(PrivateTrackers.NNMCLUB, v)
             "fx" -> store.setFilmixToken(v)
+            "epg" -> store.setEpgUrl(v)
         }
         editTarget = "kw"
     }
@@ -111,6 +117,7 @@ fun SettingsScreen(onBack: () -> Unit) {
         Modifier
             .fillMaxSize()
             .background(Color(0xFF0E1116))
+            .verticalScroll(rememberScrollState())
             .padding(28.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -279,19 +286,26 @@ fun SettingsScreen(onBack: () -> Unit) {
                 }
                 Spacer(Modifier.width(12.dp))
             }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 10.dp)) {
             // Filmix (онлайн-просмотр)
             Button(onClick = { editTarget = "fx"; kw = ""; kbFocus.requestFocus() }) {
                 Text(if (fxToken.isNotBlank()) "✓ 🌐 Filmix" else "🌐 Filmix")
             }
+            Spacer(Modifier.width(12.dp))
+            // EPG
+            Button(onClick = { editTarget = "epg"; kw = ""; kbFocus.requestFocus() }) {
+                Text("📆 EPG")
+            }
+            Spacer(Modifier.width(12.dp))
+            Text(
+                text = "трекеров подключено: " +
+                    PrivateTrackers.ALL.count { (id, _, _) -> store.trackerCookie(id).isNotBlank() } +
+                    " из ${PrivateTrackers.ALL.size}",
+                color = Color.White.copy(alpha = 0.4f),
+                fontSize = 13.sp,
+            )
         }
-        Text(
-            text = "Подключено трекеров: " +
-                PrivateTrackers.ALL.count { (id, _, _) -> store.trackerCookie(id).isNotBlank() } +
-                " из ${PrivateTrackers.ALL.size}",
-            color = Color.White.copy(alpha = 0.4f),
-            fontSize = 13.sp,
-            modifier = Modifier.padding(top = 4.dp),
-        )
 
         Text(
             text = if (editValue().isBlank()) editPlaceholder() else editValue(),
@@ -335,6 +349,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                     "kz" -> kzCookie += ch
                     "nnm" -> nnmCookie += ch
                     "fx" -> fxToken += ch
+                    "epg" -> epgUrl += ch
                     else -> kw += ch
                 }
             },
@@ -346,6 +361,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                     "kz" -> if (kzCookie.isNotEmpty()) kzCookie = kzCookie.dropLast(1)
                     "nnm" -> if (nnmCookie.isNotEmpty()) nnmCookie = nnmCookie.dropLast(1)
                     "fx" -> if (fxToken.isNotEmpty()) fxToken = fxToken.dropLast(1)
+                    "epg" -> if (epgUrl.isNotEmpty()) epgUrl = epgUrl.dropLast(1)
                     else -> if (kw.isNotEmpty()) kw = kw.dropLast(1)
                 }
             },
@@ -357,6 +373,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                     "kz" -> kzCookie = ""
                     "nnm" -> nnmCookie = ""
                     "fx" -> fxToken = ""
+                    "epg" -> epgUrl = ""
                     else -> kw = ""
                 }
             },
