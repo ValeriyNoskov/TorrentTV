@@ -722,6 +722,13 @@ private fun NetCheckScreen(onClose: () -> Unit) {
                 "IPTV-плейлист (ТВ)" to "https://iptv-org.github.io/iptv/countries/ru.m3u",
                 "GitHub (обновления)" to "https://api.github.com/repos/ValeriyNoskov/TorrentTV/releases/latest",
             ))
+            // База фильмов (каталоги, постеры, поиск) — только если настроен ключ
+            if (com.torrenttv.app.data.KinopoiskClient.isConfigured) {
+                add("Кинопоиск API (база фильмов)" to "https://kinopoiskapiunofficial.tech/api/v2.1/films/filters")
+            }
+            if (com.torrenttv.app.data.TmdbClient.isConfigured) {
+                add("TMDB (база фильмов)" to "https://api.themoviedb.org/3/configuration?api_key=" + com.torrenttv.app.BuildConfig.TMDB_API_KEY)
+            }
             if (com.torrenttv.app.data.TorrServeService.isInstalled(ctx)) {
                 add("TorrServe (движок)" to com.torrenttv.app.data.LocalStore(ctx).torrServeHost() + "/echo")
             }
