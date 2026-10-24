@@ -109,8 +109,30 @@ object KinopoiskClient {
             cooldownUntil = 0   // новый ключ — сбрасываем предохранитель
         }
 
+    /**
+     * Ключи (один или несколько через запятую). Лимит 200/сутки считается на
+     * каждый: когда ключ исчерпан (HTTP 402/429), авто-переключаемся на следующий.
+     */
+    private val allKeys: List<String>
+        get() = (overrideApiKey.ifBlank { BuildConfig.KP_API_KEY })
+            .split(',').map { it.trim() }.filter { it.isNotBlank() }
+
+    @Volatile private var keyIndex: Int = 0
+
     private val apiKey: String
-        get() = overrideApiKey.ifBlank { BuildConfig.KP_API_KEY }
+        get() = allKeys.getOrNull(keyIndex) ?: allKeys.lastOrNull().orEmpty()
+
+    /** Следующий ключ из списка, если он есть (иначе остаёмся на текущем). */
+    private fun advanceKey() {
+        if (allKeys.size > 1) {
+            val before = keyIndex
+            keyIndex = (keyIndex + 1) % allKeys.size
+            cooldownUntil = 0
+            com.torrenttv.app.data.AppLog.log(
+                "kp", "ключ исчерпан — переключился на №${keyIndex + 1} из ${allKeys.size}",
+            )
+        }
+    }
 
     /** Ключ для служебных проверок (netcheck), чтобы 401 не считался «источник лежит». */
     fun currentApiKey(): String = apiKey
@@ -162,31 +184,39 @@ object KinopoiskClient {
     }
 
     /** Один сетевой вызов; возвращает тело или null. Кэширует успех. */
-    private fun fetch(url: String): String? = try {
-        http.newCall(
-            Request.Builder()
-                .url(url)
-                .header("X-API-KEY", apiKey)
-                .build()
-        ).execute().use { resp ->
-            if (!resp.isSuccessful) {
-                // Лимит/ключ/лежащий источник: пауза 10 минут без запросов
-                if (resp.code == 429 || resp.code == 401 || resp.code == 403 ||
-                    resp.code == 402 || resp.code >= 500
-                ) {
-                    cooldownUntil = System.currentTimeMillis() + 10 * 60_000L
-                    com.torrenttv.app.data.AppLog.log("kp", "cooldown 10min (HTTP ${resp.code})")
-                }
-                null
-            } else {
-                val b = resp.body!!.string()
+    private fun fetch(url: String, attempt: Int = 0): String? {
+        val resp = try {
+            http.newCall(
+                Request.Builder()
+                    .url(url)
+                    .header("X-API-KEY", apiKey)
+                    .build()
+            ).execute()
+        } catch (e: Exception) {
+            return null
+        }
+        resp.use { r ->
+            if (r.isSuccessful) {
+                val b = r.body!!.string()
                 cache[url] = System.currentTimeMillis() to b
                 persistCache()
-                b
+                return b
             }
+            // Суточный лимит ключа — есть следующий: переключиться и повторить
+            if ((r.code == 402 || r.code == 429) && attempt < 2) {
+                val before = keyIndex
+                advanceKey()
+                if (keyIndex != before) return fetch(url, attempt + 1)
+            }
+            // Лимит (все ключи)/ключ/лежащий источник: пауза 10 минут без запросов
+            if (r.code == 429 || r.code == 401 || r.code == 403 ||
+                r.code == 402 || r.code >= 500
+            ) {
+                cooldownUntil = System.currentTimeMillis() + 10 * 60_000L
+                com.torrenttv.app.data.AppLog.log("kp", "cooldown 10min (HTTP ${r.code})")
+            }
+            return null
         }
-    } catch (e: Exception) {
-        null
     }
 
     private fun mapType(kpType: String): String =
