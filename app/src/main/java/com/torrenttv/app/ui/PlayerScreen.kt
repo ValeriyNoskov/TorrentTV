@@ -313,6 +313,7 @@ fun PlayerScreen(
             showFilesOnStart = tsShowFiles,
             files = tsFiles,
             currentFile = tsCurrent,
+            onPickTorrent = onPickTorrent,
             onSelectFile = { n ->
                 val host = tsHostStr ?: return@OnlinePlayerScreen
                 val hash = tsHashStr ?: return@OnlinePlayerScreen

@@ -87,6 +87,8 @@ fun OnlinePlayerScreen(
     currentFile: Int = -1,
     /** Выбрали другую серию — родитель перезапустит стрим. */
     onSelectFile: (Int) -> Unit = {},
+    /** «Другая раздача» — выйти в выбор раздач (позиция сохранится). */
+    onPickTorrent: () -> Unit = {},
 ) {
     val context = LocalContext.current
     // Подпись с серией в заголовках плеера: «Название · S01E08» (или «· Серия 8»)
@@ -874,6 +876,13 @@ fun OnlinePlayerScreen(
                     }
                     Spacer(Modifier.width(10.dp))
                     Btn("🎵") { showTrackMenu = true; panelTick++ }
+                    Spacer(Modifier.width(10.dp))
+                    // Другая раздача/качество без выхода из просмотра: позиция
+                    // сохранится (onDispose), после выбора — «Продолжаем с…» (ROADMAP №7)
+                    Btn("🧲") {
+                        com.torrenttv.app.data.AppLog.log("player", "нажал: «Другая раздача» в онлайн-плеере")
+                        onPickTorrent()
+                    }
                     Spacer(Modifier.width(10.dp))
                     Btn("⤴") { openExternal() }
                     Spacer(Modifier.width(10.dp))
