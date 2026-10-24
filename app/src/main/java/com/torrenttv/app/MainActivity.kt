@@ -272,6 +272,9 @@ private fun App() {
                 onAutoSearch = { screen = Screen.TorrentSearch(s.item, autoStart = true) },
                 onManualSearch = { screen = Screen.TorrentSearch(s.item, autoStart = false) },
                 onTrailer = { screen = Screen.Trailer(s.item) },
+                onWatchRutube = { vid, title, thumb ->
+                    screen = Screen.RutubeWatch(vid, title, thumb)
+                },
                 onOpenDetails = { screen = Screen.Details(it) },
                 onEpisodes = { season -> screen = Screen.Episodes(s.item, season) },
                 onPlayEpisode = { ep -> screen = Screen.Player(s.item, ep) },

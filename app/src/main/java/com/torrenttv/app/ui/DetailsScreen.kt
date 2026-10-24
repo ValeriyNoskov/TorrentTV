@@ -58,6 +58,8 @@ fun DetailsScreen(
     onManualSearch: () -> Unit = {},
     /** Трейлер внутри приложения (Rutube API + наш плеер). */
     onTrailer: () -> Unit = {},
+    /** Бесплатный полный фильм/серия на Rutube (легальный стрим с рекламой). */
+    onWatchRutube: (id: String, title: String, thumb: String) -> Unit = { _, _, _ -> },
     onOpenDetails: (MediaItem) -> Unit = {},
     onEpisodes: (Int) -> Unit = { },
     /** Играем конкретную серию (из блока «Сезоны и серии»). */
@@ -92,6 +94,17 @@ fun DetailsScreen(
 
     LaunchedEffect(item) {
         similar = withContext(Dispatchers.IO) { MediaApi.similar(item) }
+    }
+
+    // Бесплатный легальный стрим: полные фильмы/серии на Rutube (открытый API)
+    var rutubeFree by remember(item.storeKey) {
+        mutableStateOf<List<com.torrenttv.app.data.RutubeService.RutubeVideo>>(emptyList())
+    }
+    LaunchedEffect(item.storeKey) {
+        rutubeFree = withContext(Dispatchers.IO) {
+            runCatching { com.torrenttv.app.data.RutubeService.searchContent(item.title) }
+                .getOrDefault(emptyList())
+        }
     }
 
     Column(
@@ -238,6 +251,32 @@ fun DetailsScreen(
                     Button(onClick = onTrailer) { Text("🎬 Трейлер") }
                     Spacer(Modifier.width(16.dp))
                     Button(onClick = { menu = !menu }) { Text("⋯ Ещё") }
+                }
+
+                // Бесплатный легальный стрим: полные фильмы/серии на Rutube.
+                // Если есть — показываем до 3 кнопок с названиями видео
+                if (rutubeFree.isNotEmpty()) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "📺 Бесплатно на Rutube (легально, с рекламой):",
+                        color = Color(0xFF9FB0C0),
+                        fontSize = 14.sp,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        for (v in rutubeFree.take(3)) {
+                            Button(onClick = {
+                                com.torrenttv.app.data.AppLog.log("nav", "нажал: «Rutube бесплатно» «${v.title}»")
+                                onWatchRutube(v.id, v.title, v.thumb)
+                            }) {
+                                Text(
+                                    v.title.take(34) + if (v.title.length > 34) "…" else "",
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+                    }
                 }
 
                 if (menu) {
