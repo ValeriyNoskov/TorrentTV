@@ -327,7 +327,6 @@ fun OnlinePlayerScreen(
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
-                    this.player = player
                     // Нативные контролы выключены: перехватывают пульт и мешают
                     // дойти до нашей панели (⚙ Качество). Панель — своя, Compose.
                     useController = false
@@ -338,6 +337,10 @@ fun OnlinePlayerScreen(
                     }
                 }
             },
+            // КРИТИЧНО: при смене серии создаётся НОВЫЙ player (remember(link.url)),
+            // а AndroidView не пересоздаётся — без update он остаётся привязан к
+            // старому release'нутому плееру → видео нет, только звук
+            update = { view -> view.player = player },
             modifier = Modifier.fillMaxSize(),
         )
         Text(

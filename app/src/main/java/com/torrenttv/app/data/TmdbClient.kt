@@ -240,9 +240,21 @@ object TmdbClient {
     fun similar(item: MediaItem): List<MediaItem> =
         parseList(get("/" + item.type + "/" + item.id + "/similar", mapOf("page" to "1")))
 
-    /** Сезоны сериала: /tv/{id} (seasons[].episodes с названиями). */
+    /** Сезоны и эпизоды сериала (+ фолбэк: поиск по названию, если id чужой). */
     fun seasons(item: MediaItem): List<Season> {
-        val json = get("/tv/${item.id}") ?: return emptyList()
+        val direct = seasonsById(item.id)
+        if (direct.isNotEmpty()) return direct
+        // Карточка может быть не из TMDB (торрент/КП/Рутрекер) — id не совпадает.
+        // Ищем сериал по названию и берём сезоны у найденного.
+        if (item.type != "tv") return emptyList()
+        val found = search(item.title).firstOrNull {
+            it.type == "tv" && it.title.equals(item.title, ignoreCase = true)
+        } ?: return emptyList()
+        return seasonsById(found.id)
+    }
+
+    private fun seasonsById(tvId: Int): List<Season> {
+        val json = get("/tv/$tvId") ?: return emptyList()
         val arr = json.optJSONArray("seasons") ?: return emptyList()
         return (0 until arr.length()).mapNotNull { i ->
             val s = arr.optJSONObject(i) ?: return@mapNotNull null
