@@ -84,8 +84,14 @@ object UpdateManager {
      * Проверить наличие обновления. Результат — в колбеке (главный поток).
      * @param token GitHub-токен (настройки ТВ или вшитый) — обязателен
      *              для приватного репозитория
+     * @param onError сетевая ошибка/провал API (отличать от «нет обновления»)
      */
-    fun checkForUpdate(currentVersion: String, token: String = "", onResult: (UpdateInfo?) -> Unit) {
+    fun checkForUpdate(
+        currentVersion: String,
+        token: String = "",
+        onResult: (UpdateInfo?) -> Unit,
+        onError: (String) -> Unit = {},
+    ) {
         Thread {
             try {
                 val request = Request.Builder()
@@ -109,18 +115,19 @@ object UpdateManager {
                         }
                     }
 
-                    val info = if (isNewer(tag, currentVersion) && apkUrl.isNotEmpty()) {
-                        UpdateInfo(
-                            version = tag,
-                            apkUrl = apkUrl,
-                            notes = json.optString("body", "").take(500),
-                        )
-                    } else null
-
+                    val newer = isNewer(tag, currentVersion) && apkUrl.isNotEmpty()
+                    // Каждый факт проверки — в лог: «проверили → что в releases/latest → вердикт»
+                    com.torrenttv.app.data.AppLog.log(
+                        "update",
+                        "проверка: последний релиз v$tag, текущая v$currentVersion → " +
+                            if (newer) "доступно обновление" else "у вас последняя",
+                    )
+                    val info = if (newer) UpdateInfo(tag, apkUrl, json.optString("body", "").take(500)) else null
                     mainHandler.post { onResult(info) }
                 }
             } catch (e: Exception) {
-                mainHandler.post { onResult(null) }
+                com.torrenttv.app.data.AppLog.log("update", "проверка FAIL: ${e.message}")
+                mainHandler.post { onError(e.message ?: "нет сети") }
             }
         }.start()
     }

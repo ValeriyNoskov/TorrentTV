@@ -290,13 +290,21 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 com.torrenttv.app.update.UpdateManager.checkForUpdate(
                                     com.torrenttv.app.BuildConfig.VERSION_NAME,
                                     com.torrenttv.app.update.UpdateManager.ghToken(context),
-                                ) { info ->
-                                    updInfo = info
-                                    updBusy = false
-                                    // Найдено — качаем сразу в фоне, установка будет мгновенной
-                                    if (info == null) updMsg = "✓ У вас последняя версия"
-                                    else com.torrenttv.app.update.UpdateManager.startBackgroundDownload(context, info)
-                                }
+                                    { info ->
+                                        updInfo = info
+                                        updBusy = false
+                                        // Найдено — качаем сразу в фоне, установка будет мгновенной
+                                        if (info != null) {
+                                            com.torrenttv.app.update.UpdateManager.startBackgroundDownload(context, info)
+                                        }
+                                    },
+                                    { err ->
+                                        updInfo = null
+                                        updBusy = false
+                                        // Честный статус: не «у вас последняя», а реальная ошибка
+                                        updMsg = "Не удалось проверить ($err)"
+                                    },
+                                )
                             }
                         }
                         SettingsNote("Обновления проверяются при запуске и качаются в фоне.")
