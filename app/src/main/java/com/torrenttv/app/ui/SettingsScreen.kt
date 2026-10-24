@@ -377,7 +377,9 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 uploadUrl = ""
                                 kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
                                     val url = com.torrenttv.app.data.AppLog.sendToPastebin(
-                                        store.githubToken().ifBlank { null },
+                                        store.githubToken().ifBlank {
+                                            com.torrenttv.app.update.UpdateManager.ghToken(context).ifBlank { null }
+                                        },
                                     )
                                     com.torrenttv.app.data.AppLog.log(
                                         "upload",
@@ -787,6 +789,7 @@ private data class NetCheckRow(val name: String, val hint: String, val ok: Boole
 /** Проверка доступности источников: торренты, онлайн, ТВ, обновления. */
 @Composable
 private fun NetCheckScreen(onClose: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     var rows by remember { mutableStateOf<List<NetCheckRow>>(emptyList()) }
     var running by remember { mutableStateOf(false) }
     var done by remember { mutableStateOf(0) }
@@ -954,7 +957,7 @@ private fun NetCheckScreen(onClose: () -> Unit) {
                         uploadState = "Отправляю лог…"
                         uploadUrl = ""
                         kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-                            val url = com.torrenttv.app.data.AppLog.sendToPastebin(store.githubToken().ifBlank { null })
+                            val url = com.torrenttv.app.data.AppLog.sendToPastebin(store.githubToken().ifBlank { com.torrenttv.app.update.UpdateManager.ghToken(context).ifBlank { null } })
                             com.torrenttv.app.data.AppLog.log("upload", if (url.isNotBlank()) "sent -> $url" else "send FAILED")
                             uploadUrl = url
                             uploadState = if (url.isNotBlank()) "" else

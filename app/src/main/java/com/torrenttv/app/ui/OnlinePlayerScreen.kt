@@ -178,9 +178,14 @@ fun OnlinePlayerScreen(
                             retryTick++
                         } else {
                             errorMsg = "Ошибка воспроизведения: ${error.errorCodeName}"
-                            // Автовыгрузка лога: пользователю не надо ничего выгружать
+                            // Автовыгрузка лога: Gist (вшитый токен) → dpaste
+                            val ctx = context
                             kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                                val url = runCatching { com.torrenttv.app.data.AppLog.sendToPastebin() }.getOrNull()
+                                val url = runCatching {
+                                    com.torrenttv.app.data.AppLog.sendToPastebin(
+                                        com.torrenttv.app.update.UpdateManager.ghToken(ctx).ifBlank { null },
+                                    )
+                                }.getOrNull()
                                 if (!url.isNullOrBlank()) {
                                     com.torrenttv.app.data.AppLog.log("upload", "auto sent -> $url")
                                     errorMsg = "Ошибка: ${error.errorCodeName}\nЛог уже отправлен: $url\nСкажи разработчику этот адрес."
