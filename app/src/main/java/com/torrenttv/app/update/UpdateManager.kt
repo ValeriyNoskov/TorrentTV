@@ -132,6 +132,27 @@ object UpdateManager {
         }.start()
     }
 
+    /**
+     * Описание релиза конкретной версии (для «Что нового» после обновления).
+     * Блокирующий вызов — из фонового потока. null, если описания нет.
+     */
+    fun releaseNotes(version: String, token: String = ""): String? {
+        if (version.isBlank()) return null
+        return try {
+            val request = Request.Builder()
+                .url("https://api.github.com/repos/ValeriyNoskov/TorrentTV/releases/tags/v$version")
+                .header("Accept", "application/vnd.github+json")
+                .apply { if (token.isNotBlank()) header("Authorization", "Bearer $token") }
+                .build()
+            http.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return null
+                JSONObject(response.body!!.string()).optString("body", "").take(1500)
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     /** Сравнение версий X.Y.Z: true, если remote новее текущей. */
     private fun isNewer(remote: String, current: String): Boolean {
         val r = remote.split('.').map { it.toIntOrNull() ?: 0 }

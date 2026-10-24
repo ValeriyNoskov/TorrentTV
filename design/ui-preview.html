@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>ВНосКино — макет интерфейса</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#151a23; --card:#1f2430; --line:#2a3140;
+    --gold:#f5b942; --green:#7fb84f; --text:#e8edf5; --muted:#8b95a7;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#05070a;color:var(--text);
+       font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+  .screen{width:1920px;height:1080px;background:var(--bg);position:relative;
+          overflow:hidden;display:flex}
+  .wrap{zoom:.52}
+  .label{width:1920px;padding:10px 18px;color:var(--muted);font-size:22px;
+         background:#05070a;border-top:1px solid #11151c}
+  /* левое меню */
+  .nav{width:250px;padding:18px 14px;background:#0b0e13;display:flex;flex-direction:column;gap:8px;flex-shrink:0}
+  .logo{font-weight:800;font-size:26px;letter-spacing:1px;margin:6px 8px 16px;color:var(--gold)}
+  .ni{display:flex;align-items:center;gap:14px;padding:12px 14px;border-radius:10px;
+      font-size:19px;color:#c6cfdd}
+  .ni .ic{font-size:21px;width:26px;text-align:center}
+  .ni.on{background:var(--gold);color:#0e1116;font-weight:700}
+  .ni.dim{color:#77808f}
+  /* контент */
+  .main{flex:1;padding:26px 34px;overflow:hidden}
+  h1{font-size:30px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:16px;margin-bottom:18px}
+  .row{display:flex;gap:12px;align-items:center}
+  .searchbar{display:flex;align-items:center;gap:12px;background:var(--card);
+             border:2px solid var(--gold);border-radius:12px;padding:14px 18px;font-size:22px;flex:1}
+  .searchbar .ph{color:#6d788b}
+  .pill{padding:11px 18px;border-radius:11px;background:var(--card);font-size:16px;color:#cfd8e6}
+  .pill.on{background:var(--gold);color:#0e1116;font-weight:700}
+  .pill.green{background:#2e4a22;color:#d8f0c8}
+  .sect{margin:24px 0 10px;font-size:18px;color:var(--gold);font-weight:700;letter-spacing:.3px}
+  .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:14px}
+  .poster{background:linear-gradient(160deg,#2b3550,#141a26);border-radius:10px;
+          height:230px;position:relative;overflow:hidden;border:1px solid var(--line)}
+  .poster:after{content:"";position:absolute;inset:0;
+     background:radial-gradient(120px 140px at 70% 25%,rgba(245,185,66,.22),transparent 70%)}
+  .poster .t{position:absolute;left:10px;bottom:10px;right:10px;font-size:14px;font-weight:600;line-height:1.25}
+  .badge{position:absolute;left:8px;top:8px;background:#000a;border:1px solid #ffffff22;
+         border-radius:6px;padding:3px 7px;font-size:12px;color:#ffd479}
+  .torrent{display:flex;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line);
+           border-radius:10px;padding:12px 14px;margin-bottom:8px}
+  .torrent .name{font-size:16px;flex:1}
+  .torrent .meta{font-size:13px;color:var(--muted);width:210px}
+  .torrent .go{padding:8px 14px;background:var(--green);color:#0e1116;border-radius:8px;font-weight:700;font-size:14px}
+  /* правая колонка */
+  .two{display:grid;grid-template-columns:1fr 520px;gap:26px}
+  .statgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px}
+  .stat .n{font-size:38px;font-weight:800;color:var(--gold)}
+  .stat .l{font-size:14px;color:var(--muted);margin-top:4px}
+  .chart{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px}
+  .bars{display:flex;align-items:flex-end;gap:16px;height:170px;margin-top:8px}
+  .bar{flex:1;background:linear-gradient(180deg,#f5b942,#8a6212);border-radius:6px 6px 0 0;position:relative}
+  .bar span{position:absolute;bottom:-26px;left:0;right:0;text-align:center;font-size:12px;color:var(--muted)}
+  .list{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .li{display:flex;justify-content:space-between;padding:10px 4px;border-bottom:1px solid #232936;font-size:16px}
+  .li:last-child{border:0}
+  /* детали */
+  .hero{display:grid;grid-template-columns:330px 1fr;gap:28px}
+  .bigposter{height:470px;border-radius:14px;background:linear-gradient(160deg,#33405f,#131822);position:relative;border:1px solid var(--line)}
+  .status{display:inline-block;background:#1e2e17;color:#a8e08a;border:1px solid #385a26;
+          padding:8px 14px;border-radius:10px;font-size:16px;font-weight:700;margin:10px 0}
+  .actors{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+  .actor{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 13px;font-size:14px;color:#cfe4f1}
+  .actions{display:flex;gap:12px;margin-top:20px}
+  .btn{padding:14px 22px;border-radius:10px;background:var(--card);font-size:17px;font-weight:700}
+  .btn.primary{background:var(--gold);color:#0e1116}
+  /* оверлей */
+  .overlay{position:absolute;inset:0;background:#000c;display:flex;align-items:center;justify-content:center}
+  .modal{width:820px;background:#141922;border:1px solid #2b3342;border-radius:16px;padding:30px}
+  .modal h2{margin:0 0 12px;font-size:26px;color:var(--gold)}
+  .modal p{color:#c7d0de;font-size:16px;line-height:1.5;margin:6px 0}
+  .note{position:absolute;right:22px;bottom:18px;background:#f5b942;color:#0e1116;
+        font-size:14px;font-weight:700;padding:8px 12px;border-radius:8px;max-width:520px}
+  /* фильтры */
+  .chips{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .chipx{background:#241f10;border:1px solid #5a4718;color:#ffd479;
+         padding:9px 13px;border-radius:10px;font-size:14px;font-weight:600}
+  .chipx b{color:#fff;font-weight:800;margin-left:6px}
+  .filters{position:absolute;inset:0;background:#000d;display:flex;align-items:center;justify-content:center}
+  .fbox{width:1500px;max-height:900px;background:#121821;border:1px solid #2b3342;
+        border-radius:18px;padding:26px 30px;display:flex;flex-direction:column}
+  .fhead{display:flex;align-items:center;margin-bottom:6px}
+  .fhead h2{margin:0;font-size:26px}
+  .fhead .cnt{margin-left:12px;background:#2a2333;color:#d9c6ff;border-radius:20px;
+              padding:4px 11px;font-size:14px;font-weight:700}
+  .fhead .apply{margin-left:auto;display:flex;gap:10px}
+  .fcols{display:grid;grid-template-columns:220px 1fr;gap:22px;margin-top:14px;flex:1;min-height:0}
+  .fnav{background:#0e131b;border:1px solid #232a37;border-radius:13px;padding:10px}
+  .fnav .it{padding:12px 13px;border-radius:9px;font-size:16px;color:#c6cfdd;display:flex;justify-content:space-between}
+  .fnav .it.on{background:#f5b942;color:#0e1116;font-weight:800}
+  .fnav .it span{font-size:13px;opacity:.75}
+  .fpane{overflow:hidden}
+  .fgroup{margin-bottom:20px}
+  .fgroup .gl{font-size:13px;letter-spacing:.6px;color:#8b95a7;font-weight:800;margin-bottom:9px}
+  .opts{display:flex;flex-wrap:wrap;gap:9px}
+  .opt{background:#1a202b;border:1px solid #2a3140;border-radius:10px;padding:10px 14px;
+       font-size:15px;color:#d3dbe8;display:flex;align-items:center;gap:9px}
+  .opt.on{background:#241f10;border-color:var(--gold);color:#ffd479;font-weight:700}
+  .box{width:18px;height:18px;border-radius:5px;border:2px solid #4a5568;display:inline-block;position:relative}
+  .opt.on .box{background:var(--gold);border-color:var(--gold)}
+  .opt.on .box:after{content:"✓";position:absolute;left:2px;top:-3px;color:#0e1116;font-weight:900;font-size:15px}
+  .fnote{color:#8b95a7;font-size:13px;margin-top:4px}
+  /* настройки: под-вкладки */
+  .setcols{display:grid;grid-template-columns:310px 1fr;gap:22px;align-items:start}
+  .snav{background:#0e131b;border:1px solid #232a37;border-radius:14px;padding:10px}
+  .snav .it{padding:13px 15px;border-radius:10px;font-size:17px;color:#c6cfdd;
+            display:flex;align-items:center;gap:11px;margin-bottom:2px}
+  .snav .it.on{background:var(--gold);color:#0e1116;font-weight:800}
+  .pane{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px 26px}
+  .pane .ph{font-size:22px;font-weight:800;margin:0 0 4px}
+  .pane .pd{color:var(--muted);font-size:15px;margin-bottom:14px}
+  .fld{display:flex;align-items:center;gap:16px;padding:13px 0;border-bottom:1px solid #232936}
+  .fld:last-child{border:0}
+  .fld .lbl{width:360px;font-size:16px}
+  .fld .lbl small{display:block;color:var(--muted);font-size:13px;margin-top:3px}
+  .inp{flex:1;background:#0e131b;border:1px solid #2a3140;border-radius:10px;
+       padding:12px 14px;font-size:15px;color:#dbe3ef}
+  .sw{width:56px;height:30px;border-radius:16px;background:#2a3140;position:relative;flex-shrink:0}
+  .sw.on{background:var(--green)}
+  .sw:after{content:"";position:absolute;top:4px;left:4px;width:22px;height:22px;border-radius:50%;background:#fff}
+  .sw.on:after{left:30px}
+  .ok{color:#a8e08a;font-weight:700}
+  .bad{color:#f08a8a;font-weight:700}
+</style>
+</head>
+<body>
+
+<!-- ЭКРАН 1: ПОИСК (единая точка) -->
+<div class="wrap">
+<div class="screen">
+  <div class="nav">
+    <div class="logo">ВНосКино</div>
+    <div class="ni"><span class="ic">🏠</span>Главная</div>
+    <div class="ni"><span class="ic">▶</span>Продолжить</div>
+    <div class="ni"><span class="ic">⭐</span>Избранное</div>
+    <div class="ni"><span class="ic">🎬</span>Фильмы</div>
+    <div class="ni"><span class="ic">📺</span>Сериалы</div>
+    <div class="ni"><span class="ic">🎪</span>Шоу</div>
+    <div class="ni"><span class="ic">🧲</span>Торренты</div>
+    <div class="ni on"><span class="ic">🔍</span>Поиск</div>
+    <div class="ni"><span class="ic">📊</span>Статистика</div>
+    <div class="ni dim"><span class="ic">⚙</span>Настройки</div>
+  </div>
+  <div class="main">
+    <h1>Поиск</h1>
+    <div class="sub">Один ввод — три источника: фильмы и сериалы (КП), раздачи (трекер), бесплатные фильмы (Rutube)</div>
+    <div class="row" style="margin-bottom:16px">
+      <div class="searchbar"><span>🔍</span><span class="ph">Титаны</span><span style="margin-left:auto;color:var(--gold)">▌</span></div>
+      <div class="pill">🎤 Голос</div>
+      <div class="pill">⌨ Внешняя</div>
+      <div class="pill green">Найти ▶</div>
+    </div>
+    <div class="row" style="margin-bottom:6px">
+      <div class="pill on">Все</div><div class="pill">Фильмы</div><div class="pill">Сериалы</div>
+      <div class="pill">Раздачи</div><div class="pill">Rutube</div>
+      <div class="pill" style="margin-left:auto;background:#2a2333;color:#d9c6ff">Недавние: спецы · титаны · дюна</div>
+    </div>
+
+    <div class="sect">Фильмы и сериалы</div>
+    <div class="grid">
+      <div class="poster"><span class="badge">Сериал</span><div class="t">Титаны (2026)</div></div>
+      <div class="poster"><span class="badge">Сериал</span><div class="t">Спецы (2026)</div></div>
+      <div class="poster"><span class="badge">Фильм</span><div class="t">Дюна: часть вторая</div></div>
+      <div class="poster"><span class="badge">Фильм</span><div class="t">Одиссея (2026)</div></div>
+      <div class="poster"><span class="badge">Сериал</span><div class="t">Сердце зверя</div></div>
+      <div class="poster"><span class="badge">Фильм</span><div class="t">Обсессия (2025)</div></div>
+      <div class="poster"><span class="badge">Сериал</span><div class="t">Медленные лошади</div></div>
+    </div>
+
+    <div class="sect">Раздачи в трекере — «Титаны» (12)</div>
+    <div class="torrent">
+      <span style="font-size:20px">🧲</span>
+      <div class="name">Титаны.S05.2026.WEB-DL 1080p | 5 сезон, 7 серий</div>
+      <div class="meta">1080p · 4,2 ГБ · 👤 14</div>
+      <div class="go">Смотреть</div>
+    </div>
+    <div class="torrent">
+      <span style="font-size:20px">🧲</span>
+      <div class="name">Титаны.S01-S05.2026.WEB-DL 720p | все сезоны</div>
+      <div class="meta">720p · 18 ГБ · 👤 32</div>
+      <div class="go">Смотреть</div>
+    </div>
+  </div>
+  <div class="note">Единый поиск: больше не нужно угадывать, в какую вкладку идти</div>
+</div>
+<div class="label">Экран 1 — Поиск: одна строка ввода, голос, внешняя клавиатура, результаты по типам</div>
+</div>
+
+<!-- ЭКРАН 2: ТОРРЕНТЫ (только каталог и фильтры) -->
+<div class="wrap">
+<div class="screen">
+  <div class="nav">
+    <div class="logo">ВНосКино</div>
+    <div class="ni"><span class="ic">🏠</span>Главная</div>
+    <div class="ni"><span class="ic">▶</span>Продолжить</div>
+    <div class="ni"><span class="ic">⭐</span>Избранное</div>
+    <div class="ni"><span class="ic">🎬</span>Фильмы</div>
+    <div class="ni"><span class="ic">📺</span>Сериалы</div>
+    <div class="ni"><span class="ic">🎪</span>Шоу</div>
+    <div class="ni on"><span class="ic">🧲</span>Торренты</div>
+    <div class="ni"><span class="ic">🔍</span>Поиск</div>
+    <div class="ni"><span class="ic">📊</span>Статистика</div>
+    <div class="ni dim"><span class="ic">⚙</span>Настройки</div>
+  </div>
+  <div class="main">
+    <h1>🧲 Торренты</h1>
+    <div class="sub">Только то, что реально есть в трекере. Искать — в общем «Поиске» (🔍 слева)</div>
+    <div class="row" style="margin-bottom:4px">
+      <div class="pill on">⚙ Фильтры · 3</div>
+      <div class="chipx">Жанры: Боевик, Фантастика<b>✕</b></div>
+      <div class="chipx">Страны: США, Россия<b>✕</b></div>
+      <div class="chipx">Годы: 2024–2026<b>✕</b></div>
+      <div class="pill" style="margin-left:auto;background:#1b2130;color:#9fb0c7">Сбросить всё</div>
+    </div>
+    <div class="sub" style="margin-bottom:14px">Обновлено 16:39 · 20 карточек · листайте — подгрузится ещё</div>
+    <div class="grid">
+      <div class="poster"><span class="badge">Фильм</span><div class="t">Одиссея (2026)</div></div>
+      <div class="poster"><span class="badge">Фильм</span><div class="t">Сердце зверя (2026)</div></div>
+      <div class="poster"><span class="badge">Фильм</span><div class="t">Обсессия (2025)</div></div>
+      <div class="poster"><span class="badge">Сериал</span><div class="t">Титаны (2026)</div></div>
+      <div class="poster"><span class="badge">Сериал</span><div class="t">Спецы (2026)</div></div>
+      <div class="poster"><span class="badge">Фильм</span><div class="t">Дюна: часть вторая</div></div>
+      <div class="poster"><span class="badge">Фильм</span><div class="t">Падение луны</div></div>
+      <div class="poster"><span class="badge">Сериал</span><div class="t">Медленные лошади</div></div>
+      <div class="poster"><span class="badge">Фильм</span><div class="t">Бегущий по лезвию</div></div>
+      <div class="poster"><span class="badge">Сериал</span><div class="t">Пропавшие</div></div>
+      <div class="poster"><span class="badge">Фильм</span><div class="t">Город страха</div></div>
+      <div class="poster"><span class="badge">Сериал</span><div class="t">Тёмные начала</div></div>
+      <div class="poster"><span class="badge">Фильм</span><div class="t">Стеклянный дом</div></div>
+      <div class="poster"><span class="badge">Фильм</span><div class="t">Северный ветер</div></div>
+    </div>
+  </div>
+  <div class="note">Поиск убран: он один — в 🔍. Здесь остались фильтры и каталог</div>
+</div>
+<div class="label">Экран 2 — Торренты: каталог и фильтры, без дублирующей строки поиска</div>
+</div>
+
+<!-- ЭКРАН 2а: ФИЛЬТРЫ (оверлей по кнопке ⚙) -->
+<div class="wrap">
+<div class="screen">
+  <div class="nav">
+    <div class="logo">ВНосКино</div>
+    <div class="ni"><span class="ic">🏠</span>Главная</div>
+    <div class="ni"><span class="ic">▶</span>Продолжить</div>
+    <div class="ni"><span class="ic">⭐</span>Избранное</div>
+    <div class="ni"><span class="ic">🎬</span>Фильмы</div>
+    <div class="ni"><span class="ic">📺</span>Сериалы</div>
+    <div class="ni"><span class="ic">🎪</span>Шоу</div>
+    <div class="ni on"><span class="ic">🧲</span>Торренты</div>
+    <div class="ni"><span class="ic">🔍</span>Поиск</div>
+    <div class="ni"><span class="ic">📊</span>Статистика</div>
+    <div class="ni dim"><span class="ic">⚙</span>Настройки</div>
+  </div>
+  <div class="main" style="opacity:.35">
+    <h1>🧲 Торренты</h1>
+    <div class="sub">Только то, что реально есть в трекере. Искать — в общем «Поиске» (🔍 слева)</div>
+    <div class="row" style="margin-bottom:14px">
+      <div class="pill on">⚙ Фильтры · 3</div>
+    </div>
+    <div class="grid">
+      <div class="poster"><span class="badge">Фильм</span><div class="t">Одиссея (2026)</div></div>
+      <div class="poster"><span class="badge">Фильм</span><div class="t">Сердце зверя (2026)</div></div>
+      <div class="poster"><span class="badge">Фильм</span><div class="t">Обсессия (2025)</div></div>
+      <div class="poster"><span class="badge">Сериал</span><div class="t">Титаны (2026)</div></div>
+      <div class="poster"><span class="badge">Сериал</span><div class="t">Спецы (2026)</div></div>
+      <div class="poster"><span class="badge">Фильм</span><div class="t">Дюна: часть вторая</div></div>
+      <div class="poster"><span class="badge">Фильм</span><div class="t">Падение луны</div></div>
+    </div>
+  </div>
+
+  <!-- сам оверлей фильтров -->
+  <div class="filters">
+    <div class="fbox">
+      <div class="fhead">
+        <h2>⚙ Фильтры</h2>
+        <span class="cnt">выбрано 5</span>
+        <div class="apply">
+          <div class="pill" style="background:#1b2130;color:#c6cfdd">↺ Сбросить</div>
+          <div class="pill on">Применить · 43</div>
+        </div>
+      </div>
+      <div class="fnote">Галочками можно выбрать несколько значений в каждом разделе. Пусто = «любой».</div>
+
+      <div class="fcols">
+        <!-- список разделов -->
+        <div class="fnav">
+          <div class="it on">Тип <span>2</span></div>
+          <div class="it">Жанры <span>2</span></div>
+          <div class="it">Страны <span>2</span></div>
+          <div class="it">Годы <span>1</span></div>
+          <div class="it">Качество <span>0</span></div>
+          <div class="it">Озвучка <span>0</span></div>
+        </div>
+
+        <!-- содержимое раздела «Страны» -->
+        <div class="fpane">
+          <div class="fgroup">
+            <div class="gl">ОСНОВНЫЕ СТРАНЫ — ВСЕГДА СВЕРХУ</div>
+            <div class="opts">
+              <div class="opt on"><span class="box"></span>Россия</div>
+              <div class="opt on"><span class="box"></span>США</div>
+              <div class="opt"><span class="box"></span>Великобритания</div>
+              <div class="opt"><span class="box"></span>Франция</div>
+              <div class="opt"><span class="box"></span>Германия</div>
+              <div class="opt"><span class="box"></span>Корея</div>
+              <div class="opt"><span class="box"></span>Япония</div>
+              <div class="opt"><span class="box"></span>Индия</div>
+              <div class="opt"><span class="box"></span>Испания</div>
+              <div class="opt"><span class="box"></span>Италия</div>
+            </div>
+          </div>
+          <div class="fgroup">
+            <div class="gl">ОСТАЛЬНЫЕ СТРАНЫ</div>
+            <div class="opts">
+              <div class="opt"><span class="box"></span>Австралия</div>
+              <div class="opt"><span class="box"></span>Австрия</div>
+              <div class="opt"><span class="box"></span>Аргентина</div>
+              <div class="opt"><span class="box"></span>Бельгия</div>
+              <div class="opt"><span class="box"></span>Бразилия</div>
+              <div class="opt"><span class="box"></span>Венгрия</div>
+              <div class="opt"><span class="box"></span>Гонконг</div>
+              <div class="opt"><span class="box"></span>Дания</div>
+              <div class="opt"><span class="box"></span>Израиль</div>
+              <div class="opt"><span class="box"></span>Ирландия</div>
+              <div class="opt"><span class="box"></span>Казахстан</div>
+              <div class="opt"><span class="box"></span>Канада</div>
+              <div class="opt"><span class="box"></span>Китай</div>
+              <div class="opt"><span class="box"></span>Мексика</div>
+              <div class="opt"><span class="box"></span>Нидерланды</div>
+              <div class="opt"><span class="box"></span>Норвегия</div>
+              <div class="opt"><span class="box"></span>Польша</div>
+              <div class="opt"><span class="box"></span>Турция</div>
+              <div class="opt"><span class="box"></span>Украина</div>
+              <div class="opt"><span class="box"></span>Швеция</div>
+              <div class="opt" style="border-style:dashed;color:#8b95a7">ещё 21 →</div>
+            </div>
+          </div>
+          <div class="fnote">Выбранные разделы подсвечиваются в списке слева; «Применить» показывает счётчик подходящих раздач.</div>
+        </div>
+      </div>
+
+      <!-- как будет выглядеть раздел «Жанры» -->
+      <div style="margin-top:16px">
+        <div class="gl" style="font-size:13px;letter-spacing:.6px;color:#8b95a7;font-weight:800;margin-bottom:9px">
+          ТАК ЖЕ ВЫГЛЯДЯТ РАЗДЕЛЫ: ЖАНРЫ (мультивыбор), ГОДЫ, КАЧЕСТВО, ОЗВУЧКА
+        </div>
+        <div class="opts">
+          <div class="opt on"><span class="box"></span>Боевик</div>
+          <div class="opt on"><span class="box"></span>Фантастика</div>
+          <div class="opt"><span class="box"></span>Комедия</div>
+          <div class="opt"><span class="box"></span>Драма</div>
+          <div class="opt"><span class="box"></span>Триллер</div>
+          <div class="opt"><span class="box"></span>Ужасы</div>
+          <div class="opt"><span class="box"></span>Детектив</div>
+          <div class="opt"><span class="box"></span>Мелодрама</div>
+          <div class="opt"><span class="box"></span>Документальный</div>
+          <div class="opt"><span class="box"></span>Мультфильм</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">Одна кнопка «⚙ Фильтры» вместо простыни чипов; выбранное видно чипами на экране каталога</div>
+</div>
+<div class="label">Экран 2а — Фильтры: оверлей с разделами, галочки, мультивыбор, основные страны первыми</div>
+</div>
+
+<!-- ЭКРАН 3: СТАТИСТИКА -->
+<div class="wrap">
+<div class="screen">
+  <div class="nav">
+    <div class="logo">ВНосКино</div>
+    <div class="ni"><span class="ic">🏠</span>Главная</div>
+    <div class="ni"><span class="ic">▶</span>Продолжить</div>
+    <div class="ni"><span class="ic">⭐</span>Избранное</div>
+    <div class="ni"><span class="ic">🎬</span>Фильмы</div>
+    <div class="ni"><span class="ic">📺</span>Сериалы</div>
+    <div class="ni"><span class="ic">🎪</span>Шоу</div>
+    <div class="ni"><span class="ic">🧲</span>Торренты</div>
+    <div class="ni"><span class="ic">🔍</span>Поиск</div>
+    <div class="ni on"><span class="ic">📊</span>Статистика</div>
+    <div class="ni dim"><span class="ic">⚙</span>Настройки</div>
+  </div>
+  <div class="main">
+    <h1>📊 Статистика</h1>
+    <div class="sub">По вашей истории просмотра — без интернета, всё считается на телевизоре</div>
+    <div class="statgrid">
+      <div class="stat"><div class="n">128 ч</div><div class="l">всего просмотрено</div></div>
+      <div class="stat"><div class="n">312</div><div class="l">серий с прогрессом</div></div>
+      <div class="stat"><div class="n">46</div><div class="l">отмечено просмотренными</div></div>
+      <div class="stat"><div class="n">19</div><div class="l">за последние 7 дней</div></div>
+    </div>
+    <div class="two">
+      <div class="chart">
+        <div style="font-size:17px;font-weight:700;margin-bottom:6px">Активность по месяцам</div>
+        <div class="bars">
+          <div class="bar" style="height:38%"><span>май</span></div>
+          <div class="bar" style="height:62%"><span>июн</span></div>
+          <div class="bar" style="height:45%"><span>июл</span></div>
+          <div class="bar" style="height:80%"><span>авг</span></div>
+          <div class="bar" style="height:56%"><span>сен</span></div>
+          <div class="bar" style="height:95%"><span>окт</span></div>
+        </div>
+      </div>
+      <div class="list">
+        <div style="font-size:17px;font-weight:700;margin-bottom:6px">Больше всего времени</div>
+        <div class="li"><span>Титаны</span><span style="color:var(--gold)">24 ч 10 мин</span></div>
+        <div class="li"><span>Спецы</span><span style="color:var(--gold)">18 ч 40 мин</span></div>
+        <div class="li"><span>Медленные лошади</span><span style="color:var(--gold)">11 ч 05 мин</span></div>
+        <div class="li"><span>Дюна: часть вторая</span><span style="color:var(--gold)">2 ч 46 мин</span></div>
+        <div class="li"><span>Сердце зверя</span><span style="color:var(--gold)">1 ч 52 мин</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="note">Данные уже пишутся в прогресс — раздел не требует новых разрешений</div>
+</div>
+<div class="label">Экран 3 — Статистика: часы, серии, активность по месяцам, топ по времени</div>
+</div>
+
+<!-- ЭКРАН 4: ДЕТАЛИ СЕРИАЛА -->
+<div class="wrap">
+<div class="screen">
+  <div class="nav">
+    <div class="logo">ВНосКино</div>
+    <div class="ni"><span class="ic">🏠</span>Главная</div>
+    <div class="ni"><span class="ic">▶</span>Продолжить</div>
+    <div class="ni"><span class="ic">⭐</span>Избранное</div>
+    <div class="ni"><span class="ic">🎬</span>Фильмы</div>
+    <div class="ni on"><span class="ic">📺</span>Сериалы</div>
+    <div class="ni"><span class="ic">🎪</span>Шоу</div>
+    <div class="ni"><span class="ic">🧲</span>Торренты</div>
+    <div class="ni"><span class="ic">🔍</span>Поиск</div>
+    <div class="ni"><span class="ic">📊</span>Статистика</div>
+    <div class="ni dim"><span class="ic">⚙</span>Настройки</div>
+  </div>
+  <div class="main">
+    <div class="hero">
+      <div class="bigposter"><span class="badge" style="left:12px;top:12px">Сериал · 2026</span></div>
+      <div>
+        <h1 style="font-size:40px">Титаны</h1>
+        <div style="display:flex;gap:10px;align-items:center">
+          <span style="background:var(--gold);color:#0e1116;padding:6px 12px;border-radius:8px;font-weight:800">★ 7.6 КП</span>
+          <span style="background:#2b2f3a;color:#f5c518;padding:6px 12px;border-radius:8px;font-weight:800">IMDb 7.9</span>
+        </div>
+        <div class="status">📺 Идёт · следующая серия S05E07 — 12.11.2026</div>
+        <p style="color:#b9c3d2;font-size:17px;line-height:1.55;max-width:980px">
+          Пятый сезон: команда пытается удержать город после раскола. В раздаче 7 серий,
+          восьмая выйдет через неделю — приложение само добавит её в список.
+        </p>
+        <div style="margin-top:14px;font-size:15px;color:var(--muted)">В ролях <span style="color:#6d788b">(нажмите на имя — поиск по актёру)</span></div>
+        <div class="actors">
+          <div class="actor">Брентон Твейтс</div>
+          <div class="actor">Анна Диоп</div>
+          <div class="actor">Теган Крофт</div>
+          <div class="actor">Райан Поттер</div>
+        </div>
+        <div class="actions">
+          <div class="btn primary">▶ Смотреть</div>
+          <div class="btn">🎬 Эпизоды</div>
+          <div class="btn">🧲 Другая раздача</div>
+          <div class="btn">★ В избранное</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="note">Статус сериала и актёры — новые данные из TMDB (уже работает через DoH)</div>
+</div>
+<div class="label">Экран 4 — Детали: статус «идёт/завершён», следующая серия, кликабельные актёры</div>
+</div>
+
+<!-- ЭКРАН 5: ЧТО НОВОГО -->
+<div class="wrap">
+<div class="screen">
+  <div class="nav">
+    <div class="logo">ВНосКино</div>
+    <div class="ni on"><span class="ic">🏠</span>Главная</div>
+    <div class="ni"><span class="ic">▶</span>Продолжить</div>
+    <div class="ni"><span class="ic">⭐</span>Избранное</div>
+    <div class="ni"><span class="ic">🎬</span>Фильмы</div>
+    <div class="ni"><span class="ic">📺</span>Сериалы</div>
+    <div class="ni"><span class="ic">🎪</span>Шоу</div>
+    <div class="ni"><span class="ic">🧲</span>Торренты</div>
+    <div class="ni"><span class="ic">🔍</span>Поиск</div>
+    <div class="ni"><span class="ic">📊</span>Статистика</div>
+    <div class="ni dim"><span class="ic">⚙</span>Настройки</div>
+  </div>
+  <div class="main">
+    <h1>Главная</h1>
+    <div class="sub">Продолжить просмотр · Новинки · Популярное</div>
+    <div class="grid">
+      <div class="poster"><span class="badge">+2 серии</span><div class="t">Титаны</div></div>
+      <div class="poster"><div class="t">Спецы</div></div>
+      <div class="poster"><div class="t">Дюна: часть вторая</div></div>
+      <div class="poster"><div class="t">Одиссея</div></div>
+      <div class="poster"><div class="t">Сердце зверя</div></div>
+      <div class="poster"><div class="t">Обсессия</div></div>
+      <div class="poster"><div class="t">Медленные лошади</div></div>
+    </div>
+  </div>
+  <div class="overlay">
+    <div class="modal">
+      <h2>🆕 Что нового в 0.7.99</h2>
+      <p>• Вкладка «Торренты» больше не пустая</p>
+      <p>• 5-й сезон появляется в эпизодах — сезоны собираются из нескольких раздач</p>
+      <p>• Бэкап настроек и кеша на домашний сервер</p>
+      <p>• Статус сериала: идёт / завершён и дата следующей серии</p>
+      <p>• Статистика просмотра и кликабельные актёры</p>
+      <div class="btn primary" style="display:inline-block;margin-top:18px">Понятно</div>
+    </div>
+  </div>
+</div>
+<div class="label">Экран 5 — «Что нового»: один раз после обновления, текст из GitHub Release</div>
+</div>
+
+<!-- ЭКРАН 6: НАСТРОЙКИ — ПОД-ВКЛАДКИ (Проверка сети) -->
+<div class="wrap">
+<div class="screen">
+  <div class="nav">
+    <div class="logo">ВНосКино</div>
+    <div class="ni"><span class="ic">🏠</span>Главная</div>
+    <div class="ni"><span class="ic">▶</span>Продолжить</div>
+    <div class="ni"><span class="ic">⭐</span>Избранное</div>
+    <div class="ni"><span class="ic">🎬</span>Фильмы</div>
+    <div class="ni"><span class="ic">📺</span>Сериалы</div>
+    <div class="ni"><span class="ic">🎪</span>Шоу</div>
+    <div class="ni"><span class="ic">🧲</span>Торренты</div>
+    <div class="ni"><span class="ic">🔍</span>Поиск</div>
+    <div class="ni"><span class="ic">📊</span>Статистика</div>
+    <div class="ni on"><span class="ic">⚙</span>Настройки</div>
+  </div>
+  <div class="main">
+    <h1>⚙ Настройки</h1>
+    <div class="sub">Раньше — одна длинная простыня. Теперь 4 под-вкладки: слева разделы, справа только они</div>
+
+    <div class="setcols">
+      <div class="snav">
+        <div class="it">🔄 <span>Обновление</span></div>
+        <div class="it on">🔌 <span>Подключения</span></div>
+        <div class="it">📺 <span>Воспроизведение</span></div>
+        <div class="it">🧰 <span>Обслуживание</span></div>
+      </div>
+
+      <div class="pane">
+        <div class="ph">🔌 Подключения</div>
+        <div class="pd">Всё, без чего не работают каталоги, раздачи и обновления</div>
+
+        <div class="fld">
+          <div class="lbl">Jackett<small>Поиск раздач по всем трекерам</small></div>
+          <div class="inp">http://192.168.3.78:9117</div>
+          <div class="inp" style="flex:0 0 300px">api-ключ ••••••••</div>
+          <div class="ok">✓ 12 трекеров</div>
+        </div>
+        <div class="fld">
+          <div class="lbl">TorrServe<small>Основной движок стриминга</small></div>
+          <div class="inp">http://192.168.3.78:8090</div>
+          <div class="ok">✓ 147.1</div>
+        </div>
+        <div class="fld">
+          <div class="lbl">Ключ Кинопоиска<small>Каталоги, постеры, рейтинги</small></div>
+          <div class="inp">kinopoisk.dev • ключ задан</div>
+          <div class="ok">✓ 200 OK</div>
+        </div>
+        <div class="fld">
+          <div class="lbl">TMDB<small>Кадры серий, актёры, статус сериала</small></div>
+          <div class="inp">через DoH (DNS-обход блокировки)</div>
+          <div class="ok">✓ api отвечает</div>
+        </div>
+        <div class="fld">
+          <div class="lbl">Сервер бэкапа<small>Настройки и кеш на домашнем Mac</small></div>
+          <div class="inp">http://192.168.3.78:8091</div>
+          <div class="ok">✓ /health OK · 65 ключей</div>
+        </div>
+
+        <div style="display:flex;gap:12px;margin-top:18px">
+          <div class="pill on" style="padding:13px 20px;font-size:16px">Проверить всё</div>
+          <div class="pill" style="padding:13px 20px;font-size:16px;background:#1b2130">Сохранить</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="note">Внутри раздела — одна проверка на всё: «Проверить всё» показывает ✓/✕ рядом с каждым</div>
+</div>
+<div class="label">Экран 6 — Настройки: под-вкладки (Обновление, Подключения, Воспроизведение, Обслуживание)</div>
+</div>
+
+<!-- ЭКРАН 7: НАСТРОЙКИ — ОБСЛУЖИВАНИЕ (Логи и бэкап) -->
+<div class="wrap">
+<div class="screen">
+  <div class="nav">
+    <div class="logo">ВНосКино</div>
+    <div class="ni"><span class="ic">🏠</span>Главная</div>
+    <div class="ni"><span class="ic">▶</span>Продолжить</div>
+    <div class="ni"><span class="ic">⭐</span>Избранное</div>
+    <div class="ni"><span class="ic">🎬</span>Фильмы</div>
+    <div class="ni"><span class="ic">📺</span>Сериалы</div>
+    <div class="ni"><span class="ic">🎪</span>Шоу</div>
+    <div class="ni"><span class="ic">🧲</span>Торренты</div>
+    <div class="ni"><span class="ic">🔍</span>Поиск</div>
+    <div class="ni"><span class="ic">📊</span>Статистика</div>
+    <div class="ni on"><span class="ic">⚙</span>Настройки</div>
+  </div>
+  <div class="main">
+    <h1>⚙ Настройки</h1>
+    <div class="sub">Раздел «Обслуживание»: бэкап, логи, сброс данных</div>
+
+    <div class="setcols">
+      <div class="snav">
+        <div class="it">🔄 <span>Обновление</span></div>
+        <div class="it">🔌 <span>Подключения</span></div>
+        <div class="it">📺 <span>Воспроизведение</span></div>
+        <div class="it on">🧰 <span>Обслуживание</span></div>
+      </div>
+
+      <div class="pane">
+        <div class="ph">🧰 Обслуживание</div>
+        <div class="pd">Чтобы телевизор не «засерался» лишним — всё хранится на домашнем сервере</div>
+
+        <div class="fld">
+          <div class="lbl">Бэкап на свой сервер<small>Настройки, избранное, прогресс, кеш</small></div>
+          <div class="sw on"></div>
+          <div class="ok">последний: сегодня 16:41</div>
+        </div>
+        <div class="fld">
+          <div class="lbl">Резервный бэкап в Gist<small>Если домашний сервер недоступен</small></div>
+          <div class="sw on"></div>
+          <div style="color:var(--muted);font-size:14px">токен задан</div>
+        </div>
+        <div class="fld">
+          <div class="lbl">Запись логов<small>Помогает разобрать сбой по Gist</small></div>
+          <div class="sw on"></div>
+          <div style="color:var(--muted);font-size:14px">файл 240 КБ</div>
+        </div>
+        <div class="fld">
+          <div class="lbl">Кеш каталогов<small>Постеры, метаданные, раздачи</small></div>
+          <div class="inp" style="flex:0 0 220px">18,4 МБ</div>
+          <div class="pill" style="padding:10px 16px;background:#1b2130">Очистить</div>
+        </div>
+
+        <div style="display:flex;gap:12px;margin-top:18px">
+          <div class="pill on" style="padding:13px 20px;font-size:16px">💾 Сохранить бэкап сейчас</div>
+          <div class="pill" style="padding:13px 20px;font-size:16px;background:#1b2130">⬇ Восстановить</div>
+          <div class="pill" style="padding:13px 20px;font-size:16px;background:#2a1a1a;color:#f0a0a0">Выгрузить лог</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="note">Опасные действия — в самом низу раздела, отдельными кнопками с подтверждением</div>
+</div>
+<div class="label">Экран 7 — Настройки → Обслуживание: бэкап на сервер, Gist-резерв, логи, кеш</div>
+</div>
+
+</body>
+</html>

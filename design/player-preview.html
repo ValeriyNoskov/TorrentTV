@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>ВНосКино — плеер</title>
+<style>
+  :root{--bg:#080a0e;--panel:#151a23;--card:#1f2430;--line:#2a3140;
+        --gold:#f5b942;--green:#7fb84f;--text:#e8edf5;--muted:#8b95a7}
+  *{box-sizing:border-box}
+  body{margin:0;background:#05070a;color:var(--text);
+       font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+  .wrap{zoom:.52}
+  .label{width:1920px;padding:10px 18px;color:var(--muted);font-size:22px;
+         background:#05070a;border-top:1px solid #11151c}
+  .screen{width:1920px;height:1080px;position:relative;overflow:hidden;background:#000}
+  /* «видео» — градиент вместо кадра */
+  .video{position:absolute;inset:0;
+    background:
+      radial-gradient(700px 500px at 68% 30%,rgba(245,185,66,.16),transparent 70%),
+      radial-gradient(900px 700px at 20% 85%,rgba(60,110,180,.22),transparent 70%),
+      linear-gradient(160deg,#141b28,#05070b 70%)}
+  .video:after{content:"ТИТАНЫ · S05E06";position:absolute;left:50%;top:46%;
+    transform:translate(-50%,-50%);font-size:58px;letter-spacing:8px;color:#ffffff10;font-weight:800}
+  /* верхняя плашка */
+  .top{position:absolute;left:44px;top:34px;right:44px;display:flex;align-items:center;gap:16px}
+  .title{font-size:28px;font-weight:800;text-shadow:0 2px 12px #000}
+  .ep{color:var(--gold);font-size:18px;font-weight:700}
+  .src{margin-left:auto;display:flex;gap:10px;align-items:center;font-size:15px;color:#cbd5e4}
+  .tag{background:#000a;border:1px solid #ffffff22;border-radius:8px;padding:6px 11px}
+  .tag.ok{color:#a8e08a;border-color:#3d5f2b;background:#12200c}
+  /* панель управления */
+  .panel{position:absolute;left:0;right:0;bottom:0;padding:26px 44px 30px;
+    background:linear-gradient(180deg,transparent,#000 55%)}
+  .bar{height:8px;background:#ffffff26;border-radius:6px;position:relative;margin-bottom:8px}
+  .bar .buf{position:absolute;left:0;top:0;bottom:0;width:71%;background:#ffffff40;border-radius:6px}
+  .bar .done{position:absolute;left:0;top:0;bottom:0;width:62%;background:var(--gold);border-radius:6px}
+  .bar .dot{position:absolute;left:62%;top:-6px;width:20px;height:20px;border-radius:50%;
+            background:var(--gold);box-shadow:0 0 0 4px #f5b94233}
+  .times{display:flex;justify-content:space-between;color:#c9d3e2;font-size:15px;margin-bottom:14px}
+  .controls{display:flex;align-items:center;gap:12px}
+  .ctl{width:64px;height:64px;border-radius:14px;background:#ffffff12;border:1px solid #ffffff1f;
+       display:flex;align-items:center;justify-content:center;font-size:25px}
+  .ctl.on{background:var(--gold);color:#0e1116;border-color:var(--gold)}
+  .ctl.wide{width:auto;padding:0 22px;font-size:17px;font-weight:700;gap:10px}
+  .spacer{flex:1}
+  .epname{font-size:16px;color:#aeb9c9}
+  /* оверлей следующей серии */
+  .next{position:absolute;right:52px;bottom:190px;width:560px;background:#10151ee8;
+        border:1px solid #2c3444;border-radius:18px;padding:22px;
+        box-shadow:0 20px 60px #000a}
+  .next .h{font-size:15px;color:var(--gold);font-weight:800;letter-spacing:.4px}
+  .next .n{font-size:24px;font-weight:800;margin:8px 0 4px}
+  .next .d{color:#b9c3d2;font-size:15px}
+  .next .btns{display:flex;gap:10px;margin-top:16px}
+  .btn{padding:13px 20px;border-radius:11px;background:#1f2430;font-size:16px;font-weight:700;
+       border:1px solid #2a3140}
+  .btn.primary{background:var(--gold);color:#0e1116;border-color:var(--gold)}
+  .count{position:absolute;right:16px;top:14px;background:#0009;border:1px solid #ffffff22;
+         border-radius:50%;width:42px;height:42px;display:flex;align-items:center;justify-content:center;
+         font-weight:800;color:var(--gold)}
+  /* панель «серии/качество» */
+  .sheet{position:absolute;inset:0;background:#000c;display:flex;align-items:center;justify-content:center}
+  .sheetbox{width:1200px;background:#121821;border:1px solid #2b3342;border-radius:18px;padding:26px}
+  .sheetbox h2{margin:0 0 6px;font-size:26px}
+  .sheetbox .sub{color:var(--muted);font-size:15px;margin-bottom:18px}
+  .tabs{display:flex;gap:10px;margin-bottom:14px}
+  .tab{padding:10px 16px;border-radius:10px;background:#1b2130;font-size:15px;color:#cbd5e4}
+  .tab.on{background:var(--gold);color:#0e1116;font-weight:800}
+  .files{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .file{display:flex;align-items:center;gap:12px;background:#1a202b;border:1px solid #262d3b;
+        border-radius:11px;padding:13px 15px;font-size:15px}
+  .file.on{border-color:var(--gold);background:#241f10}
+  .file .q{color:var(--gold);font-weight:800;font-size:13px}
+  .file .s{margin-left:auto;color:#93a0b3;font-size:13px}
+  .note{position:absolute;right:22px;top:18px;background:#f5b942;color:#0e1116;
+        font-size:14px;font-weight:700;padding:8px 12px;border-radius:8px;max-width:520px}
+</style>
+</head>
+<body>
+
+<!-- ЭКРАН 1: ПЛЕЕР -->
+<div class="wrap">
+<div class="screen">
+  <div class="video"></div>
+  <div class="top">
+    <div class="title">Титаны</div>
+    <div class="ep">S05E06 · «Пепел»</div>
+    <div class="src">
+      <div class="tag ok">🧲 TorrServe · 1080p</div>
+      <div class="tag">⬇ 12,4 МБ/с · 👤 34</div>
+      <div class="tag">🔊 Дубляж</div>
+      <div class="tag">💬 Русские</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="bar"><div class="buf"></div><div class="done"></div><div class="dot"></div></div>
+    <div class="times"><span>32:14</span><span>− 18:42</span></div>
+    <div class="controls">
+      <div class="ctl on">⏸</div>
+      <div class="ctl">⏪</div>
+      <div class="ctl">⏩</div>
+      <div class="ctl">🔊</div>
+      <div class="ctl wide">1.0×</div>
+      <div class="ctl wide">💬 Субтитры</div>
+      <div class="ctl wide">🧲 Другая раздача</div>
+      <div class="ctl wide">📺 Серии</div>
+      <div class="spacer"></div>
+      <div class="epname">Следующая: S05E07 · «Перелом»</div>
+    </div>
+  </div>
+  <div class="note">Панель: пауза, ±10 сек, звук, скорость, субтитры, качество, серии</div>
+</div>
+<div class="label">Экран 1 — Плеер: панель, буфер, качество, источник и скорость загрузки</div>
+</div>
+
+<!-- ЭКРАН 2: СЛЕДУЮЩАЯ СЕРИЯ -->
+<div class="wrap">
+<div class="screen">
+  <div class="video"></div>
+  <div class="top">
+    <div class="title">Титаны</div>
+    <div class="ep">S05E06 · «Пепел»</div>
+    <div class="src"><div class="tag ok">🧲 TorrServe · 1080p</div></div>
+  </div>
+  <div class="panel">
+    <div class="bar"><div class="buf"></div><div class="done" style="width:97%"></div><div class="dot" style="left:97%"></div></div>
+    <div class="times"><span>50:02</span><span>− 00:54</span></div>
+    <div class="controls">
+      <div class="ctl">⏸</div><div class="ctl">⏪</div><div class="ctl">⏩</div><div class="ctl">🔊</div>
+      <div class="spacer"></div><div class="epname">Конец серии</div>
+    </div>
+  </div>
+  <div class="next">
+    <div class="count">12</div>
+    <div class="h">СЛЕДУЮЩАЯ СЕРИЯ</div>
+    <div class="n">S05E07 · «Перелом»</div>
+    <div class="d">Раздача уже подключена — начнём без задержки</div>
+    <div class="btns">
+      <div class="btn primary">▶ Смотреть сейчас</div>
+      <div class="btn">✕ Отмена</div>
+    </div>
+  </div>
+  <div class="note">Автопереход с обратным отсчётом — можно отменить</div>
+</div>
+<div class="label">Экран 2 — Окончание серии: «следующая через 12 сек» + отмена</div>
+</div>
+
+<!-- ЭКРАН 3: ВЫБОР РАЗДАЧИ/СЕРИИ -->
+<div class="wrap">
+<div class="screen">
+  <div class="video" style="filter:brightness(.25)"></div>
+  <div class="sheet">
+    <div class="sheetbox">
+      <h2>🧲 Титаны — выбрать серию или качество</h2>
+      <div class="sub">Позиция просмотра сохранится: продолжим с 32:14</div>
+      <div class="tabs">
+        <div class="tab on">Все серии</div>
+        <div class="tab">1080p</div>
+        <div class="tab">720p</div>
+        <div class="tab">Другая раздача</div>
+      </div>
+      <div class="files">
+        <div class="file"><span class="q">1080p</span> S05E06 · «Пепел» <span class="s">▶ 32:14</span></div>
+        <div class="file"><span class="q">720p</span> S05E06 · «Пепел» <span class="s">▶ 32:14</span></div>
+        <div class="file on"><span class="q">1080p</span> S05E07 · «Перелом» <span class="s">следующая</span></div>
+        <div class="file"><span class="q">720p</span> S05E07 · «Перелом» <span class="s">следующая</span></div>
+        <div class="file"><span class="q">1080p</span> S05E05 · «Тень» <span class="s">✓ просмотрено</span></div>
+        <div class="file"><span class="q">720p</span> S05E05 · «Тень» <span class="s">✓ просмотрено</span></div>
+        <div class="file"><span class="q">1080p</span> S05E04 · «Круг» <span class="s">✓ просмотрено</span></div>
+        <div class="file"><span class="q">720p</span> S05E04 · «Круг» <span class="s">✓ просмотрено</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="note">Переключение без потери позиции — то, ради чего кнопка «🧲»</div>
+</div>
+<div class="label">Экран 3 — Выбор серии/качества поверх видео, с сохранением позиции</div>
+</div>
+
+</body>
+</html>

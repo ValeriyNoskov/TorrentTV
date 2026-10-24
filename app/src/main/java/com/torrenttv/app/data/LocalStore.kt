@@ -318,6 +318,79 @@ class LocalStore(context: Context) {
         prefs.edit().putStringSet("watched", next).apply()
     }
 
+    // ---------- Статистика просмотра (ROADMAP E) ----------
+
+    /** Сводка для экрана «Статистика»: часы, серии, активность, топ по времени. */
+    data class WatchStats(
+        val totalSeconds: Long,
+        val episodes: Int,
+        val watched: Int,
+        val inHistory: Int,
+        val last7: Int,
+        val last30: Int,
+        /** Месяц «2026-10» → сколько серий/записей, последние 6 месяцев по порядку. */
+        val byMonth: List<Pair<String, Int>>,
+        /** Название → минуты (из ленты «Продолжить»). */
+        val top: List<Pair<String, Int>>,
+    )
+
+    fun watchStats(): WatchStats {
+        val now = System.currentTimeMillis()
+        val day = 86_400_000L
+        var totalSec = 0L
+        var episodes = 0
+        var last7 = 0
+        var last30 = 0
+        val months = mutableMapOf<String, Int>()
+        val monthFmt = java.text.SimpleDateFormat("yyyy-MM", java.util.Locale.US)
+
+        // Серии: у каждой своя запись epos:<ключ> с позицией и временем
+        for ((k, v) in prefs.all) {
+            if (!k.startsWith("epos:") || v !is String) continue
+            val o = runCatching { JSONObject(v) }.getOrNull() ?: continue
+            val pos = o.optInt("pos", 0)
+            val dur = o.optInt("dur", 0)
+            val at = o.optLong("at", 0)
+            episodes++
+            // Смотрим не больше длительности: иначе перемотки раздувают часы
+            totalSec += (if (dur > 0) minOf(pos, dur) else pos).toLong()
+            if (at > now - 7 * day) last7++
+            if (at > now - 30 * day) last30++
+            if (at > 0) months[monthFmt.format(java.util.Date(at))] = (months[monthFmt.format(java.util.Date(at))] ?: 0) + 1
+        }
+
+        // Лента «Продолжить»: фильмы и сериалы целиком + топ по времени
+        val progress = continueWatching()
+        val byTitle = mutableMapOf<String, Int>()
+        for (e in progress) {
+            totalSec += e.positionSec.coerceAtMost(if (e.durationSec > 0) e.durationSec else e.positionSec).toLong()
+            if (e.updatedAt > now - 7 * day) last7++
+            if (e.updatedAt > now - 30 * day) last30++
+            val minutes = (e.positionSec / 60).coerceAtLeast(1)
+            byTitle[e.item.title] = (byTitle[e.item.title] ?: 0) + minutes
+        }
+
+        // Последние 6 месяцев по порядку (включая пустые — чтобы график не «прыгал»)
+        val cal = java.util.Calendar.getInstance()
+        val ordered = mutableListOf<Pair<String, Int>>()
+        repeat(6) {
+            val key = monthFmt.format(cal.time)
+            ordered.add(0, key to (months[key] ?: 0))
+            cal.add(java.util.Calendar.MONTH, -1)
+        }
+
+        return WatchStats(
+            totalSeconds = totalSec,
+            episodes = episodes,
+            watched = (prefs.getStringSet("watched", emptySet()) ?: emptySet()).size,
+            inHistory = progress.size,
+            last7 = last7,
+            last30 = last30,
+            byMonth = ordered,
+            top = byTitle.entries.sortedByDescending { it.value }.take(5).map { it.key to it.value },
+        )
+    }
+
     /** Отметить просмотренной сразу под несколькими ключами (обычный + нормализованный). */
     fun markWatchedKeys(keys: List<String>, watched: Boolean = true) {
         val set = prefs.getStringSet("watched", emptySet()) ?: emptySet()
@@ -555,6 +628,15 @@ class LocalStore(context: Context) {
 
     fun setTorrServeHost(v: String) {
         prefs.edit().putString("torrserve_host", v.trim().removeSuffix("/")).apply()
+    }
+
+    // ---------- «Что нового» после обновления ----------
+
+    /** Версия, для которой пользователь уже видел список изменений. */
+    fun lastSeenVersion(): String = prefs.getString("seen_version", "") ?: ""
+
+    fun setLastSeenVersion(v: String) {
+        prefs.edit().putString("seen_version", v).apply()
     }
 
     // ---------- Свой сервер бэкапа (домашний Mac) ----------

@@ -1,18 +1,22 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
     namespace = "com.torrenttv.app"
-    compileSdk = 34
+    // compileSdk 36 нужен для свежих media3 (1.11.x): они требуют новую
+    // платформу. targetSdk оставляем 34 — поведение на ТВ не меняем,
+    // чтобы обновление библиотек не притащило новых ограничений Android 15/16
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.torrenttv.app"
         minSdk = 29          // Android 10 — минимальная версия Android TV по требованию
         targetSdk = 34
-        versionCode = 114
-        versionName = "0.7.98"
+        versionCode = 115
+        versionName = "0.7.99"
         // Ключи метаданных задаются в gradle.properties: kpApiKey=... (kinopoisk.dev) или tmdbApiKey=...
         buildConfigField("String", "KP_API_KEY", "\"${findProperty("kpApiKey") ?: ""}\"")
         buildConfigField("String", "TMDB_API_KEY", "\"${findProperty("tmdbApiKey") ?: ""}\"")
@@ -51,9 +55,6 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true   // нужна версия в BuildConfig.VERSION_NAME для автообновления
-    }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -108,8 +109,8 @@ dependencies {
     implementation("com.frostwire:jlibtorrent-android-x86_64:$jlibtorrent")
 
     // Плеер (Media3 / ExoPlayer)
-    implementation("androidx.media3:media3-exoplayer:1.4.1")
-    implementation("androidx.media3:media3-exoplayer-hls:1.4.1")  // IPTV-потоки (.m3u8)
-    implementation("androidx.media3:media3-exoplayer-dash:1.4.1") // Filmix отдаёт .mpd (DASH) — без него краш ClassNotFoundException
-    implementation("androidx.media3:media3-ui:1.4.1")
+    implementation("androidx.media3:media3-exoplayer:1.11.1")
+    implementation("androidx.media3:media3-exoplayer-hls:1.11.1")  // IPTV-потоки (.m3u8)
+    implementation("androidx.media3:media3-exoplayer-dash:1.11.1") // Filmix отдаёт .mpd (DASH) — без него краш ClassNotFoundException
+    implementation("androidx.media3:media3-ui:1.11.1")
 }

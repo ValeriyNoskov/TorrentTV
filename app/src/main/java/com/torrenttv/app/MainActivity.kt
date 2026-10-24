@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -17,6 +19,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
 import com.torrenttv.app.ui.AppTypography
 import com.torrenttv.app.data.MediaItem
@@ -147,6 +152,30 @@ private fun App() {
     // а не на «Главную» (жалоба: вышел из «Спецов» — выкинуло с «Торрентов»)
     var lastTab by remember { mutableStateOf<Screen>(Screen.Home) }
 
+    // «Что нового» (ROADMAP B): один раз после обновления показываем список
+    // изменений из GitHub Release. При первой установке не показываем —
+    // пользователю не с чем сравнивать
+    val appCtx = androidx.compose.ui.platform.LocalContext.current
+    var changelog by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) {
+        val store = com.torrenttv.app.data.LocalStore(appCtx)
+        val seen = store.lastSeenVersion()
+        val current = BuildConfig.VERSION_NAME
+        if (seen != current) {
+            store.setLastSeenVersion(current)
+            if (seen.isNotBlank()) {
+                val notes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    com.torrenttv.app.update.UpdateManager.releaseNotes(
+                        current,
+                        com.torrenttv.app.update.UpdateManager.ghToken(appCtx),
+                    )
+                }
+                com.torrenttv.app.data.AppLog.log("app", "что нового: версия $current, описание ${if (notes.isNullOrBlank()) "нет" else "есть"}")
+                changelog = notes?.takeIf { it.isNotBlank() } ?: "Обновление установлено. Список изменений — в описании релиза."
+            }
+        }
+    }
+
     // Полный лог навигации: «нажал кнопку → открылось то-то» — видно в выгрузке лога
     LaunchedEffect(screen) {
         if (screen in Screen.TABS) lastTab = screen
@@ -207,6 +236,7 @@ private fun App() {
         }
     }
 
+    Box(Modifier.fillMaxSize()) {
     if (screen in Screen.TABS) {
         // Вкладки: левый навигационный бар + содержимое вкладки
         Row(
@@ -369,5 +399,47 @@ private fun App() {
 
             else -> Unit
         }
+    }
+
+    // Оверлей «Что нового»: показывается один раз после обновления,
+    // закрывается кнопкой (или любой кнопкой пульта — фокус на «Понятно»)
+    if (changelog.isNotBlank()) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color(0xCC000000)),
+            contentAlignment = androidx.compose.ui.Alignment.Center,
+        ) {
+            Column(
+                Modifier
+                    .background(
+                        Color(0xFF141922),
+                        androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                    )
+                    .padding(28.dp)
+                    .widthIn(max = 820.dp),
+            ) {
+                androidx.tv.material3.Text(
+                    text = "🆕 Что нового в ${BuildConfig.VERSION_NAME}",
+                    color = Color(0xFFF5B942),
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                androidx.tv.material3.Text(
+                    text = changelog.take(900),
+                    color = Color.White.copy(alpha = 0.85f),
+                    fontSize = 15.sp,
+                    lineHeight = 22.sp,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                androidx.tv.material3.Button(
+                    onClick = { changelog = "" },
+                    modifier = Modifier.padding(top = 18.dp),
+                ) {
+                    androidx.tv.material3.Text("Понятно", fontSize = 16.sp)
+                }
+            }
+        }
+    }
     }
 }

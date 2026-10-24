@@ -40,6 +40,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import com.torrenttv.app.data.MediaItem
 import com.torrenttv.app.data.MediaApi
+import com.torrenttv.app.data.TmdbClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -198,6 +199,42 @@ fun DetailsScreen(
                                 color = Color(0xFFF5C518),
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                }
+                // Статус сериала (ROADMAP №10): «идёт/завершён» и ближайшая серия.
+                // TMDB (через DoH) — единственный надёжный источник; если его нет,
+                // строка просто не показывается
+                if (item.type == "tv") {
+                    var tvStatus by remember(item.id) { mutableStateOf<TmdbClient.TvStatus?>(null) }
+                    LaunchedEffect(item.id) {
+                        val st = withContext(Dispatchers.IO) {
+                            runCatching { TmdbClient.tvStatus(item.title, item.year) }.getOrNull()
+                        }
+                        tvStatus = st
+                    }
+                    tvStatus?.let { st ->
+                        val date = { d: String ->
+                            if (d.length >= 10) "${d.substring(8, 10)}.${d.substring(5, 7)}.${d.substring(0, 4)}" else d
+                        }
+                        val text = when {
+                            st.running && st.nextSeason > 0 ->
+                                "📺 Идёт · следующая серия S%02dE%02d".format(st.nextSeason, st.nextEpisode) +
+                                    if (st.nextAirDate.isNotBlank()) " — ${date(st.nextAirDate)}" else ""
+                            st.running -> "📺 Идёт · новые серии ожидаются"
+                            st.lastSeason > 0 ->
+                                "📺 Завершён · последняя серия S%02dE%02d".format(st.lastSeason, st.lastEpisode) +
+                                    if (st.lastAirDate.isNotBlank()) " — ${date(st.lastAirDate)}" else ""
+                            else -> ""
+                        }
+                        if (text.isNotBlank()) {
+                            Text(
+                                text = text,
+                                color = if (st.running) Color(0xFF7FB84F) else Color.White.copy(alpha = 0.6f),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(top = 10.dp),
                             )
                         }
                     }

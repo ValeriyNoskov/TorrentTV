@@ -1,5 +1,10 @@
 package com.torrenttv.app.ui
 
+import android.app.Activity
+import android.content.Intent
+import android.speech.RecognizerIntent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,8 +33,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -81,6 +90,40 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
     var searchQ by remember { mutableStateOf("") }
     var showKb by remember { mutableStateOf(false) }
     val searchFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    // Внешняя клавиатура (Настройки → Ввод): раньше этот экран её игнорировал
+    // и всегда показывал экранную — теперь как в «Поиске»
+    val externalKb = remember { store.useExternalKeyboard() }
+    val kbFieldFocus = remember { FocusRequester() }
+    var voiceStatus by remember { mutableStateOf("") }
+
+    // Голосовой ввод: тот же системный распознаватель, что в «Поиске»
+    val voiceLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { res ->
+        if (res.resultCode == Activity.RESULT_OK) {
+            val text = res.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+            if (!text.isNullOrBlank()) {
+                searchQ = text.trim()
+                voiceStatus = ""
+            }
+        }
+    }
+
+    fun startVoice() {
+        voiceStatus = ""
+        try {
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
+                putExtra(RecognizerIntent.EXTRA_PROMPT, "Скажите название для поиска в трекере")
+            }
+            voiceLauncher.launch(intent)
+        } catch (e: Exception) {
+            voiceStatus = "Голосовой ввод недоступен на этом устройстве"
+        }
+    }
 
     val gridState = rememberLazyGridState()
 
@@ -244,6 +287,17 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
                     focusedContentColor = Color(0xFF0E1116),
                 ),
             ) { Text("🔍 Найти в трекере", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)) }
+            Spacer(Modifier.width(8.dp))
+            androidx.tv.material3.Surface(
+                onClick = { showKb = true; startVoice() },
+                shape = clickableSurfaceShape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
+                colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                    containerColor = Color(0xFF1F2430),
+                    contentColor = Color.White,
+                    focusedContainerColor = Color(0xFFF5B942),
+                    focusedContentColor = Color(0xFF0E1116),
+                ),
+            ) { Text("🎤 Голос", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)) }
             if (searchMode) {
                 Spacer(Modifier.width(8.dp))
                 androidx.tv.material3.Surface(

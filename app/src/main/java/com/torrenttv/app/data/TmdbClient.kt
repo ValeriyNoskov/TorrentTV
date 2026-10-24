@@ -38,6 +38,9 @@ object TmdbClient {
     private val http = OkHttpClient.Builder()
         .connectTimeout(6, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
+        // TMDB блокируется в РФ на уровне DNS — резолвим через DoH,
+        // иначе каталоги, кадры серий и актёры молча не работают
+        .dns(DohDns)
         .build()
 
     /** true, если последний запрос к API не удался (сеть/ошибка HTTP). */
@@ -299,6 +302,83 @@ object TmdbClient {
     // ---------- Жанры ----------
 
     fun movieGenres(): List<Genre> = genres("/genre/movie/list")
+
+    // ---------- Статус сериала (ROADMAP №10) ----------
+
+    /** Состояние сериала: идёт/завершён и ближайшая/последняя серия. */
+    data class TvStatus(
+        val running: Boolean,
+        val nextSeason: Int = 0,
+        val nextEpisode: Int = 0,
+        val nextAirDate: String = "",
+        val lastSeason: Int = 0,
+        val lastEpisode: Int = 0,
+        val lastAirDate: String = "",
+        val seasons: Int = 0,
+    )
+
+    /**
+     * Статус по названию: «Возвращается/Завершён» + следующая серия.
+     * Берём TMDB (через DoH — в РФ его DNS блокирует), совпадение проверяем
+     * по названию и году, чтобы «Спецы» 2026 не получили статус фильма 2017.
+     */
+    fun tvStatus(title: String, year: String): TvStatus? {
+        if (title.isBlank()) return null
+        val params = mutableMapOf("query" to title)
+        year.toIntOrNull()?.let { params["first_air_date_year"] = it.toString() }
+        val found = get("/search/tv", params) ?: return null
+        val arr = found.optJSONArray("results") ?: return null
+        val want = TitleMatch.normalize(title)
+        var bestId = 0
+        var bestScore = 0
+        for (i in 0 until minOf(arr.length(), 5)) {
+            val o = arr.optJSONObject(i) ?: continue
+            val name = TitleMatch.normalize(
+                o.optString("name", "").ifBlank { o.optString("original_name", "") },
+            )
+            if (name.isBlank()) continue
+            var score = when {
+                name == want -> 100
+                name.startsWith(want) || want.startsWith(name) -> 70
+                else -> 0
+            }
+            val candYear = o.optString("first_air_date", "").take(4)
+            if (year.isNotBlank() && candYear == year) score += 40
+            if (o.optDouble("popularity", 0.0) > 10) score += 5
+            if (score > bestScore) {
+                bestScore = score
+                bestId = o.optInt("id", 0)
+            }
+        }
+        if (bestId == 0 || bestScore < 100) return null
+        return statusById(bestId)
+    }
+
+    fun statusById(tmdbId: Int): TvStatus? {
+        val o = get("/tv/$tmdbId") ?: return null
+        val st = o.optString("status", "")
+        val running = st.equals("Returning Series", true) || st.equals("In Production", true)
+        fun ep(key: String): Triple<Int, Int, String> {
+            val e = o.optJSONObject(key) ?: return Triple(0, 0, "")
+            return Triple(
+                e.optInt("season_number", 0),
+                e.optInt("episode_number", 0),
+                e.optString("air_date", ""),
+            )
+        }
+        val next = ep("next_episode_to_air")
+        val last = ep("last_episode_to_air")
+        return TvStatus(
+            running = running,
+            nextSeason = next.first,
+            nextEpisode = next.second,
+            nextAirDate = next.third,
+            lastSeason = last.first,
+            lastEpisode = last.second,
+            lastAirDate = last.third,
+            seasons = o.optInt("number_of_seasons", 0),
+        )
+    }
 
     fun tvGenres(): List<Genre> = genres("/genre/tv/list")
 
