@@ -14,6 +14,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -147,6 +149,9 @@ fun HomeScreen(
 
         // ---------- Оверлей обновления ----------
         updateInfo?.let { info ->
+            // Фокус сразу на кнопке «Обновить»: пультом достаточно нажать OK
+            val updateFocus = remember { FocusRequester() }
+            LaunchedEffect(info) { updateFocus.requestFocus() }
             androidx.tv.material3.Surface(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -171,14 +176,17 @@ fun HomeScreen(
                             Text(updateStatus, color = Color(0xFFFFD54F), fontSize = 13.sp)
                         }
                     }
-                    Button(onClick = {
-                        UpdateManager.downloadAndInstall(
-                            context,
-                            info,
-                            onProgress = { updateStatus = it },
-                            onError = { updateStatus = it },
-                        )
-                    }) {
+                    Button(
+                        onClick = {
+                            UpdateManager.downloadAndInstall(
+                                context,
+                                info,
+                                onProgress = { updateStatus = it },
+                                onError = { updateStatus = it },
+                            )
+                        },
+                        modifier = Modifier.focusRequester(updateFocus),
+                    ) {
                         Text("Обновить")
                     }
                 }
