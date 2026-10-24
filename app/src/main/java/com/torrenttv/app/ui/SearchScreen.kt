@@ -80,6 +80,7 @@ fun SearchScreen(
     val store = remember { LocalStore(context) }
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
+    var searchNote by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var torrents by remember { mutableStateOf<List<com.torrenttv.app.data.TorrentResult>>(emptyList()) }
     // Полные фильмы/серии с Rutube (без обманок: обзоров/реакций/нарезок)
@@ -130,6 +131,7 @@ fun SearchScreen(
         if (query.length >= 2) {
             loading = true
             failed = false
+            searchNote = ""
             delay(500)
             // Запрос реально ушёл в поиск — сохраняем в историю
             store.addRecentQuery(query)
@@ -196,6 +198,26 @@ fun SearchScreen(
             }
             // Фильмы догружаются параллельно — карточки появятся сами
             results = films.await()
+
+            // УМНЫЙ ПОИСК: точный запрос пуст → пробуем варианты запроса
+            // (раскладка «ghjtw»→«спецы», транслит «spetsy»→«спецы»,
+            // опечатка по истории «спецф»→«спецы»). Локально, без нейросети.
+            if (results.isEmpty() && MediaApi.lastSearchFailed.not() && results.isNotEmpty().not()) {
+                val variants = com.torrenttv.app.data.SearchVariants.variants(
+                    query, store.recentQueries(),
+                )
+                for (v in variants.take(2)) {
+                    val alt = withContext(Dispatchers.IO) {
+                        runCatching { MediaApi.search(v).filter { store.isAllowed(it) } }
+                            .getOrDefault(emptyList())
+                    }
+                    if (alt.isNotEmpty()) {
+                        results = alt
+                        searchNote = "Показываю результаты для «$v»"
+                        break
+                    }
+                }
+            }
             // пустой ответ при ошибке API (сеть/лимит) — показываем «Повторить»
             failed = results.isEmpty() && MediaApi.lastSearchFailed
         } else {
@@ -302,6 +324,9 @@ fun SearchScreen(
             Button(onClick = { searchTickForce++ }, modifier = Modifier.focusRequester(findFocus)) {
                 Text("🔍 Найти")
             }
+        }
+        if (searchNote.isNotBlank()) {
+            Text("🤖 $searchNote", color = Color(0xFF8AB4F8), fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
         }
         if (status.isNotBlank()) {
             Text(status, color = Color(0xFFFFD54F), fontSize = 14.sp, modifier = Modifier.padding(top = 6.dp))

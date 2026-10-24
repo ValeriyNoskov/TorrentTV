@@ -113,7 +113,7 @@ fun TorrentSearchScreen(
         results = found
         stats = st
         if (autoStart && found.isNotEmpty()) {
-            select(bestTorrent(found))
+            select(bestTorrent(found, store))
             return@LaunchedEffect
         }
         status = if (found.isEmpty()) {
@@ -292,9 +292,14 @@ private fun QualityChip(label: String, selected: Boolean, onClick: () -> Unit) {
  * Лучшая раздача для авто-старта (как в Zona): предпочитаем HD (2160/1080/720),
  * если у HD прилично сидов (≥10); иначе просто максимум сидов.
  */
-internal fun bestTorrent(list: List<TorrentResult>): TorrentResult {
+internal fun bestTorrent(list: List<TorrentResult>, store: com.torrenttv.app.data.LocalStore? = null): TorrentResult {
     if (list.size == 1) return list[0]
     val hd = list.filter { it.resolution in setOf("2160p", "1080p", "720p") }
     val pool = if (hd.any { it.seeds >= 10 }) hd else list
-    return pool.maxByOrNull { it.seeds } ?: list.first()
+    // Умный выбор: сиды решают, но раздача от «вашего» релизёра получает бонус —
+    // приложение учится на том, что вы выбирали руками раньше
+    val best = pool.maxByOrNull { it.seeds + (store?.groupBonus(it.name) ?: 0) }
+        ?: list.first()
+    store?.noteChosenGroup(best.name)
+    return best
 }

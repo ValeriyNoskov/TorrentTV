@@ -697,33 +697,44 @@ class LocalStore(context: Context) {
         prefs.edit().putInt("player_scale", v).apply()
     }
 
-    // ---------- Пропуск титров и заставки ----------
-
-    /** Автопропуск титров в конце серий (перемотка к следующей). */
-    fun skipCredits(): Boolean = prefs.getBoolean("skip_credits", true)
-
-    fun setSkipCredits(v: Boolean) {
-        prefs.edit().putBoolean("skip_credits", v).apply()
-    }
-
-    /** Автопропуск заставки в начале серий (по запомненной точке). */
-    fun skipIntro(): Boolean = prefs.getBoolean("skip_intro", true)
-
-    fun setSkipIntro(v: Boolean) {
-        prefs.edit().putBoolean("skip_intro", v).apply()
-    }
+    // ---------- Умный подбор раздач: предпочтения владельца ----------
 
     /**
-     * Точка «конец заставки» для сериала (сек): запоминается, когда владелец
-     * перематывает первые минуты — в следующих сериях перематываем сами.
-     * Ключ — карточка + сезон (у сезона заставка на одном и том же месте).
+     * Предпочтительные релизёры: токены имён раздач, которые владелец выбирал
+     * сам. Строка «tok1,tok2,…» — чем раньше, тем чаще выбирали.
      */
-    fun introSkipSec(key: String, season: Int): Int =
-        prefs.getInt("intro_skip_${key}_s$season", 0)
+    fun preferedGroups(): List<String> =
+        (prefs.getString("prefer_groups", "") ?: "")
+            .split(',').map { it.trim().lowercase() }.filter { it.isNotBlank() }
 
-    fun setIntroSkipSec(key: String, season: Int, sec: Int) {
-        if (sec <= 0) return
-        prefs.edit().putInt("intro_skip_${key}_s$season", sec).apply()
+    fun noteChosenGroup(releaseName: String) {
+        val tok = Regex("""[A-Za-z][A-Za-z0-9]{3,}""").findAll(releaseName)
+            .map { it.value.lowercase() }
+            .firstOrNull { it !in STOP_TOKENS } ?: return
+        val cur = preferedGroups().toMutableList()
+        cur.removeAll { it == tok }
+        cur.add(0, tok)
+        prefs.edit().putString("prefer_groups", cur.take(6).joinToString(",")).apply()
+    }
+
+    /** Токены, которые встречаются почти в каждой раздаче — не признак релизёра. */
+    private val STOP_TOKENS = setOf(
+        "webdl", "web", "dlrip", "bdrip", "bluray", "hdr", "hevc", "h264", "x264",
+        "x265", "1080", "720", "2160", "season", "series", "lostfilm", "hdrezka",
+        "rus", "eng", "ukr", "dual", "mega", "rip", "uhd",
+    )
+
+    /**
+     * Бонус раздачи при авто-выборе: совпадение релизёра с вашими прошлыми
+     * выборами (первый в списке — самый частый).
+     */
+    fun groupBonus(releaseName: String): Int {
+        val toks = Regex("""[a-z][a-z0-9]{3,}""").findAll(releaseName.lowercase())
+            .map { it.value }.toSet()
+        preferedGroups().forEachIndexed { idx, g ->
+            if (g in toks) return 60 - idx * 15
+        }
+        return 0
     }
 
     /** Подпись аудиодорожки, выбранной пользователем (например, «Дубляж»). */
