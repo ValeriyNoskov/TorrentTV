@@ -119,6 +119,30 @@ fun EpisodesScreen(
         if (seasons.isNotEmpty()) store.saveEpisodeCache(item, seasons)
         loading = false
         AppLog.log("episodes", "«${item.title}»: загружено сезонов ${seasons.size} (id=${item.id})")
+        // КП-мета не знает про раздачи: у «Титанов» 5-й сезон выходит отдельной
+        // раздачей, а КП отдаёт только 1–4. Раньше раздачи смотрели ТОЛЬКО когда
+        // КП молчал — и при наличии сезона 1 «пятёрка» не появлялась вовсе.
+        // Теперь всегда подмешиваем сезоны из раздач (фоном, после отрисовки)
+        if (seasons.isNotEmpty()) {
+            val (fromTorrents, reason) = withContext(Dispatchers.IO) { seasonsFromTorrents(item, store, context) }
+            if (fromTorrents.isNotEmpty()) {
+                val merged = mergeSeasons(seasons, fromTorrents)
+                val added = merged.sumOf { it.episodes.size } - seasons.sumOf { it.episodes.size }
+                if (added > 0) {
+                    seasons = merged
+                    store.saveEpisodeCache(item, merged)
+                    tick++
+                    AppLog.log(
+                        "episodes",
+                        "«${item.title}»: из раздач добавлено $added серий (сезоны ${fromTorrents.map { it.number }})",
+                    )
+                } else {
+                    AppLog.log("episodes", "«${item.title}»: раздачи новых серий не дали")
+                }
+            } else {
+                AppLog.log("episodes", "«${item.title}»: раздачи не дали серий${reason?.let { ": $it" } ?: ""}")
+            }
+        }
         if (seasons.isNotEmpty() && selected == null) {
             val last = store.lastSeason(item).takeIf { n -> n != 0 && seasons.any { it.number == n } }
             selected = initialSeason?.takeIf { s -> seasons.any { it.number == s } }
@@ -295,6 +319,10 @@ private suspend fun seasonsFromTorrents(
         emptyList()
     }
     AppLog.log("episodes", "«${item.title}»: раздач для эпизодов найдено ${found.size}")
+    // Собираем сезоны из НЕСКОЛЬКИХ раздач: сезоны одного сериала часто лежат
+    // отдельными раздачами («Титаны» S01–S04 в одной, S05 — в другой).
+    // Раньше возвращалась первая успешная — и 5-й сезон не появлялся вообще
+    val allSeasons = sortedMapOf<Int, MutableMap<Int, Episode>>()
     for (r in found.sortedByDescending { it.seeds }.take(3)) {
         val t = runCatching {
             TorrServeService.addMagnet(host, TorrentSearch.toMagnet(r), item.title, 45_000)
@@ -328,9 +356,15 @@ private suspend fun seasonsFromTorrents(
         if (bySeason.isEmpty()) continue
         val magnet = TorrentSearch.toMagnet(r)
         for (eps in bySeason.values) for (ep in eps) store.saveMagnet(item, magnet, ep.sourceSuffix)
-        return bySeason.map { (num, eps) -> Season(num, eps.sortedBy { it.episode }) }.sortedBy { it.number } to null
+        for ((num, eps) in bySeason) {
+            val target = allSeasons.getOrPut(num) { mutableMapOf() }
+            for (ep in eps) target.putIfAbsent(ep.episode, ep)
+        }
     }
-    return emptyList<Season>() to "Раздач с сериями не нашлось"
+    if (allSeasons.isEmpty()) return emptyList<Season>() to "Раздач с сериями не нашлось"
+    AppLog.log("episodes", "«${item.title}»: из раздач собраны сезоны ${allSeasons.keys}")
+    return allSeasons.map { (num, eps) -> Season(num, eps.values.sortedBy { it.episode }) }
+        .sortedBy { it.number } to null
 }
 
 @Composable

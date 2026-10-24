@@ -259,15 +259,19 @@ fun OnlinePlayerScreen(
                             "playback error: ${error.errorCodeName} code=${error.errorCode} retry=$retryCount link=${link.url.take(120)}",
                         )
                         // TorrServe часто не успевает скачать начало новой серии —
-                        // молча перезапускаем плеер до 3 раз, без алармов
-                        if (isTorrserve && retryCount < 3) {
+                        // молча перезапускаем плеер, без алармов.
+                        // Пауза растёт: медленная раздача (4 сида, ~0.7 МБ/с) за 1.5 с
+                        // не успевает отдать даже начало файла — раньше 3 попытки
+                        // заканчивались ошибкой, хотя файл был жив
+                        if (isTorrserve && retryCount < 4) {
                             retryCount++
                             seekInfo = "🔄 Запускаю поток (попытка ${retryCount + 1})…"
                             panelTick++
                             // TorrServe после IO-ошибки (2000) ещё докачивает серию —
                             // мгновенный рестарт попадает в то же состояние
+                            val waitMs = 3000L * retryCount   // 3с, 6с, 9с, 12с
                             kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
-                                kotlinx.coroutines.delay(1500)
+                                kotlinx.coroutines.delay(waitMs)
                                 retryTick++
                             }
                         } else {

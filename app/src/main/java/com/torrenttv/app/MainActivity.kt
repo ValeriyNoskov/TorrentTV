@@ -76,7 +76,9 @@ sealed interface Screen {
     ) : Screen
 
     companion object {
-        val TABS: List<Screen> = listOf(Home, Movies, TvShows, Shows, Favorites, Continue, WatchLater, Search, Settings)
+        val TABS: List<Screen> = listOf(
+            Home, Movies, TvShows, Shows, Torrents, Favorites, Continue, WatchLater, Search, Settings,
+        )
     }
 }
 

@@ -35,10 +35,29 @@ object SettingsBackup {
             try {
                 val store = LocalStore(context)
                 if (!store.isEmpty()) return@Thread
+                // 1) Свой сервер (домашний Mac) — основное хранилище.
+                // Адрес/токен могли остаться в prefs, даже если сами настройки
+                // стёрты не полностью; при полном сбросе берём резерв из Gist
+                val fromServer = serverLoad(store)
+                if (fromServer != null) {
+                    store.restore(fromServer)
+                    lastSavedHash = fromServer.toString().hashCode()
+                    AppLog.log("backup", "настройки восстановлены с сервера (${fromServer.length()} ключей)")
+                    onRestored?.invoke()
+                    return@Thread
+                }
+                // 2) Резерв — приватный Gist
                 val token = com.torrenttv.app.update.UpdateManager.ghToken(context)
                 if (token.isBlank()) return@Thread
                 val content = download(findGistId(token) ?: return@Thread, token) ?: return@Thread
-                val json = JSONObject(content)
+                // Старые снимки могли сохраниться с управляющими символами
+                // (Android org.json их не экранирует) — такой JSON не парсится.
+                // Чистим и пробуем снова, иначе настройки «теряются» при сбросе
+                val json = runCatching { JSONObject(content) }.getOrElse {
+                    val fixed = content.replace(Regex("[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F]"), "")
+                    AppLog.log("backup", "бэкап содержал управляющие символы — очищен и прочитан заново")
+                    JSONObject(fixed)
+                }
                 store.restore(json)
                 lastSavedHash = content.hashCode()
                 AppLog.log("backup", "настройки восстановлены из облачного бэкапа (${json.length()} ключей)")
@@ -50,27 +69,78 @@ object SettingsBackup {
     }
 
     /** Выгрузить настройки, если они менялись с прошлой выгрузки. */
-    fun save(context: Context) {
-        Thread {
-            try {
-                val store = LocalStore(context)
-                if (store.isEmpty()) return@Thread
-                val token = com.torrenttv.app.update.UpdateManager.ghToken(context)
-                if (token.isBlank()) return@Thread
-                val json = store.snapshot().toString()
-                if (json.hashCode() == lastSavedHash) return@Thread   // ничего не менялось
+    fun save(context: Context, force: Boolean = false) {
+        Thread { doSave(context, force) }.start()
+    }
+
+    /** Синхронная выгрузка — для кнопки «Сохранить сейчас» (нужен результат). */
+    fun saveNow(context: Context): Boolean =
+        runCatching { doSave(context, force = true) }.getOrDefault(false)
+
+    private fun doSave(context: Context, force: Boolean): Boolean {
+        try {
+            val store = LocalStore(context)
+            if (store.isEmpty()) return false
+            val token = com.torrenttv.app.update.UpdateManager.ghToken(context)
+            val json = store.snapshot().toString()
+            if (!force && json.hashCode() == lastSavedHash) return true   // ничего не менялось
+            // Основное хранилище — свой сервер (настройки и кеш не должны
+            // жить только на телевизоре). Gist остаётся резервом и хранит
+            // адрес/токен сервера, чтобы после полного сброса было откуда
+            // их взять.
+            val onServer = serverSave(store, json)
+            var onGist = false
+            if (token.isNotBlank()) {
                 val gistId = findGistId(token)
-                val ok = if (gistId != null) patch(gistId, json, token) else create(json, token)
-                if (ok) {
-                    lastSavedHash = json.hashCode()
-                    AppLog.log("backup", "настройки сохранены в облачный бэкап")
-                } else {
-                    AppLog.log("backup", "сохранение FAIL: API не принял")
-                }
-            } catch (e: Exception) {
-                AppLog.log("backup", "сохранение FAIL: ${e.message}")
+                onGist = if (gistId != null) patch(gistId, json, token) else create(json, token)
             }
-        }.start()
+            if (onServer || onGist) {
+                lastSavedHash = json.hashCode()
+                AppLog.log(
+                    "backup",
+                    "настройки сохранены: сервер=${if (onServer) "ок" else "—"}, Gist=${if (onGist) "ок" else "—"}",
+                )
+            } else {
+                AppLog.log("backup", "сохранение FAIL: сервер и Gist недоступны")
+            }
+            return onServer || onGist
+        } catch (e: Exception) {
+            AppLog.log("backup", "сохранение FAIL: ${e.message}")
+            return false
+        }
+    }
+
+    // ---------- Свой сервер бэкапа ----------
+
+    /** Сохранить снимок на домашний сервер (PUT /backup). */
+    private fun serverSave(store: LocalStore, json: String): Boolean {
+        val base = store.backupServerUrl()
+        val token = store.backupServerToken()
+        if (base.isBlank() || token.isBlank()) return false
+        return runCatching {
+            val req = Request.Builder().url("$base/backup")
+                .header("X-Backup-Token", token)
+                .put(json.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
+                .build()
+            http.newCall(req).execute().use { it.isSuccessful }
+        }.getOrElse { false }
+    }
+
+    /** Прочитать снимок с домашнего сервера (GET /backup) или null. */
+    private fun serverLoad(store: LocalStore): JSONObject? {
+        val base = store.backupServerUrl()
+        val token = store.backupServerToken()
+        if (base.isBlank() || token.isBlank()) return null
+        val body = runCatching {
+            val req = Request.Builder().url("$base/backup")
+                .header("X-Backup-Token", token)
+                .get()
+                .build()
+            http.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) null else resp.body?.string()
+            }
+        }.getOrNull() ?: return null
+        return runCatching { JSONObject(body) }.getOrNull()
     }
 
     // ---------- GitHub Gist ----------

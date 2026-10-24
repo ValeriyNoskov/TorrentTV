@@ -45,6 +45,15 @@ data class WatchEntry(
  */
 class LocalStore(context: Context) {
 
+    companion object {
+        // Домашний сервер бэкапа (MacBook): адрес и токен прописаны по умолчанию,
+        // чтобы на телевизоре ничего не вводить руками. Сервер слушает только
+        // локальную сеть (наружу порт не проброшен). Сменить можно в
+        // Настройки → Логи → «Сервер бэкапа» — тогда в prefs ляжет своё значение.
+        const val DEFAULT_BACKUP_URL = "http://192.168.3.78:8091"
+        const val DEFAULT_BACKUP_TOKEN = "8c39cbdfb8fd114471ed7b3ff36684b8"
+    }
+
     private val prefs: SharedPreferences =
         context.getSharedPreferences("torrenttv", Context.MODE_PRIVATE)
 
@@ -59,7 +68,15 @@ class LocalStore(context: Context) {
                 null -> o.put(k, JSONObject.NULL)
                 is Set<*> -> o.put(k, JSONArray(v))
                 is Int, is Long, is Boolean, is Double, is String -> o.put(k, v)
-                else -> o.put(k, v.toString())
+                // Управляющие символы (0x00–0x1F) ломают JSON: Android-реализация
+                // org.json пишет их как есть, и потом бэкап НЕ ЧИТАЕТСЯ при
+                // восстановлении. Такой символ однажды попал в историю поиска
+                // и весь снимок стал невалидным — чистим перед выгрузкой
+                else -> o.put(k, v.toString().filter { it >= ' ' })
+            }
+            if (v is String) {
+                val clean = v.filter { it >= ' ' || it == '\n' || it == '\r' || it == '\t' }
+                if (clean != v) o.put(k, clean)
             }
         }
         return o
@@ -538,6 +555,29 @@ class LocalStore(context: Context) {
 
     fun setTorrServeHost(v: String) {
         prefs.edit().putString("torrserve_host", v.trim().removeSuffix("/")).apply()
+    }
+
+    // ---------- Свой сервер бэкапа (домашний Mac) ----------
+    // Телевизор не должен быть единственным местом, где лежат настройки и кеш:
+    // при «очистить данные» они пропадают. Сначала пробуем свой сервер,
+    // Gist остаётся резервом, если сервер недоступен.
+
+    /** Адрес сервиса бэкапа, напр. http://192.168.3.78:8091 (пусто — не использовать). */
+    fun backupServerUrl(): String =
+        (prefs.getString("backup_server_url", DEFAULT_BACKUP_URL) ?: DEFAULT_BACKUP_URL)
+            .trim().removeSuffix("/")
+
+    fun setBackupServerUrl(v: String) {
+        prefs.edit().putString("backup_server_url", v.trim().removeSuffix("/")).apply()
+    }
+
+    /** Токен сервера бэкапа (заголовок X-Backup-Token). */
+    fun backupServerToken(): String =
+        (prefs.getString("backup_server_token", DEFAULT_BACKUP_TOKEN) ?: DEFAULT_BACKUP_TOKEN)
+            .trim()
+
+    fun setBackupServerToken(v: String) {
+        prefs.edit().putString("backup_server_token", v.trim()).apply()
     }
 
     // ---------- Плеер: автоскрытие панели управления ----------

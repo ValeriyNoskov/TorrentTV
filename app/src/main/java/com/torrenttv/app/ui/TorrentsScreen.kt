@@ -403,7 +403,13 @@ private fun FilterRow(label: String, content: @Composable () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier.weight(1f),
         ) {
-            item { content() }
+            // Чипы фильтра — ОДНИМ рядом внутри item: раньше content() эмитил
+            // несколько Surface в один слот LazyRow, и они рисовались друг на
+            // друге (виден был только последний чип). Ряд кладёт их подряд,
+            // прокрутка остаётся — ширина item больше экрана
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { content() }
+            }
         }
     }
 }

@@ -124,6 +124,8 @@ fun SettingsScreen(onBack: () -> Unit) {
                 "kpkey" -> { store.setKpApiKey(editTmp); kpKey = editTmp }
                 "tmdbkey" -> { store.setTmdbApiKey(editTmp); tmdbKey = editTmp }
                 "ghtoken" -> { store.setGithubToken(editTmp); ghToken = editTmp }
+                "bkurl" -> store.setBackupServerUrl(editTmp)
+                "bktoken" -> store.setBackupServerToken(editTmp)
             }
         }
         editTarget = null
@@ -347,6 +349,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                         var uploading by remember { mutableStateOf(false) }
                         var uploadState by remember { mutableStateOf("") }
                         var uploadUrl by remember { mutableStateOf("") }
+                        var backupMsg by remember { mutableStateOf("") }
                         var logTail by remember { mutableStateOf(com.torrenttv.app.data.AppLog.recent(14).joinToString("\n")) }
 
                         SettingsRow(
@@ -399,6 +402,37 @@ fun SettingsScreen(onBack: () -> Unit) {
                             com.torrenttv.app.data.AppLog.clear()
                             logTail = com.torrenttv.app.data.AppLog.recent(14).joinToString("\n")
                         }
+
+                        // ---------- Бэкап: свой сервер (домашний Mac) ----------
+                        // Настройки и кеш серий не должны жить только на телевизоре:
+                        // «очистить данные» их стирает. Адрес и токен уже прописаны,
+                        // поля — чтобы сменить сервер, не пересобирая приложение
+                        SettingsRow(
+                            title = "💾 Сервер бэкапа",
+                            value = store.backupServerUrl(),
+                            valueOk = store.backupServerUrl().isNotBlank(),
+                        ) { openEdit("bkurl", store.backupServerUrl(), "http://192.168.3.78:8091") }
+                        SettingsRow(
+                            title = "🔑 Токен сервера",
+                            value = if (store.backupServerToken().isNotBlank()) "••••••••" else "Не задан",
+                            valueOk = store.backupServerToken().isNotBlank(),
+                        ) { openEdit("bktoken", store.backupServerToken(), "Токен сервера бэкапа") }
+                        SettingsRow(
+                            title = "⬆ Сохранить сейчас",
+                            value = if (backupMsg.isBlank()) "Настройки + кеш серий" else backupMsg,
+                            valueOk = backupMsg.startsWith("✓"),
+                        ) {
+                            backupMsg = "Отправляю…"
+                            com.torrenttv.app.data.AppLog.log("ui", "нажал: «Сохранить сейчас» (бэкап)")
+                            kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                                val ok = com.torrenttv.app.data.SettingsBackup.saveNow(context)
+                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                    backupMsg = if (ok) "✓ Отправлено на ${store.backupServerUrl()}"
+                                    else "⚠ Сервер и Gist не ответили"
+                                }
+                            }
+                        }
+                        SettingsNote("Копия уходит на домашний сервер; если он недоступен — в приватный Gist. Восстанавливается сама после сброса данных.")
 
                         if (uploadState.isNotBlank()) {
                             SettingsNote(uploadState)
