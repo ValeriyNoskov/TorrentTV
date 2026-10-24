@@ -53,6 +53,8 @@ fun DetailsScreen(
     onWatchSmart: () -> Unit = {},
     /** Ручной выбор из списка раздач. */
     onManualSearch: () -> Unit = {},
+    /** Трейлер внутри приложения (Rutube API + наш плеер). */
+    onTrailer: () -> Unit = {},
     onOpenDetails: (MediaItem) -> Unit = {},
     onEpisodes: (Int) -> Unit = { },
     /** Играем конкретную серию (из блока «Сезоны и серии»). */
@@ -151,38 +153,9 @@ fun DetailsScreen(
                         modifier = Modifier.focusRequester(watchFocus),
                     ) { Text("▶ Смотреть") }
                     Spacer(Modifier.width(16.dp))
-                    // Трейлер: Rutube (приложение) → поиск через браузер. YouTube не используется.
-                    Button(onClick = {
-                        val q = listOf(item.title, item.year, "трейлер")
-                            .filter { it.isNotBlank() }.joinToString(" ")
-                        var ok = false
-                        // 1) Приложение Rutube (TV или мобильное) — запускаем напрямую
-                        for (pkg in listOf("ru.rutube.tv", "ru.rutube.rutube")) {
-                            val launch = context.packageManager.getLaunchIntentForPackage(pkg)
-                            if (launch != null) {
-                                // Открываем приложение с поиском, если умеет; иначе просто запускаем
-                                val withSearch = launch.apply {
-                                    data = android.net.Uri.parse("https://rutube.ru/search/?query=" + android.net.Uri.encode(q))
-                                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                                }
-                                if (runCatching { context.startActivity(withSearch) }.isSuccess ||
-                                    runCatching { context.startActivity(launch) }.isSuccess
-                                ) { ok = true; break }
-                            }
-                        }
-                        // 2) Браузер / любое приложение, перехватывающее ссылки rutube.ru
-                        if (!ok) {
-                            ok = runCatching {
-                                context.startActivity(
-                                    android.content.Intent(
-                                        android.content.Intent.ACTION_VIEW,
-                                        android.net.Uri.parse("https://rutube.ru/search/?query=" + android.net.Uri.encode(q)),
-                                    ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
-                                )
-                            }.isSuccess
-                        }
-                        if (!ok) status = "Rutube/браузер не найдены — установите приложение Rutube или браузер"
-                    }) { Text("🎬 Трейлер") }
+                    // Трейлер: играет ВНУТРИ приложения (поиск по Rutube API,
+                    // HLS в нашем плеере) — на приставке не нужны Rutube-приложение и браузер
+                    Button(onClick = onTrailer) { Text("🎬 Трейлер") }
                     Spacer(Modifier.width(16.dp))
                     Button(onClick = { menu = !menu }) { Text("⋯ Ещё") }
                 }

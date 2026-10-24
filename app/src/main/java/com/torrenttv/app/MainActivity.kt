@@ -22,6 +22,7 @@ import com.torrenttv.app.data.MediaItem
 import com.torrenttv.app.ui.CatalogScreen
 import com.torrenttv.app.ui.DetailsScreen
 import com.torrenttv.app.ui.EpisodesScreen
+import com.torrenttv.app.ui.TrailerScreen
 import com.torrenttv.app.ui.FavoritesScreen
 import com.torrenttv.app.ui.HomeScreen
 import com.torrenttv.app.ui.MagnetEntryScreen
@@ -55,6 +56,7 @@ sealed interface Screen {
         val autoStart: Boolean = true,
     ) : Screen
     data class Watch(val item: MediaItem) : Screen
+    data class Trailer(val item: MediaItem) : Screen
     data class Player(val item: MediaItem, val episode: com.torrenttv.app.data.Episode? = null, val fileIndex: Int = -1) : Screen
     data class TorrentFiles(val item: MediaItem, val magnet: String) : Screen
     data class TorrentResults(
@@ -92,6 +94,8 @@ class MainActivity : ComponentActivity() {
         com.torrenttv.app.data.KinopoiskClient.attachCache(cacheDir)
         // Личные ключи баз фильмов (перекрывают вшитые общие)
         val store0 = com.torrenttv.app.data.LocalStore(this)
+        // Галочка «Запись логов» (Настройки → Логи): включена по умолчанию
+        com.torrenttv.app.data.AppLog.recording = store0.loggingEnabled()
         com.torrenttv.app.data.KinopoiskClient.overrideApiKey = store0.kpApiKey()
         com.torrenttv.app.data.TmdbClient.overrideApiKey = store0.tmdbApiKey()
         // Прогрев torrent-сессии: DHT/трекеры готовы заранее —
@@ -181,6 +185,7 @@ private fun App() {
                 onWatchSmart = { screen = Screen.Watch(s.item) },
                 onAutoSearch = { screen = Screen.TorrentSearch(s.item, autoStart = true) },
                 onManualSearch = { screen = Screen.TorrentSearch(s.item, autoStart = false) },
+                onTrailer = { screen = Screen.Trailer(s.item) },
                 onOpenDetails = { screen = Screen.Details(it) },
                 onEpisodes = { season -> screen = Screen.Episodes(s.item, season) },
                 onPlayEpisode = { ep -> screen = Screen.Player(s.item, ep) },
@@ -190,6 +195,15 @@ private fun App() {
                 item = s.item,
                 onBack = { screen = Screen.Details(s.item) },
                 onPlayTorrent = { screen = Screen.Player(s.item) },
+                // Сериал: показываем состав раздачи — пользователь выбирает серию
+                onPickFiles = { r ->
+                    screen = Screen.TorrentFiles(s.item, com.torrenttv.app.data.TorrentSearch.toMagnet(r))
+                },
+            )
+
+            is Screen.Trailer -> TrailerScreen(
+                item = s.item,
+                onBack = { screen = Screen.Details(s.item) },
             )
 
             is Screen.Episodes -> EpisodesScreen(

@@ -41,6 +41,7 @@ import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ClickableSurfaceShape
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import androidx.activity.compose.BackHandler
 import coil.compose.AsyncImage
 import androidx.compose.foundation.layout.Arrangement
 import com.torrenttv.app.data.Genre
@@ -256,10 +257,13 @@ fun ContinueRow(
     title: String,
     entries: List<com.torrenttv.app.data.WatchEntry>,
     onClick: (com.torrenttv.app.data.MediaItem) -> Unit,
+    onRemove: ((com.torrenttv.app.data.WatchEntry) -> Unit)? = null,
 ) {
+    // Зажать OK на карточке → предложение убрать из просмотра
+    var removeTarget by remember { mutableStateOf<com.torrenttv.app.data.WatchEntry?>(null) }
     Column(Modifier.padding(vertical = 10.dp)) {
         Text(
-            text = title,
+            text = title + if (onRemove != null) "   (зажмите OK — убрать из просмотра)" else "",
             color = Color.White,
             fontSize = 22.sp,
             fontWeight = FontWeight.SemiBold,
@@ -272,6 +276,7 @@ fun ContinueRow(
                     (e.positionSec.toFloat() / e.durationSec).coerceIn(0.02f, 1f) else 0f
                 Surface(
                     onClick = { onClick(e.item) },
+                    onLongClick = { if (onRemove != null) removeTarget = e },
                     modifier = Modifier
                         .width(190.dp)
                         .padding(6.dp),
@@ -344,6 +349,46 @@ fun ContinueRow(
                             modifier = Modifier.padding(8.dp, 2.dp, 8.dp, 8.dp),
                         )
                     }
+                }
+            }
+        }
+    }
+
+    // Диалог удаления: появился при зажатии OK на карточке
+    removeTarget?.let { target ->
+        BackHandler { removeTarget = null }
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color(0x66000000)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                Modifier
+                    .width(420.dp)
+                    .background(Color(0xF0151B26), RoundedCornerShape(14.dp))
+                    .padding(18.dp),
+            ) {
+                Text(
+                    "Убрать из просмотра?",
+                    color = Color(0xFFF5B942),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    target.item.title,
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    maxLines = 1,
+                    modifier = Modifier.padding(top = 6.dp, bottom = 14.dp),
+                )
+                Row {
+                    Button(onClick = {
+                        removeTarget = null
+                        onRemove?.invoke(target)
+                    }) { Text("✕ Убрать") }
+                    Spacer(Modifier.width(10.dp))
+                    Button(onClick = { removeTarget = null }) { Text("Отмена") }
                 }
             }
         }

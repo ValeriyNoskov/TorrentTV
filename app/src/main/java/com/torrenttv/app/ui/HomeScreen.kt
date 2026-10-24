@@ -97,6 +97,13 @@ fun HomeScreen(
                         title = "Продолжить просмотр",
                         entries = progress.distinctBy { it.sourceKey },
                         onClick = onOpenDetails,
+                        onRemove = { e ->
+                            store.clearWatched(e.item)
+                            runCatching {
+                                java.io.File(context.filesDir, "downloads/" + e.item.storeKey).deleteRecursively()
+                            }
+                            progress = store.continueWatching()
+                        },
                     )
                 }
             }

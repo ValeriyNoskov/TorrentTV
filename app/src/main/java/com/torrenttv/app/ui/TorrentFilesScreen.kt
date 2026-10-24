@@ -203,6 +203,8 @@ fun TorrentFilesScreen(
         }
         files = res
         loading = false
+        // В раздаче один видеофайл (фильм) — не показываем список, сразу запускаем
+        if (res.size == 1) onPick(res.first().first)
     }
 
     // Разбор «Сезон N / Серия M»: S01E02, 1x02, «Сезон 1 Серия 2», просто «Серия 2»

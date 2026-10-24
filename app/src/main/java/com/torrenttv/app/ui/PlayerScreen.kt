@@ -566,6 +566,7 @@ private fun VideoPlayer(
     var showTrackMenu by remember { mutableStateOf(false) }
     var showFiles by remember { mutableStateOf(false) }
     var showGear by remember { mutableStateOf(false) }
+    var showJump by remember { mutableStateOf(false) }
     var gearMsg by remember { mutableStateOf("") }
     // Скорость воспроизведения: живёт вне панели, чтобы выбор не сбрасывался
     val speeds = listOf(0.75f, 1f, 1.25f, 1.5f, 2f)
@@ -611,7 +612,7 @@ private fun VideoPlayer(
             }
             return true
         }
-        val panelVisible = showPanel || showFiles || showGear || showTrackMenu
+        val panelVisible = showPanel || showFiles || showGear || showTrackMenu || showJump
         // Любая кнопка пульта при скрытой панели СНАЧАЛА показывает панель
         // (как в MX Player), действие выполняется следующим нажатием
         return when (keyCode) {
@@ -658,7 +659,8 @@ private fun VideoPlayer(
         // BACK при открытой панели прячет панель, при скрытой — выход из плеера
         // (меню дорожек не трогаем: его закрывает свой BackHandler в оверлее)
         KeyEvent.KEYCODE_BACK -> {
-            if (showFiles || showGear) {
+            if (showJump) { showJump = false; true }
+            else if (showFiles || showGear) {
                 showFiles = false; showGear = false; panelTick++; true
             } else if (showPanel) {
                 showPanel = false; true
@@ -935,6 +937,18 @@ private fun VideoPlayer(
                         ),
                     ) { Text("⏩ 10с", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
                     Spacer(Modifier.width(8.dp))
+                    // ⏱ Перейти к… — пресеты % (середина фильма и т.п.), как в MX/VLC
+                    androidx.tv.material3.Surface(
+                        onClick = { showJump = true; showFiles = false; showGear = false; panelTick++ },
+                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF1F2430),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContentColor = Color.Black,
+                        ),
+                    ) { Text("⏱", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
+                    Spacer(Modifier.width(8.dp))
                     // Скорость: 0.75× → 1× → 1.25× → 1.5× → 2× по кругу
                     LaunchedEffect(Unit) { player.setPlaybackParameters(player.playbackParameters.withSpeed(speeds[speedIdx])) }
                     androidx.tv.material3.Surface(
@@ -1075,6 +1089,20 @@ private fun VideoPlayer(
                     }
                 }
             }
+        }
+
+        // ⏱ «Перейти к…» — пресеты % поверх видео
+        if (showJump) {
+            JumpToDialog(
+                durationMs = if (player.duration > 0) player.duration else 0L,
+                title = item.title,
+                onJump = { ms ->
+                    player.seekTo(ms)
+                    seekInfo = "⏱ Перемотка"
+                    panelTick++
+                },
+                onClose = { showJump = false },
+            )
         }
 
         // ⚙-меню: «Другое качество» и «Внешний плеер» — раскрывается из панели,

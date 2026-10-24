@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+
 package com.torrenttv.app.ui
 
 import androidx.compose.foundation.background
@@ -29,6 +31,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -65,6 +68,7 @@ private val SECTIONS = listOf(
     Triple("jackett", "🔗 Jackett", "Дополнительный провайдер автопоиска торрентов"),
     Triple("trackers", "🔑 Частные трекеры", "RuTracker, Kinozal, NNM-Club — без Jackett"),
     Triple("netcheck", "🩺 Проверка сети", "Какие источники доступны с этого устройства"),
+    Triple("logs", "📝 Логи", "Запись событий и отправка логов разработчику"),
     Triple("torrserve", "🚀 TorrServe", "Внешний движок торрентов — надёжнее внутреннего"),
     Triple("player", "📺 Плеер", "Встроенный или внешний плеер (VLC, MX Player)"),
     Triple("input", "⌨ Ввод", "Клавиатура: внешняя (системная) или встроенная"),
@@ -178,7 +182,10 @@ fun SettingsScreen(onBack: () -> Unit) {
             Modifier
                 .width(252.dp)
                 .fillMaxHeight()
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
+                // Фокус не должен убегать влево в главный сайдбар:
+                // OK там переключает вкладку («сброс на главный экран»)
+                .focusProperties { left = FocusRequester.Cancel },
         ) {
             SectionItem("← Назад", false) { onBack() }
             Spacer(Modifier.height(8.dp))
@@ -209,7 +216,9 @@ fun SettingsScreen(onBack: () -> Unit) {
             Column(
                 Modifier
                     .weight(1f)
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(rememberScrollState())
+                    // LEFT из параметров — в колонку разделов, не в сайдбар
+                    .focusProperties { left = FocusRequester.Cancel },
             ) {
                 when (section) {
                     "jackett" -> {
@@ -342,6 +351,79 @@ fun SettingsScreen(onBack: () -> Unit) {
                         SettingsNote(
                             "Размер постеров в каталогах: Мелкие — больше карточек в ряд, " +
                                 "Крупные — максимум читаемости. Применяется сразу ко всем экранам."
+                        )
+                    }
+
+                    "logs" -> {
+                        // Галочка записи: включил → пользовался приложением → отправил
+                        var recOn by remember { mutableStateOf(com.torrenttv.app.data.AppLog.recording) }
+                        var uploading by remember { mutableStateOf(false) }
+                        var uploadState by remember { mutableStateOf("") }
+                        var uploadUrl by remember { mutableStateOf("") }
+                        var logTail by remember { mutableStateOf(com.torrenttv.app.data.AppLog.recent(14).joinToString("\n")) }
+
+                        SettingsRow(
+                            title = if (recOn) "✅ Запись логов" else "⬜ Запись логов",
+                            value = if (recOn) "Ведётся" else "Выключена",
+                            valueOk = recOn,
+                        ) {
+                            recOn = !recOn
+                            com.torrenttv.app.data.AppLog.recording = recOn
+                            store.setLoggingEnabled(recOn)
+                        }
+
+                        SettingsRow(
+                            title = "📤 Отправить логи разработчику",
+                            value = if (uploading) "…" else "Выложить и показать адрес",
+                        ) {
+                            if (!uploading) {
+                                uploading = true
+                                uploadState = "Отправляю лог…"
+                                uploadUrl = ""
+                                kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                                    val url = com.torrenttv.app.data.AppLog.sendToPastebin(
+                                        store.githubToken().ifBlank { null },
+                                    )
+                                    com.torrenttv.app.data.AppLog.log(
+                                        "upload",
+                                        if (url.isNotBlank()) "sent -> $url" else "send FAILED",
+                                    )
+                                    uploadUrl = url
+                                    uploadState = if (url.isNotBlank()) "" else
+                                        "Не удалось отправить (нет доступа к pastebin-сайтам)"
+                                    uploading = false
+                                }
+                            }
+                        }
+
+                        SettingsRow(
+                            title = "🗑 Очистить логи",
+                            value = "",
+                            danger = true,
+                        ) {
+                            com.torrenttv.app.data.AppLog.clear()
+                            logTail = com.torrenttv.app.data.AppLog.recent(14).joinToString("\n")
+                        }
+
+                        if (uploadState.isNotBlank()) {
+                            SettingsNote(uploadState)
+                        }
+                        if (uploadUrl.isNotBlank()) {
+                            SettingsNote("Назовите разработчику этот адрес:\n${uploadUrl.trim()}")
+                        }
+                        SettingsNote(
+                            "Как пользоваться: включите «Запись логов», воспроизведите проблему " +
+                                "(например, завис плеер или пропали кнопки), вернитесь сюда и нажмите " +
+                                "«Отправить логи». В лог попадают: версия, устройство, все события " +
+                                "приложения, последний краш и история из файла."
+                        )
+                        // Превью последних строк — видно, что запись идёт
+                        Text(
+                            text = logTail.ifBlank { "(лог пуст — включите запись и подёргайте приложение)" },
+                            color = Color.White.copy(alpha = 0.45f),
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                            modifier = Modifier.padding(top = 8.dp),
                         )
                     }
 
@@ -715,6 +797,7 @@ private fun NetCheckScreen(onClose: () -> Unit) {
                 "Torrentio (торренты)" to "https://torrentio.strem.fun/stream/movie/tt0133093.json",
                 "bt4g (торренты)" to "https://bt4gprx.com/api/search?q=test",
                 "YTS (торренты)" to "https://yts.mx/api/v2/list_movies.json?query_term=test",
+                "Rutube API (трейлеры)" to "https://rutube.ru/api/search/video/?query=test&page=1",
                 "GitHub (обновления)" to "https://api.github.com/repos/ValeriyNoskov/TorrentTV/releases/latest",
             ))
             // База фильмов (каталоги, постеры, поиск) — только если настроен ключ

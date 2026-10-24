@@ -79,6 +79,8 @@ fun SmartPlayScreen(
     onBack: () -> Unit,
     /** Выбран торрент: magnet сохранён — открыть плеер. */
     onPlayTorrent: () -> Unit,
+    /** Выбран торрент у сериала: показать список файлов (серий) для выбора. */
+    onPickFiles: (TorrentResult) -> Unit = { onPlayTorrent() },
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val store = remember { LocalStore(context) }
@@ -249,8 +251,9 @@ fun SmartPlayScreen(
                             onClick = {
                                 when (c) {
                                     is SmartChoice.Resume -> onPlayTorrent()
-                                    is SmartChoice.Instant -> playTorrent(c.r)
-                                    is SmartChoice.Torrent -> playTorrent(c.r)
+                                    // Сериал — сначала список файлов (серий), фильм — сразу в плеер
+                                    is SmartChoice.Instant -> if (item.type != "movie") onPickFiles(c.r) else playTorrent(c.r)
+                                    is SmartChoice.Torrent -> if (item.type != "movie") onPickFiles(c.r) else playTorrent(c.r)
                                 }
                             },
                             modifier = Modifier

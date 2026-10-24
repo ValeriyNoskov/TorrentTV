@@ -390,6 +390,15 @@ class LocalStore(context: Context) {
 
     /** Последняя открытая секция настроек — открываем её при входе. */
     fun lastSettingsSection(): String = prefs.getString("settings_section", "search") ?: "search"
+
+    // ---------- Логи ----------
+
+    /** Запись логов включена (Настройки → Логи). */
+    fun loggingEnabled(): Boolean = prefs.getBoolean("logging_enabled", true)
+
+    fun setLoggingEnabled(v: Boolean) {
+        prefs.edit().putBoolean("logging_enabled", v).apply()
+    }
     fun setLastSettingsSection(id: String) {
         prefs.edit().putString("settings_section", id).apply()
     }

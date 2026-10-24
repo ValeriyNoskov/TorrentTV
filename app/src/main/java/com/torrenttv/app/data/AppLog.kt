@@ -18,6 +18,9 @@ object AppLog {
     private val buf = ArrayDeque<String>()
     private val fmt = SimpleDateFormat("MM-dd HH:mm:ss", Locale.US)
 
+    /** Запись логов включена (галочка в Настройках → Логи). */
+    @Volatile var recording: Boolean = true
+
     @Volatile private var appContext: Context? = null
 
     /** Вызвать один раз из MainActivity.onCreate. */
@@ -34,8 +37,27 @@ object AppLog {
             buf.addLast(line)
             while (buf.size > MAX_LINES) buf.removeFirst()
         }
-        runCatching { file().appendText(line + "\n") }
+        if (recording) {
+            runCatching {
+                val f = file()
+                // Ротация: файл больше 512 КБ — начинаем заново
+                if (f.length() > 512L * 1024) f.writeText("")
+                f.appendText(line + "\n")
+            }
+        }
         runCatching { android.util.Log.i("VNosKino", "$tag: $msg") }
+    }
+
+    /** Последние n строк лога (для превью в Настройках → Логи). */
+    fun recent(n: Int = 40): List<String> = synchronized(buf) {
+        buf.toList().takeLast(n)
+    }
+
+    /** Полностью очистить лог (память + файл). */
+    fun clear() {
+        synchronized(buf) { buf.clear() }
+        runCatching { file().writeText("") }
+        log("app", "логи очищены")
     }
 
     /** Полный dump: устройство + версия + лог + краши. */
@@ -55,6 +77,15 @@ object AppLog {
         }
         append("\n--- events ---\n")
         synchronized(buf) { buf.forEach { append(it).append('\n') } }
+        // История из файла: буфер держит 800 строк, файл — больше
+        runCatching {
+            val f = file()
+            if (f.exists() && f.length() > 0) {
+                val tail = f.readText().takeLast(40_000)
+                append("\n--- file log (tail) ---\n")
+                append(tail)
+            }
+        }
         val crash = crashFile()
         if (crash.exists()) {
             append("\n--- last crash ---\n")

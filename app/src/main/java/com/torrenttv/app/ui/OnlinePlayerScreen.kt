@@ -44,6 +44,7 @@ import androidx.tv.material3.Text
 import com.torrenttv.app.MainActivity
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -64,7 +65,14 @@ data class OnlineLink(
 )
 
 @Composable
-fun OnlinePlayerScreen(link: OnlineLink, item: MediaItem, title: String, onBack: () -> Unit) {
+fun OnlinePlayerScreen(
+    link: OnlineLink,
+    item: MediaItem,
+    title: String,
+    onBack: () -> Unit,
+    /** Сохранять позицию в «Продолжить смотреть» (трейлерам не нужно). */
+    saveProgress: Boolean = true,
+) {
     val context = LocalContext.current
     val store = remember { com.torrenttv.app.data.LocalStore(context) }
     // Ключ источника: своя позиция на каждую ссылку (и серию) онлайн-просмотра
@@ -77,6 +85,7 @@ fun OnlinePlayerScreen(link: OnlineLink, item: MediaItem, title: String, onBack:
     var showQuality by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showTrackMenu by remember { mutableStateOf(false) }
+    var showJump by remember { mutableStateOf(false) }
     var maxQuality by remember { mutableStateOf<Int?>(null) } // null = авто
     var seekInfo by remember { mutableStateOf("") }           // «⏩ +10 сек» при перемотке пультом
     // ---------- Состояние: буферизация и ошибки (чёрный экран ≠ «зависло») ----------
@@ -148,6 +157,7 @@ fun OnlinePlayerScreen(link: OnlineLink, item: MediaItem, title: String, onBack:
     LaunchedEffect(player) {
         while (true) {
             kotlinx.coroutines.delay(5000)
+            if (!saveProgress) return@LaunchedEffect
             val pos = (player.currentPosition / 1000).toInt()
             val dur = (player.duration / 1000).toInt()
             if (pos > 10 && dur > 0) {
@@ -161,7 +171,7 @@ fun OnlinePlayerScreen(link: OnlineLink, item: MediaItem, title: String, onBack:
         onDispose {
             val pos = (player.currentPosition / 1000).toInt()
             val dur = (player.duration / 1000).toInt()
-            if (pos > 10 && dur > 0 && pos < dur * 95 / 100) {
+            if (saveProgress && pos > 10 && dur > 0 && pos < dur * 95 / 100) {
                 store.saveProgress(item, pos, dur, onlineKey)
             }
             player.release()
@@ -219,27 +229,22 @@ fun OnlinePlayerScreen(link: OnlineLink, item: MediaItem, title: String, onBack:
     }
 
     // ---------- Единый обработчик пульта: работает при ЛЮБОМ фокусе ----------
-    // Скрытая панель: любая кнопка сначала показывает панель (как в MX),
-    // действие — следующим нажатием. Видимая: стрелки двигают фокус по кнопкам
+    // Как в сетевых плеерах: OK — пауза, ←/→ — перемотка, ↑ — меню,
+    // MENU — дорожки. Никаких кнопок на панели — фокус не нужен
     fun handleRemoteKey(keyCode: Int): Boolean {
-        val panelVisible = showPanel || showSettings || showQuality || showTrackMenu
         return when (keyCode) {
             KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                if (panelVisible) { panelTick++; false }
-                else {
-                    val delta = if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) 10_000L else -10_000L
-                    val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
-                    player.seekTo((player.currentPosition + delta).coerceIn(0L, dur))
-                    seekInfo = if (delta > 0) "⏩ +10 сек" else "⏪ −10 сек"
-                    panelTick++
-                    true
-                }
+                val delta = if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) 10_000L else -10_000L
+                val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
+                player.seekTo((player.currentPosition + delta).coerceIn(0L, dur))
+                seekInfo = if (delta > 0) "⏩ +10 сек" else "⏪ −10 сек"
+                panelTick++
+                true
             }
-            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN ->
-                if (panelVisible) false else { panelTick++; true }
-            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER ->
-                if (panelVisible) false else { panelTick++; true }
-            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+            KeyEvent.KEYCODE_DPAD_UP -> { showSettings = !showSettings; panelTick++; true }
+            KeyEvent.KEYCODE_DPAD_DOWN -> { panelTick++; true }
+            // OK — пауза/продолжить (как в YouTube TV)
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
                 if (player.isPlaying) player.pause() else player.play()
                 seekInfo = if (player.isPlaying) "▶ Продолжаем" else "⏸ Пауза"
                 panelTick++; true
@@ -249,9 +254,11 @@ fun OnlinePlayerScreen(link: OnlineLink, item: MediaItem, title: String, onBack:
             KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { player.seekTo(player.currentPosition + 30_000L); seekInfo = "⏩ +30 сек"; panelTick++; true }
             KeyEvent.KEYCODE_MEDIA_REWIND -> { player.seekTo((player.currentPosition - 30_000L).coerceAtLeast(0)); seekInfo = "⏪ −30 сек"; panelTick++; true }
             KeyEvent.KEYCODE_MENU -> { showTrackMenu = !showTrackMenu; true }
-            // BACK: панель видна — прячем; скрыта — выходим из плеера (BackHandler)
+            // BACK: меню/дорожки открыты — закрывает их BackHandler ниже;
+            // панель видна — прячем; скрыта — выходим из плеера
             KeyEvent.KEYCODE_BACK -> {
-                if (showPanel && !showSettings && !showQuality && !showTrackMenu) { showPanel = false; true }
+                if (showJump) { showJump = false; true }
+                else if (showPanel && !showSettings && !showQuality && !showTrackMenu) { showPanel = false; true }
                 else false
             }
             else -> false
@@ -405,72 +412,135 @@ fun OnlinePlayerScreen(link: OnlineLink, item: MediaItem, title: String, onBack:
             )
         }
 
-        // Панель контролов «как MX»: появляется при действии пульта,
-        // исчезает через 4 сек; шестерёнка ⚙ — качество и внешний плеер
-        if (showPanel || showSettings || showQuality) {
-            var posText by remember { mutableStateOf("") }
+        // Панель «как в сетевых плеерах» (YouTube TV/Zona): внизу сикбар
+        // с буфером и временем — никаких кнопок. Управление пультом:
+        // OK — пауза, ←/→ — перемотка, ↑ — меню настроек, MENU — дорожки
+        if (showPanel || showSettings || showQuality || showTrackMenu) {
+            var posMs by remember { mutableStateOf(0L) }
+            var durMs by remember { mutableStateOf(0L) }
+            var bufFrac by remember { mutableStateOf(0f) }
             LaunchedEffect(panelTick) {
                 while (true) {
-                    val p = player.currentPosition / 1000
-                    val d = (player.duration / 1000).takeIf { it > 0 }
-                    posText = "%d:%02d / %s".format(p / 60, p % 60, d?.let { "${it / 60}:${"%02d".format(it % 60)}" } ?: "—")
-                    kotlinx.coroutines.delay(500)
+                    posMs = player.currentPosition
+                    durMs = player.duration
+                    bufFrac = player.bufferedPercentage / 100f
+                    kotlinx.coroutines.delay(400)
                 }
             }
-            Row(
+            Column(
                 Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .background(Color(0xB3000000))
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
             ) {
-                Text(posText, color = Color.White, fontSize = 15.sp)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    PlayerChip("⏸") { if (player.isPlaying) player.pause() else player.play() }
-                    Spacer(Modifier.width(8.dp))
-                    PlayerChip("⏪10с") {
-                        val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
-                        player.seekTo((player.currentPosition - 10_000L).coerceIn(0L, dur))
-                        seekInfo = "⏪ −10 сек"
-                        panelTick++
+                // Заголовок над сикбаром
+                Text(
+                    title,
+                    color = Color(0xFFB8C0CC),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                )
+                Spacer(Modifier.height(8.dp))
+                // Сикбар: буфер (тускло) + позиция (жёлтый)
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(5.dp)
+                        .background(Color(0xFF2A3242)),
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth(bufFrac.coerceAtLeast(if (durMs > 0) (posMs.toFloat() / durMs).coerceIn(0f, 1f) else 0f))
+                            .height(5.dp)
+                            .background(Color(0xFF4A5872)),
+                    )
+                    if (durMs > 0) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth((posMs.toFloat() / durMs).coerceIn(0f, 1f))
+                                .height(5.dp)
+                                .background(Color(0xFFF5B942)),
+                        )
                     }
-                    Spacer(Modifier.width(8.dp))
-                    PlayerChip("⏩10с") {
-                        val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
-                        player.seekTo((player.currentPosition + 10_000L).coerceIn(0L, dur))
-                        seekInfo = "⏩ +10 сек"
-                        panelTick++
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    PlayerChip("🎵") { showTrackMenu = true }
-                    Spacer(Modifier.width(8.dp))
-                    PlayerChip(if (showSettings) "✕" else "⚙", focusRequester = gearFocus) { showSettings = !showSettings }
+                }
+                Spacer(Modifier.height(6.dp))
+                Row(Modifier.fillMaxWidth()) {
+                    Text(
+                        "%d:%02d".format(posMs / 60000, (posMs / 1000) % 60),
+                        color = Color.White, fontSize = 14.sp,
+                    )
+                    Spacer(Modifier.width(14.dp))
+                    Text(
+                        "⏳ $bufPct%" + if (bufPct >= 100) "" else " · ← → перемотка · OK пауза · ↑ меню",
+                        color = Color.White.copy(alpha = 0.45f),
+                        fontSize = 13.sp,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        if (durMs > 0) "-%d:%02d".format((durMs - posMs) / 60000, ((durMs - posMs) / 1000) % 60) else "—",
+                        color = Color.White, fontSize = 14.sp,
+                    )
                 }
             }
         }
 
-        // Меню шестерёнки — раскрывается вверх от кнопки
+        // Меню настроек (↑ на пульте): качество, дорожки, внешний плеер
         if (showSettings) {
+            val firstItemFocus = remember { FocusRequester() }
+            LaunchedEffect(showSettings) { firstItemFocus.requestFocus() }
             Column(
                 Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(bottom = 76.dp, end = 24.dp)
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 48.dp)
                     .background(Color(0xF0151B26), RoundedCornerShape(14.dp))
-                    .padding(12.dp),
-                horizontalAlignment = Alignment.End,
+                    .padding(14.dp),
             ) {
-                PlayerChip("Качество: ${maxQuality?.let { "${it}p" } ?: "авто"}") {
+                Text(
+                    "Настройки плеера",
+                    color = Color(0xFFF5B942),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(bottom = 10.dp),
+                )
+                SettingsMenuItem(
+                    label = "Качество: ${maxQuality?.let { "${it}p" } ?: "авто"}",
+                    focusRequester = firstItemFocus,
+                ) {
                     showSettings = false
                     showQuality = true
                 }
                 Spacer(Modifier.height(6.dp))
-                PlayerChip("⤴ Внешний плеер") {
+                SettingsMenuItem(label = "🎵 Дорожки и субтитры") {
+                    showSettings = false
+                    showTrackMenu = true
+                }
+                Spacer(Modifier.height(6.dp))
+                SettingsMenuItem(label = "⤴ Внешний плеер") {
                     showSettings = false
                     openExternal()
                 }
+                Spacer(Modifier.height(6.dp))
+                SettingsMenuItem(label = "⏱ Перейти к…") {
+                    showSettings = false
+                    showJump = true
+                }
             }
+        }
+
+        // «Перейти к…» — пресеты % поверх видео
+        if (showJump) {
+            JumpToDialog(
+                durationMs = if (player.duration > 0) player.duration else 0L,
+                title = title,
+                onJump = { ms ->
+                    player.seekTo(ms)
+                    seekInfo = "⏱ Перемотка"
+                    panelTick++
+                },
+                onClose = { showJump = false },
+            )
         }
 
         if (extMsg.isNotBlank() && !showQuality && !showSettings) {
@@ -530,17 +600,18 @@ fun OnlinePlayerScreen(link: OnlineLink, item: MediaItem, title: String, onBack:
     }
 }
 
-/** Небольшая кнопка поверх видео. */
+/** Пункт меню настроек плеера (фокус с пульта, мышь — для отладки). */
 @Composable
-private fun PlayerChip(label: String, focusRequester: FocusRequester? = null, onClick: () -> Unit) {
+internal fun SettingsMenuItem(label: String, focusRequester: FocusRequester? = null, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         modifier = Modifier
+            .width(260.dp)
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .mouseClick { onClick() },
         shape = clickableSurfaceShape(RoundedCornerShape(8.dp)),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color(0x990E1116),
+            containerColor = Color.Transparent,
             contentColor = Color.White,
             focusedContainerColor = Color(0xFFF5B942),
             focusedContentColor = Color(0xFF0E1116),
@@ -550,8 +621,76 @@ private fun PlayerChip(label: String, focusRequester: FocusRequester? = null, on
     ) {
         Text(
             label,
-            fontSize = 13.sp,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            fontSize = 15.sp,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
         )
+    }
+}
+
+/**
+ * Трейлер — играет ВНУТРИ приложения: поиск на Rutube по названию,
+ * HLS-стрим в нашем плеере. Внешние приложения/браузер не нужны
+ * (на ТВ-приставке их часто нет — кнопка раньше была «мёртвая»).
+ */
+@Composable
+fun TrailerScreen(item: MediaItem, onBack: () -> Unit) {
+    var link by remember { mutableStateOf<OnlineLink?>(null) }
+    var failed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(item) {
+        val t = withContext(Dispatchers.IO) {
+            com.torrenttv.app.data.RutubeService.searchTrailer(item.title + " трейлер")
+        }
+        link = t?.let { OnlineLink(url = it.hls, label = "rutube") }
+        failed = t == null
+    }
+
+    val tl = link
+    if (tl != null) {
+        OnlinePlayerScreen(
+            link = tl,
+            item = item,
+            title = "Трейлер · ${item.title}",
+            onBack = onBack,
+            // Трейлер не попадает в «Продолжить смотреть»
+            saveProgress = false,
+        )
+        return
+    }
+
+    androidx.compose.foundation.layout.Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0E1116)),
+    ) {
+        Column(
+            Modifier.align(Alignment.Center),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            if (failed) {
+                Text(
+                    "Трейлер на Rutube не найден 🤷",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.height(16.dp))
+                val backFocus = remember { FocusRequester() }
+                LaunchedEffect(Unit) { backFocus.requestFocus() }
+                Surface(
+                    onClick = onBack,
+                    modifier = Modifier.focusRequester(backFocus),
+                    shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color(0xFF1F2430),
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContentColor = Color(0xFF0E1116),
+                    ),
+                ) { Text("← Назад", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp)) }
+            } else {
+                Text("🎬 Ищу трейлер на Rutube…", color = Color(0xFFF5B942), fontSize = 18.sp)
+            }
+        }
     }
 }
