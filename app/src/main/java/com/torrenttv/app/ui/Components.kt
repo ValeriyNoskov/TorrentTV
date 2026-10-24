@@ -651,8 +651,19 @@ fun GenreChipsMulti(
 /** Левый навигационный бар. Свёрнут — только ярлыки (иконки);
  *  фокус переходит в бар — раскрывается с подписями, ушёл — сворачивается. */
 @Composable
-fun SideNav(active: Screen, onTab: (Screen) -> Unit) {
+fun SideNav(active: Screen, onTab: (Screen) -> Unit, restoreFocusTick: Int = 0) {
     var expanded by remember { mutableStateOf(false) }
+    // Фокус на активном пункте: после возврата из плеера/карточки Compose
+    // отдаёт фокус ПЕРВОЙ кнопке («Главная»), хотя подсвечен текущий экран.
+    // restoreFocusTick>0 — сигнал «мы вернулись на вкладку»: ставим фокус
+    // на активный (жёлтый) пункт меню.
+    val activeFocus = remember(active) { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(restoreFocusTick, active) {
+        if (restoreFocusTick > 0) {
+            kotlinx.coroutines.delay(250) // даём композиции вкладки устояться
+            runCatching { activeFocus.requestFocus() }
+        }
+    }
     val width by androidx.compose.animation.core.animateDpAsState(
         targetValue = if (expanded) 208.dp else 76.dp,
         animationSpec = androidx.compose.animation.core.tween(180),
@@ -686,18 +697,28 @@ fun SideNav(active: Screen, onTab: (Screen) -> Unit) {
                 modifier = Modifier.padding(bottom = 10.dp),
             )
         }
-        SideBarButton("🏠", "Главная", Screen.Home, active, onTab, expanded) { expanded = it }
-        SideBarButton("▶", "Продолжить", Screen.Continue, active, onTab, expanded) { expanded = it }
-        SideBarButton("⭐", "Избранное", Screen.Favorites, active, onTab, expanded) { expanded = it }
+        SideBarButton("🏠", "Главная", Screen.Home, active, onTab, expanded,
+            focusRequester = activeFocus.takeIf { active == Screen.Home }) { expanded = it }
+        SideBarButton("▶", "Продолжить", Screen.Continue, active, onTab, expanded,
+            focusRequester = activeFocus.takeIf { active == Screen.Continue }) { expanded = it }
+        SideBarButton("⭐", "Избранное", Screen.Favorites, active, onTab, expanded,
+            focusRequester = activeFocus.takeIf { active == Screen.Favorites }) { expanded = it }
         // «Смотреть позже» убрано: дублировало избранное — есть фильтр
         // «Фильмы / Сериалы» (решение владельца).
-        SideBarButton("🎬", "Фильмы", Screen.Movies, active, onTab, expanded) { expanded = it }
-        SideBarButton("📺", "Сериалы", Screen.TvShows, active, onTab, expanded) { expanded = it }
-        SideBarButton("🎪", "Шоу", Screen.Shows, active, onTab, expanded) { expanded = it }
-        SideBarButton("📡", "ТВ", Screen.Tv, active, onTab, expanded) { expanded = it }
-        SideBarButton("🧲", "Торренты", Screen.Torrents, active, onTab, expanded) { expanded = it }
-        SideBarButton("🔍", "Поиск", Screen.Search, active, onTab, expanded) { expanded = it }
-        SideBarButton("⚙", "Настройки", Screen.Settings, active, onTab, expanded) { expanded = it }
+        SideBarButton("🎬", "Фильмы", Screen.Movies, active, onTab, expanded,
+            focusRequester = activeFocus.takeIf { active == Screen.Movies }) { expanded = it }
+        SideBarButton("📺", "Сериалы", Screen.TvShows, active, onTab, expanded,
+            focusRequester = activeFocus.takeIf { active == Screen.TvShows }) { expanded = it }
+        SideBarButton("🎪", "Шоу", Screen.Shows, active, onTab, expanded,
+            focusRequester = activeFocus.takeIf { active == Screen.Shows }) { expanded = it }
+        SideBarButton("📡", "ТВ", Screen.Tv, active, onTab, expanded,
+            focusRequester = activeFocus.takeIf { active == Screen.Tv }) { expanded = it }
+        SideBarButton("🧲", "Торренты", Screen.Torrents, active, onTab, expanded,
+            focusRequester = activeFocus.takeIf { active == Screen.Torrents }) { expanded = it }
+        SideBarButton("🔍", "Поиск", Screen.Search, active, onTab, expanded,
+            focusRequester = activeFocus.takeIf { active == Screen.Search }) { expanded = it }
+        SideBarButton("⚙", "Настройки", Screen.Settings, active, onTab, expanded,
+            focusRequester = activeFocus.takeIf { active == Screen.Settings }) { expanded = it }
         // Сразу после настроек — всегда видна, никаких прыжков вниз
         SideBarExitButton(expanded) { expanded = it }
     }
@@ -711,12 +732,17 @@ fun SideBarButton(
     active: Screen,
     onTab: (Screen) -> Unit,
     expanded: Boolean = true,
+    focusRequester: androidx.compose.ui.focus.FocusRequester? = null,
     onFocusInBar: (Boolean) -> Unit = {},
 ) {
     val isActive = active == target
     Surface(
         onClick = { onTab(target) },
         modifier = Modifier
+            .then(
+                if (focusRequester != null)
+                    Modifier.focusRequester(focusRequester) else Modifier
+            )
             .width(if (expanded) 188.dp else 60.dp)
             .mouseClick { onTab(target) }
             .onFocusChanged { onFocusInBar(it.hasFocus) },

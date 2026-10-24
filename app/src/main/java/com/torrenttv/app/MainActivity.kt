@@ -247,6 +247,10 @@ private fun App() {
         }
     }
 
+    // Счётчик возвратов на вкладку: SideNav по нему возвращает фокус
+    // на активный пункт меню (а не на «Главная» — первый элемент)
+    var menuFocusTick by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+
     // Системная «Назад» не должна закрывать приложение, пока мы не на «Главной»:
     // плеер → серии → карточка → ТА ВКЛАДКА, откуда зашли (не всегда «Главная»)
     BackHandler(screen != Screen.Home) {
@@ -254,7 +258,7 @@ private fun App() {
             is Screen.Player ->
                 if (s.episode != null) Screen.Episodes(s.item) else Screen.Details(s.item)
             is Screen.MagnetEntry -> Screen.Details(s.item)
-            else -> lastTab
+            else -> lastTab.also { menuFocusTick++ }
         }
     }
 
@@ -266,7 +270,11 @@ private fun App() {
                 .fillMaxSize()
                 .background(Color(0xFF0E1116)),
         ) {
-            SideNav(active = screen) { screen = it }
+            SideNav(
+                active = screen,
+                onTab = { screen = it },
+                restoreFocusTick = menuFocusTick,
+            )
             Box(Modifier.weight(1f)) {
                 when (screen) {
                 Screen.Home -> HomeScreen(
@@ -397,7 +405,7 @@ private fun App() {
             is Screen.Live -> LivePlayerScreen(
                 channel = s.channel,
                 channels = s.channels,
-                onBack = { screen = lastTab },
+                onBack = { screen = lastTab; menuFocusTick++ },
                 onSwitch = { ch -> screen = Screen.Live(ch, s.channels) },
             )
 
