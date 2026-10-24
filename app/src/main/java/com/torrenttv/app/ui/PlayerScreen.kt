@@ -91,6 +91,12 @@ fun PlayerScreen(
     // Оверлеи объявлены заранее: состояние нужно уже в LaunchedEffect старта
     var showFiles by remember { mutableStateOf(false) }
     var showPanel by remember { mutableStateOf(true) }
+    // TorrServe: серии раздачи для переключения в плеере
+    var tsFiles by remember { mutableStateOf<List<Pair<Int, String>>>(emptyList()) }
+    var tsAllFiles by remember { mutableStateOf<List<com.torrenttv.app.data.TorrServeService.TSFile>>(emptyList()) }
+    var tsCurrent by remember { mutableStateOf(-1) }
+    var tsHostStr by remember { mutableStateOf<String?>(null) }
+    var tsHashStr by remember { mutableStateOf<String?>(null) }
 
     // Приоритет движков: 1) TorrServe (внешний), 2) внутренний jlibtorrent
     LaunchedEffect(magnet) {
@@ -119,6 +125,16 @@ fun PlayerScreen(
                 com.torrenttv.app.data.AppLog.log("player", "torrserve: ok hash=${ts.hash} file=\"${file.path}\" buffered=$buffered")
                 if (buffered) {
                     torrLink = com.torrenttv.app.data.TorrServeService.streamUrl(tsHost, ts.hash, file)
+                    // Серии для переключения в плеере: видео-файлы в естественном
+                    // порядке (E01, E02…), индекс текущего — по запущенному файлу
+                    val video = ts.files.filter {
+                        it.path.substringAfterLast('.', "").lowercase() in TorrentEngine.VIDEO_EXT
+                    }.sortedWith { x, y -> TorrentEngine.naturalCompare(x.path, y.path) }
+                    tsAllFiles = video
+                    tsFiles = video.mapIndexed { i, f -> i to f.path }
+                    tsCurrent = video.indexOfFirst { it.path == file.path }
+                    tsHostStr = tsHost
+                    tsHashStr = ts.hash
                     // Предзагрузка следующей серии фоном (как у Stremio):
                     // пока смотрим текущую, TorrServe качает следующую
                     scope.launch(Dispatchers.IO) {
@@ -248,7 +264,8 @@ fun PlayerScreen(
         bufferedPct = 100
     }
 
-    // TorrServe готов — играем его HTTP-стрим родным онлайн-плеером
+    // TorrServe готов — играем его HTTP-стрим родным онлайн-плеером.
+    // Серии TorrServe-раздачи: переключение прямо в плеере (как в Zona)
     val tl = torrLink
     if (tl != null) {
         OnlinePlayerScreen(
@@ -256,6 +273,28 @@ fun PlayerScreen(
             item = item,
             title = item.title,
             onBack = onBack,
+            files = tsFiles,
+            currentFile = tsCurrent,
+            onSelectFile = { n ->
+                val host = tsHostStr ?: return@OnlinePlayerScreen
+                val hash = tsHashStr ?: return@OnlinePlayerScreen
+                val f = tsFiles.getOrNull(n)?.let { (_, path) ->
+                    tsAllFiles.firstOrNull { it.path == path }
+                } ?: return@OnlinePlayerScreen
+                scope.launch {
+                    status = "Переключаю серию…"
+                    val ok = withContext(Dispatchers.IO) {
+                        com.torrenttv.app.data.TorrServeService.preloadFile(host, hash, f) { }
+                    }
+                    if (ok) {
+                        tsCurrent = n
+                        torrLink = com.torrenttv.app.data.TorrServeService.streamUrl(host, hash, f)
+                        com.torrenttv.app.data.AppLog.log("player", "torrserve: switched to \"${f.path}\"")
+                    } else {
+                        com.torrenttv.app.data.AppLog.log("player", "torrserve: switch failed")
+                    }
+                }
+            },
         )
         return
     }

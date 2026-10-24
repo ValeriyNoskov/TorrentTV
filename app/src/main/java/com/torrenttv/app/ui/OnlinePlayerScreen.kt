@@ -72,6 +72,12 @@ fun OnlinePlayerScreen(
     onBack: () -> Unit,
     /** Сохранять позицию в «Продолжить смотреть» (трейлерам не нужно). */
     saveProgress: Boolean = true,
+    /** Серии (для TorrServe): (индекс файла, имя). Пусто — кнопки «Серии» нет. */
+    files: List<Pair<Int, String>> = emptyList(),
+    /** Текущая серия (индекс в files). */
+    currentFile: Int = -1,
+    /** Выбрали другую серию — родитель перезапустит стрим. */
+    onSelectFile: (Int) -> Unit = {},
 ) {
     val context = LocalContext.current
     val store = remember { com.torrenttv.app.data.LocalStore(context) }
@@ -86,6 +92,11 @@ fun OnlinePlayerScreen(
     var showSettings by remember { mutableStateOf(false) }
     var showTrackMenu by remember { mutableStateOf(false) }
     var showJump by remember { mutableStateOf(false) }
+    // Список серий (TorrServe): выбор серии прямо в плеере
+    var showFiles by remember { mutableStateOf(false) }
+    // Кнопки на панели: игра/пауза (иконка меняется) + фокус на кнопке Play
+    var playing by remember { mutableStateOf(true) }
+    val playBtnFocus = remember { FocusRequester() }
     var maxQuality by remember { mutableStateOf<Int?>(null) } // null = авто
     var seekInfo by remember { mutableStateOf("") }           // «⏩ +10 сек» при перемотке пультом
     // ---------- Состояние: буферизация и ошибки (чёрный экран ≠ «зависло») ----------
@@ -103,6 +114,7 @@ fun OnlinePlayerScreen(
             if (!showSettings && !showQuality && !showTrackMenu) showPanel = false
         }
     }
+    LaunchedEffect(showPanel) { if (showPanel) runCatching { playBtnFocus.requestFocus() } }
 
     val player = remember(link.url) {
         // CDN проверяет Referer: у Filmix — filmix.ac, у HDRezka — её зеркало.
@@ -229,6 +241,21 @@ fun OnlinePlayerScreen(
     // Как в сетевых плеерах: OK — пауза, ←/→ — перемотка, ↑ — меню,
     // MENU — дорожки. Никаких кнопок на панели — фокус не нужен
     fun handleRemoteKey(keyCode: Int): Boolean {
+        // Список серий открыт — BACK закрывает его, не выходя из плеера
+        if (showFiles) {
+            if (keyCode == KeyEvent.KEYCODE_BACK) { showFiles = false; return true }
+            return false
+        }
+        // Панель видима — стрелки/OK управляют ФОКУСОМ по кнопкам панели
+        // (как в Zona), глобальные действия пульта уступают
+        if (showPanel) {
+            when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_UP -> { showSettings = !showSettings; panelTick++; return true }
+                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
+                KeyEvent.KEYCODE_DPAD_DOWN,
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> return false
+            }
+        }
         return when (keyCode) {
             KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
                 val delta = if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) 10_000L else -10_000L
@@ -421,6 +448,7 @@ fun OnlinePlayerScreen(
                     posMs = player.currentPosition
                     durMs = player.duration
                     bufFrac = player.bufferedPercentage / 100f
+                    playing = player.isPlaying
                     kotlinx.coroutines.delay(400)
                 }
             }
@@ -480,6 +508,52 @@ fun OnlinePlayerScreen(
                         color = Color.White, fontSize = 14.sp,
                     )
                 }
+                // Ряд кнопок (как в Zona): перемотка, пауза, серии, настройки.
+                // Фокус при показе панели — на ▶/⏸, стрелки ходят по ряду
+                Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    @Composable fun Btn(label: String, focusReq: FocusRequester? = null, action: () -> Unit) {
+                        androidx.tv.material3.Surface(
+                            onClick = action,
+                            modifier = if (focusReq != null) Modifier.focusRequester(focusReq) else Modifier,
+                            shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+                            colors = ClickableSurfaceDefaults.colors(
+                                containerColor = Color(0xFF1F2430),
+                                contentColor = Color.White,
+                                focusedContainerColor = Color(0xFFF5B942),
+                                focusedContentColor = Color(0xFF0E1116),
+                            ),
+                        ) { Text(label, fontSize = 16.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) }
+                    }
+                    Btn("⏪") {
+                        val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
+                        player.seekTo((player.currentPosition - 10_000L).coerceIn(0L, dur))
+                        seekInfo = "⏪ −10 сек"; panelTick++
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Btn(if (playing) "⏸" else "▶", focusReq = playBtnFocus) {
+                        if (player.isPlaying) player.pause() else player.play()
+                        playing = !player.isPlaying
+                        seekInfo = if (player.isPlaying) "▶ Продолжаем" else "⏸ Пауза"
+                        panelTick++
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Btn("⏩") {
+                        val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
+                        player.seekTo((player.currentPosition + 10_000L).coerceIn(0L, dur))
+                        seekInfo = "⏩ +10 сек"; panelTick++
+                    }
+                    if (files.size > 1) {
+                        Spacer(Modifier.width(10.dp))
+                        Btn("☰ Серии (${files.size})") { showFiles = true; panelTick++ }
+                    }
+                    Spacer(Modifier.weight(1f))
+                    Btn("🎵") { showTrackMenu = true; panelTick++ }
+                    Spacer(Modifier.width(10.dp))
+                    Btn("⤴") { openExternal() }
+                    Spacer(Modifier.width(10.dp))
+                    Btn("⚙") { showQuality = true; panelTick++ }
+                }
             }
         }
 
@@ -513,6 +587,13 @@ fun OnlinePlayerScreen(
                     showSettings = false
                     showTrackMenu = true
                 }
+                if (files.size > 1) {
+                    Spacer(Modifier.height(6.dp))
+                    SettingsMenuItem(label = "☰ Серии (${files.size})") {
+                        showSettings = false
+                        showFiles = true
+                    }
+                }
                 Spacer(Modifier.height(6.dp))
                 SettingsMenuItem(label = "⤴ Внешний плеер") {
                     showSettings = false
@@ -538,6 +619,50 @@ fun OnlinePlayerScreen(
                 },
                 onClose = { showJump = false },
             )
+        }
+
+        // Список серий (TorrServe): выбираем серию, не выходя из плеера
+        if (showFiles && files.size > 1) {
+            val firstFileFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+            LaunchedEffect(showFiles) { runCatching { firstFileFocus.requestFocus() } }
+            androidx.compose.foundation.lazy.LazyColumn(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .width(560.dp)
+                    .height(420.dp)
+                    .background(Color(0xF0151B26), RoundedCornerShape(14.dp))
+                    .padding(14.dp),
+            ) {
+                items(files.size) { n ->
+                    val (idx, name) = files[n]
+                    val current = idx == currentFile
+                    androidx.tv.material3.Surface(
+                        onClick = {
+                            showFiles = false
+                            if (!current) onSelectFile(idx)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 2.dp)
+                            .then(if (n == 0) Modifier.focusRequester(firstFileFocus) else Modifier),
+                        shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(
+                            shape = RoundedCornerShape(8.dp),
+                        ),
+                        colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                            containerColor = if (current) Color(0xFF3A5A2E) else Color(0xFF1F2430),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContentColor = Color.Black,
+                        ),
+                    ) {
+                        androidx.tv.material3.Text(
+                            (if (current) "▶ " else "") + name.substringAfterLast('/'),
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        )
+                    }
+                }
+            }
         }
 
         if (extMsg.isNotBlank() && !showQuality && !showSettings) {
