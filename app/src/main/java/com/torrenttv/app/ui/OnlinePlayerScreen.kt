@@ -89,6 +89,14 @@ fun OnlinePlayerScreen(
     onSelectFile: (Int) -> Unit = {},
 ) {
     val context = LocalContext.current
+    // Подпись с серией в заголовках плеера: «Название · S01E08» (или «· Серия 8»)
+    val titleWithEp = remember(link) {
+        title + when {
+            link.season > 0 && link.episode > 0 -> "  ·  " + "S%02dE%02d".format(link.season, link.episode)
+            link.episode > 0 -> "  ·  Серия ${link.episode}"
+            else -> ""
+        }
+    }
     // Каждый вход в плеер — в лог: по выгрузке видно цепочку «нажал → открылся → ошибка»
     androidx.compose.runtime.LaunchedEffect(link.url) {
         com.torrenttv.app.data.AppLog.log(
@@ -604,7 +612,7 @@ fun OnlinePlayerScreen(
             ) {
                 Text("⏳ Загружаю видео…", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
-                Text("$title · буфер $bufPct%", color = Color(0xFFF5B942), fontSize = 15.sp)
+                Text("$titleWithEp · буфер $bufPct%", color = Color(0xFFF5B942), fontSize = 15.sp)
             }
         }
 
@@ -711,9 +719,9 @@ fun OnlinePlayerScreen(
                     .background(Color(0xB3000000))
                     .padding(horizontal = 20.dp, vertical = 12.dp),
             ) {
-                // Заголовок над сикбаром
+                // Заголовок над сикбаром: название + серия (S01E08)
                 Text(
-                    title,
+                    titleWithEp,
                     color = Color(0xFFB8C0CC),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
