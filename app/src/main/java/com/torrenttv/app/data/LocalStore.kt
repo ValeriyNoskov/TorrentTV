@@ -737,6 +737,39 @@ class LocalStore(context: Context) {
         return 0
     }
 
+    // ---------- Разметка пропуска (SkipDB/IntroDB) ----------
+
+    /** Пропуск по открытым базам разметки (заставка — авто, титры — кнопкой). */
+    fun skipDbEnabled(): Boolean = prefs.getBoolean("skip_db", true)
+
+    fun setSkipDbEnabled(v: Boolean) {
+        prefs.edit().putBoolean("skip_db", v).apply()
+    }
+
+    /** Кеш разметки пропуска: null — нет записи, список — что запомнили (может быть пустым). */
+    fun skipCacheGet(key: String): List<SkipSeg>? {
+        val raw = prefs.getString("skipseg_$key", null) ?: return null
+        return runCatching {
+            val o = JSONObject(raw)
+            if (System.currentTimeMillis() - o.optLong("t", 0L) > 14L * 24 * 3600 * 1000) return null
+            val arr = o.getJSONArray("segs")
+            (0 until arr.length()).map { i ->
+                val s = arr.getJSONObject(i)
+                SkipSeg(s.getString("k"), s.getLong("s"), s.getLong("e"), s.getDouble("c"))
+            }
+        }.getOrNull()
+    }
+
+    fun skipCachePut(key: String, segs: List<SkipSeg>) {
+        val arr = StringBuilder("[")
+        segs.forEachIndexed { i, s ->
+            if (i > 0) arr.append(',')
+            arr.append("""{"k":"${s.kind}","s":${s.startMs},"e":${s.endMs},"c":${s.confidence}}""")
+        }
+        arr.append(']')
+        prefs.edit().putString("skipseg_$key", """{"t":${System.currentTimeMillis()},"segs":$arr}""").apply()
+    }
+
     /** Подпись аудиодорожки, выбранной пользователем (например, «Дубляж»). */
     fun playerAudioLabel(): String = prefs.getString("player_audio_label", "") ?: ""
 

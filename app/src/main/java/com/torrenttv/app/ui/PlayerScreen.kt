@@ -87,6 +87,29 @@ fun PlayerScreen(
             if (en.posterUrl.isNotBlank() || en.imdbId.isNotBlank()) itemState = en
         }
     }
+
+    // Разметка пропуска из открытых баз (SkipDB/IntroDB): точные таймкоды
+    // заставки/пересказа/титров по IMDb ID. Кешируется, запрос — раз на серию.
+    var skipSegs by remember(episode) { mutableStateOf<List<com.torrenttv.app.data.SkipSeg>>(emptyList()) }
+    LaunchedEffect(episode, itemState.imdbId) {
+        val imdb = itemState.imdbId
+        if (imdb.isBlank() || !store.skipDbEnabled()) return@LaunchedEffect
+        val segs = withContext(Dispatchers.IO) {
+            runCatching {
+                com.torrenttv.app.data.SkipSegments.fetch(
+                    store, imdb,
+                    episode?.season ?: 0,
+                    episode?.episode,
+                )
+            }.getOrDefault(emptyList())
+        }
+        skipSegs = segs
+        com.torrenttv.app.data.AppLog.log(
+            "player",
+            if (segs.isEmpty()) "разметка пропуска: нет данных ($imdb)"
+            else "разметка пропуска: " + segs.joinToString { "${it.kind} ${it.startMs / 1000}-${it.endMs / 1000}с" },
+        )
+    }
     // Источник эпизода хранится с суффиксом (":s01e05") — у каждой серии свой
     val sourceSuffix = episode?.sourceSuffix ?: ""
     val sourceKey = item.storeKey + sourceSuffix
@@ -431,7 +454,8 @@ fun PlayerScreen(
             },
             onPickTorrent = onPickTorrent,
             externalUrl = torrLink,
-        )
+            skipSegs = skipSegs,
+)
     } else {
         // Экран буферизации
         BackHandler { com.torrenttv.app.data.AppLog.log("player", "back from buffering"); onBack() }
@@ -498,6 +522,8 @@ private fun VideoPlayer(
     onPickTorrent: () -> Unit = {},
     /** URL для внешнего плеера (TorrServe) или null — внешний недоступен. */
     externalUrl: String? = null,
+    /** Разметка пропуска (заставка/пересказ/титры) из открытых баз. */
+    skipSegs: List<com.torrenttv.app.data.SkipSeg> = emptyList(),
 ) {
     val context = LocalContext.current
     val sourceKey = item.storeKey + (episode?.sourceSuffix ?: "")
@@ -544,6 +570,44 @@ private fun VideoPlayer(
     var showSkip by remember { mutableStateOf(false) } // «Пропустить титры» доступна
 
     var seekInfo by remember { mutableStateOf("") }    // «⏩ +10 сек» при перемотке пультом
+    // Разметка пропуска (SkipDB/IntroDB) грузится в PlayerScreen — тут только тик:
+    // заставка/пересказ прыгают при входе в отрезок, титры/анонс — кнопкой
+    var autoSkipped by remember(episode) { mutableStateOf(setOf<String>()) }
+    var segButton by remember { mutableStateOf<com.torrenttv.app.data.SkipSeg?>(null) }
+    // Фокус на кнопке пропуска при её появлении (владелец: «фокус на них»)
+    val segSkipFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(segButton) {
+        if (segButton != null) runCatching { segSkipFocus.requestFocus() }
+    }
+    // Тик раз в секунду: авто-заставка/пересказ (прыжок при входе в отрезок)
+    // и кнопка «Пропустить» для титров/анонса
+    LaunchedEffect(player, skipSegs) {
+        while (true) {
+            kotlinx.coroutines.delay(1000)
+            if (skipSegs.isEmpty() || player.duration <= 0) continue
+            val pos = player.currentPosition
+            // АВТО: заставка и пересказ — прыгаем на конец отрезка, один раз на серию
+            for (seg in skipSegs) {
+                if (seg.kind !in setOf("intro", "recap")) continue
+                if (seg.kind in autoSkipped) continue
+                if (pos >= seg.startMs && pos < seg.endMs) {
+                    autoSkipped = autoSkipped + seg.kind
+                    player.seekTo(seg.endMs)
+                    player.play()
+                    seekInfo = if (seg.kind == "intro") "⏭ Заставка пропущена" else "⏭ Пересказ пропущен"
+                    com.torrenttv.app.data.AppLog.log(
+                        "player", "${seg.kind} пропущен по базе: ${item.title}",
+                    )
+                    break
+                }
+            }
+            // КНОПКА: титры (outro) и анонс следующей серии (preview)
+            segButton = skipSegs.firstOrNull {
+                (it.kind == "outro" || it.kind == "preview") &&
+                    pos >= it.startMs && pos < it.endMs
+            }
+        }
+    }
     // Автопереход: «Следующая серия через N…» с кнопками Сейчас/Отмена
     var nextCountdown by remember { mutableStateOf<Int?>(null) }
     LaunchedEffect(nextCountdown) {
@@ -958,8 +1022,43 @@ private fun VideoPlayer(
             )
         }
 
-        // «⏭ Пропустить титры» — в последние 3 минуты (поверх панели)
-        if (showSkip) {
+        // «⏭ Пропустить» по разметке баз (титры/анонс) — точные границы
+        val segSkip = segButton
+        if (segSkip != null) {
+            Button(
+                onClick = {
+                    segButton = null
+                    val target = segSkip.endMs
+                    // Титры у самого конца файла — сразу «конец серии»,
+                    // чтобы включился переход к следующей
+                    if (player.duration - target < 90_000L) {
+                        player.seekTo((player.duration - 3000).coerceAtLeast(0))
+                    } else {
+                        player.seekTo(target)
+                    }
+                    player.play()
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 28.dp, bottom = if (showPanel || showGear || showFiles) 150.dp else 28.dp)
+                    .focusRequester(segSkipFocus),
+                colors = androidx.tv.material3.ButtonDefaults.colors(
+                    containerColor = Color(0xCC1F2430),
+                    contentColor = Color.White,
+                    focusedContainerColor = Color(0xFFF5B942),
+                    focusedContentColor = Color.Black,
+                ),
+            ) {
+                Text(
+                    if (segSkip.kind == "preview") "⏭ Пропустить анонс" else "⏭ Пропустить титры",
+                    fontSize = 15.sp,
+                )
+            }
+        }
+        // «⏭ Пропустить титры» — в последние 3 минуты (поверх панели, без разметки)
+        if (showSkip && segSkip == null) {
+            val skipFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+            LaunchedEffect(showSkip) { if (showSkip) runCatching { skipFocus.requestFocus() } }
             Button(
                 onClick = {
                     showSkip = false
@@ -968,7 +1067,8 @@ private fun VideoPlayer(
                 },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(end = 28.dp, bottom = if (showPanel || showGear || showFiles) 150.dp else 28.dp),
+                    .padding(end = 28.dp, bottom = if (showPanel || showGear || showFiles) 150.dp else 28.dp)
+                    .focusRequester(skipFocus),
                 colors = androidx.tv.material3.ButtonDefaults.colors(
                     containerColor = Color(0xCC1F2430),
                     contentColor = Color.White,

@@ -382,7 +382,19 @@ fun SettingsScreen(onBack: () -> Unit) {
                             store.setCardWidthDp(cardWidthDp)
                         }
                         SettingsNote("Размер постеров во всех каталогах.")
+                        var skipDb by remember { mutableStateOf(store.skipDbEnabled()) }
+                        SettingsRow(
+                            title = if (skipDb) "✅ Пропуск заставок и титров по базам" else "⬜ Пропуск заставок и титров по базам",
+                            value = if (skipDb) "ВКЛ — заставка/пересказ сами, титры/анонс кнопкой" else "ВЫКЛ — всё смотрим как есть",
+                            valueOk = skipDb,
+                            modifier = Modifier.focusRequester(contentFocus),
+                        ) {
+                            skipDb = !skipDb
+                            store.setSkipDbEnabled(skipDb)
+                        }
+                        SettingsNote("Точные таймкоды из открытых баз разметки (SkipDB/IntroDB) по IMDb — то, что знает сообщество. Не перемотка по догадкам.")
                     }
+
 
                     "logs" -> {
                         // Галочка записи: включил → пользовался приложением → отправил
