@@ -603,14 +603,19 @@ fun OnlinePlayerScreen(
             update = { view -> view.player = player },
             modifier = Modifier.fillMaxSize(),
         )
-        Text(
-            "$title · ${link.label}",
-            color = Color.White.copy(alpha = 0.7f),
-            fontSize = 14.sp,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(16.dp),
-        )
+        // Название и серия — без технических пометок источника («torrserve»,
+        // «filmix» и т.п.). Видно только при открытой панели: владелец просил,
+        // чтобы заголовок уходил вместе с меню.
+        if (showPanel) {
+            Text(
+                titleWithEp,
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 14.sp,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(16.dp),
+            )
+        }
 
         // Индикатор перемотки пультом: скрыт при открытых меню (не наезжает)
         if (seekInfo.isNotBlank() && !showQuality && !showSettings) {
