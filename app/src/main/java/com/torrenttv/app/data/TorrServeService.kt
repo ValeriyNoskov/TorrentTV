@@ -247,8 +247,10 @@ object TorrServeService {
             }
         }.apply { isDaemon = true }.start()
 
-        // Порог: 4 МБ или 5% файла (меньше нельзя — плееру нужны заголовки/индекс)
-        val threshold = minOf(4L * 1024 * 1024, maxOf(256L * 1024, file.length / 20))
+        // Порог прогрева: для 4K-файлов (десятки ГБ, битрейт 40–80 Мбит/с) 4 МБ
+        // мало — плеер стартует и сразу упирается в буфер. Даём до 32 МБ:
+        // старт дольше на десятки секунд, зато без заиканий в начале.
+        val threshold = minOf(32L * 1024 * 1024, maxOf(4L * 1024 * 1024, file.length / 20))
         val deadline = System.currentTimeMillis() + timeoutMs
         var lastProgress = -1L
         var stalled = 0
