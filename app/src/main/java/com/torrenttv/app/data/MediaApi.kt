@@ -71,7 +71,21 @@ object MediaApi {
         val card = TitleMatch.best(item, cards)
         var poster = card?.posterUrl.orEmpty()
         var overview = card?.overview.orEmpty()
-        // Фолбэк 1 — Википедия: настоящий художественный постер фильма
+        var tmdbImdb = ""
+        // Фолбэк 1 — TMDB: работает, когда КП упёрся в дневную квоту (500/сутки).
+        // Добирает постер, описание и IMDb ID — без IMDb не работает разметка
+        // пропуска (SkipDB/IntroDB ищут именно по нему)
+        val imdbKnown = !(card?.imdbId ?: item.imdbId).isBlank()
+        if (poster.isBlank() || !imdbKnown) {
+            val tm = runCatching { TmdbClient.search(item.title) }.getOrDefault(emptyList())
+            val tBest = if (tm.isNotEmpty()) TitleMatch.best(item, tm) else null
+            if (tBest != null) {
+                if (poster.isBlank()) poster = tBest.posterUrl
+                if (overview.isBlank()) overview = tBest.overview
+            }
+            tmdbImdb = tBest?.imdbId.orEmpty()
+        }
+        // Фолбэк 2 — Википедия: настоящий художественный постер фильма
         if (poster.isBlank()) {
             poster = runCatching { WikipediaClient.poster(item.title) }.getOrNull().orEmpty()
         }
@@ -87,7 +101,7 @@ object MediaApi {
         return item.copy(
             posterUrl = poster.ifBlank { item.posterUrl },
             year = card?.year?.ifBlank { item.year } ?: item.year,
-            imdbId = card?.imdbId?.ifBlank { item.imdbId } ?: item.imdbId,
+            imdbId = (card?.imdbId ?: "").ifBlank { tmdbImdb.ifBlank { item.imdbId } },
             overview = overview.ifBlank { item.overview },
             rating = if ((card?.rating ?: 0.0) > 0) card!!.rating else item.rating,
         )
