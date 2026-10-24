@@ -34,6 +34,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.torrenttv.app.data.AppLog
 import com.torrenttv.app.data.Episode
+import com.torrenttv.app.data.KinopoiskClient
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
 import com.torrenttv.app.data.MediaApi
@@ -92,7 +93,11 @@ fun EpisodesScreen(
             )
 
             seasons.isEmpty() -> Text(
-                "Сезоны не найдены — воспользуйтесь «Автопоиском» на карточке",
+                if (KinopoiskClient.lastFailed) {
+                    "База КП недоступна (лимит или сбой) — попробуйте позже или задайте свой ключ в настройках"
+                } else {
+                    "Сезоны не найдены — воспользуйтесь «Автопоиском» на карточке"
+                },
                 color = Color.White.copy(alpha = 0.6f),
                 fontSize = 15.sp,
                 modifier = Modifier.padding(top = 10.dp),
