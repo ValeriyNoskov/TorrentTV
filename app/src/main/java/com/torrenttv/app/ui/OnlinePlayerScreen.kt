@@ -179,7 +179,12 @@ fun OnlinePlayerScreen(
                             retryCount++
                             seekInfo = "🔄 Запускаю поток (попытка ${retryCount + 1})…"
                             panelTick++
-                            retryTick++
+                            // TorrServe после IO-ошибки (2000) ещё докачивает серию —
+                            // мгновенный рестарт попадает в то же состояние
+                            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                                kotlinx.coroutines.delay(1500)
+                                retryTick++
+                            }
                         } else {
                             errorMsg = "Ошибка воспроизведения: ${error.errorCodeName}"
                             // Автовыгрузка лога: Gist (вшитый токен) → dpaste

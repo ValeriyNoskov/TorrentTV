@@ -836,11 +836,15 @@ private fun NetCheckScreen(onClose: () -> Unit) {
                             .callTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
                             .build()
                         runCatching {
-                            shortClient.newCall(
-                                okhttp3.Request.Builder().url(url)
-                                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-                                    .build()
-                            ).execute().use { it.isSuccessful }
+                            val rb = okhttp3.Request.Builder().url(url)
+                                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                            // КП без ключа отвечает 401 — проверка должна ходить с ключом,
+                            // иначе рабочий API показывает FAIL
+                            if (url.contains("kinopoiskapiunofficial.tech")) {
+                                rb.header("X-API-KEY", com.torrenttv.app.data.KinopoiskClient.currentApiKey())
+                            }
+                            shortClient.newCall(rb.build())
+                                .execute().use { it.isSuccessful }
                         }.getOrDefault(false)
                     }
                     val row = NetCheckRow(name, url.substringAfter("//").substringBefore("/"), ok, System.currentTimeMillis() - t0)

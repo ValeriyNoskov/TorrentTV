@@ -78,6 +78,55 @@ fun HomeScreen(
                     filterFn = { store.isAllowed(it) },
                 )
             }
+            // 🧪 ТЕСТ (временно): один и тот же список из двух источников —
+            // сравнение постеров КП vs TMDB + лог в Gist
+            item {
+                var kpTest by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+                var tmdbTest by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+                LaunchedEffect(Unit) {
+                    withContext(Dispatchers.IO) {
+                        val kp = runCatching { com.torrenttv.app.data.KinopoiskClient.trending() }
+                            .getOrDefault(emptyList())
+                        val tm = runCatching { com.torrenttv.app.data.TmdbClient.trending() }
+                            .getOrDefault(emptyList())
+                        com.torrenttv.app.data.AppLog.log(
+                            "postertest",
+                            "kp: ${kp.count { it.posterUrl.isNotBlank() }}/${kp.size} постеров, " +
+                                "tmdb: ${tm.count { it.posterUrl.isNotBlank() }}/${tm.size}",
+                        )
+                        kpTest = kp
+                        tmdbTest = tm
+                    }
+                }
+                if (kpTest.isNotEmpty() || tmdbTest.isNotEmpty()) {
+                    Column {
+                        Text(
+                            text = "🧪 Тест постеров — КП: ${
+                                kpTest.count { it.posterUrl.isNotBlank() }
+                            }/${kpTest.size} · TMDB: ${
+                                tmdbTest.count { it.posterUrl.isNotBlank() }
+                            }/${tmdbTest.size}",
+                            color = Color(0xFF8BD17C),
+                            fontSize = 16.sp,
+                            modifier = Modifier.padding(horizontal = 32.dp),
+                        )
+                        if (kpTest.isNotEmpty()) {
+                            MediaRow(
+                                title = "🧪 Кинопоиск",
+                                items = kpTest.take(20),
+                                onClick = onOpenDetails,
+                            )
+                        }
+                        if (tmdbTest.isNotEmpty()) {
+                            MediaRow(
+                                title = "🧪 TMDB",
+                                items = tmdbTest.take(20),
+                                onClick = onOpenDetails,
+                            )
+                        }
+                    }
+                }
+            }
             // Новинки с переходом в каталог (клик по заголовку)
             item {
                 PagedMediaRow(

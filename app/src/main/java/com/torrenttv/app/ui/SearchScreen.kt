@@ -220,6 +220,46 @@ fun SearchScreen(
         )
         return item to (card?.posterUrl ?: "")
     }
+
+    /** Очистить имя раздачи до названия тайтла: убрать серию, год, качество, релиз-группу. */
+    fun cleanTorrentName(name: String): String {
+        var s = name.substringBefore('/').substringBefore('[')
+            .replace(Regex("\\.(mkv|mp4|avi|ts|m2ts)$", RegexOption.IGNORE_CASE), "")
+        s = s.replace(Regex("""\bS\d{1,2}\s*[ЕE]?\s*\d{1,3}\b|\bS\d{1,2}\b|\b[ЕE]\d{1,3}\b""", RegexOption.IGNORE_CASE), " ")
+        s = s.replace(Regex("""\b(19|20)\d{2}\b"""), " ")
+        s = s.replace(
+            Regex("""\b(WEB-?DL|WEB-?Rip|WEB|BDRip|HDRip|HDRezka|Blu-?Ray|HDTV|SATRip|DVDRip|1080p|720p|2160p|4K|UHD|x264|x265|H\.?26[45]|HEVC|DUB|MEGapeer|ExKinoRay|Files-?x|LostFilm|HDRes|Кинозал|Механики)\b\.?""", RegexOption.IGNORE_CASE),
+            " ",
+        )
+        s = s.replace('.', ' ').replace('_', ' ').replace('-', ' ')
+        s = s.replace(Regex("""\s+"""), " ").trim()
+        return s
+    }
+
+    // Догрузка постеров для раздач без постера: поиск по очищенному названию
+    // (каскад КП→TMDB→Рутрекер, ответы в кеше 24ч — лимит не расходуется)
+    var torrentPosters by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    LaunchedEffect(torrents, results) {
+        if (torrents.isEmpty()) return@LaunchedEffect
+        val missing = torrents.filter { r ->
+            torrentPosters[r.name].isNullOrEmpty() &&
+                torrentMeta[r.name]?.first?.isNotBlank() != true &&
+                posterFor(r.name).second.isBlank()
+        }
+        if (missing.isEmpty()) return@LaunchedEffect
+        val found = mutableMapOf<String, String>()
+        kotlinx.coroutines.withContext(Dispatchers.IO) {
+            val queried = mutableSetOf<String>()
+            for (r in missing) {
+                val q = cleanTorrentName(r.name)
+                if (q.length < 3 || !queried.add(q.lowercase())) continue
+                val p = runCatching { MediaApi.search(q) }.getOrDefault(emptyList())
+                    .firstOrNull { it.posterUrl.isNotBlank() }?.posterUrl ?: continue
+                found[r.name] = p
+            }
+        }
+        if (found.isNotEmpty()) torrentPosters = torrentPosters + found
+    }
     var showKb by remember { mutableStateOf(false) }
     val externalKb = remember { store.useExternalKeyboard() }
     val findFocus = remember { FocusRequester() }
@@ -329,7 +369,9 @@ fun SearchScreen(
                     val r = torrents[i]
                     val (tItem, cardPoster) = posterFor(r.name)
                     val meta = torrentMeta[r.name]
-                    val poster = meta?.first?.takeIf { it.isNotBlank() } ?: cardPoster
+                    val poster = meta?.first?.takeIf { it.isNotBlank() }
+                        ?: cardPoster.takeIf { it.isNotBlank() }
+                        ?: torrentPosters[r.name].orEmpty()
                     val desc = meta?.second.orEmpty()
                     val card = tItem.copy(posterUrl = poster)
                     Surface(

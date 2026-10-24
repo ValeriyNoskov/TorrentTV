@@ -62,16 +62,35 @@ object TmdbClient {
             params.forEach { (k, v) -> append('&').append(k).append('=').append(Uri.encode(v)) }
         }
         return try {
+            // Свежий кеш — без сети (каталоги не меняются часами)
+            KinopoiskClient.sharedFresh(url)?.let {
+                lastFailed = false
+                return runCatching { JSONObject(it) }.getOrNull()
+            }
             http.newCall(Request.Builder().url(url).build()).execute().use { resp ->
-                lastFailed = !resp.isSuccessful
-                if (resp.code == 429 || resp.code == 401 || resp.code >= 500) {
-                    cooldownUntil = System.currentTimeMillis() + 10 * 60_000L
+                val body = if (resp.isSuccessful) resp.body!!.string() else null
+                if (body != null) {
+                    lastFailed = false
+                    KinopoiskClient.sharedPut(url, body)
+                    JSONObject(body)
+                } else {
+                    if (resp.code == 429 || resp.code == 401 || resp.code >= 500) {
+                        cooldownUntil = System.currentTimeMillis() + 10 * 60_000L
+                    }
+                    lastFailed = true
+                    // Источник сбойнул — отдаём устаревший кеш, полки не пустеют
+                    KinopoiskClient.sharedStale(url)?.let { s ->
+                        lastFailed = false
+                        runCatching { JSONObject(s) }.getOrNull()
+                    }
                 }
-                if (!resp.isSuccessful) null else JSONObject(resp.body!!.string())
             }
         } catch (e: Exception) {
             lastFailed = true
-            null
+            KinopoiskClient.sharedStale(url)?.let { s ->
+                lastFailed = false
+                runCatching { JSONObject(s) }.getOrNull()
+            }
         }
     }
 

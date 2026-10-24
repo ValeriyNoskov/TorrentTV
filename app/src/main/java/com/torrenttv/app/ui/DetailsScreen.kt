@@ -1,6 +1,7 @@
 package com.torrenttv.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -131,6 +132,54 @@ fun DetailsScreen(
                     fontSize = 18.sp,
                     modifier = Modifier.padding(top = 4.dp),
                 )
+                // Рейтинги разных сервисов: КП и IMDb догружаются одним запросом
+                // (/api/v1.2/movie/{id}, кеш 24ч). TMDB недоступен из РФ.
+                var kpRating by remember(item.id) { mutableStateOf(0.0) }
+                var imdbRating by remember(item.id) { mutableStateOf(0.0) }
+                LaunchedEffect(item.id) {
+                    withContext(Dispatchers.IO) {
+                        com.torrenttv.app.data.KinopoiskClient.ratings(item.id)?.let { (kp, imdb) ->
+                            kpRating = kp
+                            imdbRating = imdb
+                        }
+                    }
+                }
+                androidx.compose.foundation.layout.Row(
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(top = 10.dp),
+                ) {
+                    val kpShown = kpRating.takeIf { it > 0 } ?: item.rating
+                    if (kpShown > 0) {
+                        Box(
+                            Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFFF5B942))
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                        ) {
+                            Text(
+                                "★ ${"%.1f".format(kpShown)} КП",
+                                color = Color(0xFF0E1116),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                    if (imdbRating > 0) {
+                        Box(
+                            Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF2B2F3A))
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                        ) {
+                            Text(
+                                "IMDb ${"%.1f".format(imdbRating)}",
+                                color = Color(0xFFF5C518),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                }
                 if (item.overview.isNotBlank()) {
                     Text(
                         text = item.overview,

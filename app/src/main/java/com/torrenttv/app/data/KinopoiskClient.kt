@@ -72,6 +72,18 @@ object KinopoiskClient {
 
     private fun cacheStale(url: String): String? = cache[url]?.second
 
+    /** Общий кеш для других источников (TMDB): свежий ответ или null. */
+    fun sharedFresh(url: String): String? = cacheFresh(url)
+
+    /** Общий кеш: устаревший ответ (фолбэк при сбое источника). */
+    fun sharedStale(url: String): String? = cacheStale(url)
+
+    /** Сохранить чужой ответ в общий дисковый кеш. */
+    fun sharedPut(url: String, body: String) {
+        cache[url] = System.currentTimeMillis() to body
+        persistCache()
+    }
+
     private val http = OkHttpClient.Builder()
         .connectTimeout(6, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
@@ -99,6 +111,9 @@ object KinopoiskClient {
 
     private val apiKey: String
         get() = overrideApiKey.ifBlank { BuildConfig.KP_API_KEY }
+
+    /** Ключ для служебных проверок (netcheck), чтобы 401 не считался «источник лежит». */
+    fun currentApiKey(): String = apiKey
 
     // ---------- Предохранитель (circuit breaker) ----------
 
@@ -245,6 +260,19 @@ object KinopoiskClient {
         )
 
     // ---------- Поиск ----------
+
+    /**
+     * Рейтинги КП и IMDb одной карточкой: /api/v1.2/movie/{id} отдаёт оба.
+     * Кешируется общим дисковым кешем — повторный вход без запроса.
+     * @return (kinopoisk, imdb), null если ничего не найдено
+     */
+    fun ratings(id: Int): Pair<Double, Double>? {
+        val json = get("/api/v1.2/movie/$id") ?: return null
+        val kp = json.optDouble("ratingKinopoisk", 0.0).takeIf { !it.isNaN() } ?: 0.0
+        val imdb = json.optDouble("ratingImdb", 0.0).takeIf { !it.isNaN() } ?: 0.0
+        if (kp <= 0.0 && imdb <= 0.0) return null
+        return kp to imdb
+    }
 
     fun search(query: String): List<MediaItem> = parseItems(
         get(

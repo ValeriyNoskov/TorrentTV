@@ -24,7 +24,7 @@ class TorrentTVApp : Application(), ImageLoaderFactory {
             .diskCache {
                 DiskCache.Builder()
                     .directory(cacheDir.resolve("image_cache"))
-                    .maxSizeBytes(250L * 1024 * 1024)
+                    .maxSizeBytes(500L * 1024 * 1024)
                     .build()
             }
             .respectCacheHeaders(false)
