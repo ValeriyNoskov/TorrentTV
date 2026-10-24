@@ -96,7 +96,6 @@ fun OnlinePlayerScreen(
     // Видна сразу при входе — пользователь видит, что плеер жив
     var panelTick by remember { mutableStateOf(1) }
     var showPanel by remember { mutableStateOf(true) }
-    val gearFocus = remember { FocusRequester() }
     LaunchedEffect(panelTick) {
         if (panelTick > 0 && !showSettings && !showQuality && !showTrackMenu) {
             showPanel = true
@@ -104,8 +103,6 @@ fun OnlinePlayerScreen(
             if (!showSettings && !showQuality && !showTrackMenu) showPanel = false
         }
     }
-    // При открытой панели фокус сразу на шестерёнке — пульт её находит
-    LaunchedEffect(showPanel) { if (showPanel) gearFocus.requestFocus() }
 
     val player = remember(link.url) {
         // CDN проверяет Referer: у Filmix — filmix.ac, у HDRezka — её зеркало.

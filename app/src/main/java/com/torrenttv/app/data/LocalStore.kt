@@ -380,7 +380,12 @@ class LocalStore(context: Context) {
     fun addRecentQuery(q: String) {
         val v = q.trim()
         if (v.length < 2) return
-        val next = (listOf(v) + recentQueries().filterNot { it.equals(v, ignoreCase = true) }).take(8)
+        // Набор по буквам («сп», «спе», «спец») не должен замусоривать историю:
+        // убираем все прежние записи, которые являются ПРЕФИКСОМ полного запроса.
+        // «спецлаб» (другой фильм, не префикс) остаётся в списке.
+        val next = (listOf(v) + recentQueries().filterNot {
+            it.equals(v, ignoreCase = true) || v.startsWith(it, ignoreCase = true)
+        }).take(8)
         prefs.edit().putString("recent_queries", next.joinToString("\u0001")).apply()
     }
 
