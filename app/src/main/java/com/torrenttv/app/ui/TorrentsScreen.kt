@@ -139,13 +139,23 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
     }
 
     // Перезагрузка при смене фильтров
+    var loadError by remember { mutableStateOf("") }
     LaunchedEffect(type, genre, year, country, reloadTick) {
         loading = true
+        loadError = ""
         page = 1
         endReached = false
-        items = loadPage(1)
+        try {
+            items = loadPage(1).distinctBy { it.storeKey }
+        } catch (e: Exception) {
+            // Молчаливое падение корутины = «чёрный экран» без объяснений —
+            // фиксируем в лог и показываем пользователю
+            items = emptyList()
+            loadError = "${e.javaClass.simpleName}: ${e.message ?: "ошибка загрузки"}"
+            AppLog.log("torrents", "ОШИБКА загрузки каталога: $loadError")
+        }
         loading = false
-        AppLog.log("torrents", "каталог: тип=$type жанр=$genre год=$year страна=$country → ${items.size}")
+        AppLog.log("torrents", "каталог: тип=$type жанр=$genre год=$year страна=$country поиск=$searchMode → ${items.size}")
     }
 
     // Бесконечная подгрузка: приблизились к концу списка — грузим следующую страницу
@@ -155,10 +165,15 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
         !loading && !endReached && info.totalItemsCount > 0 && last >= info.totalItemsCount - 6
     }
     LaunchedEffect(shouldLoadMore) {
-        if (!shouldLoadMore) return@LaunchedEffect
+        if (!shouldLoadMore || items.isEmpty()) return@LaunchedEffect // пустой список — не долбим страницы
         loading = true
         val next = page + 1
-        val more = loadPage(next)
+        val more = try {
+            loadPage(next)
+        } catch (e: Exception) {
+            AppLog.log("torrents", "ОШИБКА догрузки стр.$next: ${e.javaClass.simpleName}: ${e.message}")
+            emptyList()
+        }
         if (more.isEmpty()) endReached = true else {
             page = next
             // Дедуп по ключу карточки (страницы могут повторять)
@@ -297,14 +312,30 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Text(
                     text = when {
+                        loadError.isNotEmpty() -> "⚠ Не удалось загрузить каталог: $loadError"
                         loading && items.isEmpty() -> "Загружаю раздачи…"
                         shown.isEmpty() -> "По этим фильтрам ничего нет — ослабьте фильтры"
                         else -> "Найдено: ${shown.size}" + if (endReached) "" else " (листаю дальше — подгрузится ещё)"
                     },
-                    color = Color.White.copy(alpha = 0.55f),
+                    color = if (loadError.isNotEmpty()) Color(0xFFF5B942) else Color.White.copy(alpha = 0.55f),
                     fontSize = 14.sp,
                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                 )
+            }
+            // Ошибка загрузки — кнопка повтора (раньше был молчаливый «чёрный экран»)
+            if (loadError.isNotEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    androidx.tv.material3.Surface(
+                        onClick = { reloadTick++ },
+                        shape = clickableSurfaceShape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
+                        colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF1F2430),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContentColor = Color(0xFF0E1116),
+                        ),
+                    ) { Text("↻ Повторить", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) }
+                }
             }
             // ---- Карточки ----
             items(shown, key = { it.storeKey }) { item ->

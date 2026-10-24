@@ -501,15 +501,18 @@ fun OnlinePlayerScreen(
     // поэтому базовый выход первым, оверлеи — после (перекрывают его).
     // Выход из плеера — только двойным BACK (3 сек): первый показ панели /
     // подсказку, второй — выход (жалоба: «назад сразу закрывает плеер»)
+    // BACK при видимой панели: если панель только что показал BACK (armed) —
+    // второй BACK выходит; если панель открылась сама (действие пульта) —
+    // ОДИН BACK её прячет, без «ещё раз — выход» (жалоба владельца)
     BackHandler(enabled = showPanel && !showSettings && !showQuality && !showTrackMenu && !showFiles && !showJump) {
         val now = System.currentTimeMillis()
-        if (now - backArmedAt < 3000) {
+        if (backArmedAt > 0 && now - backArmedAt < 3000) {
             com.torrenttv.app.data.AppLog.log("player", "back: выход из плеера (подтверждён)")
             exitPlayer()
         } else {
-            backArmedAt = now
-            seekInfo = "⚠ BACK ещё раз — выход"
-            com.torrenttv.app.data.AppLog.log("player", "back: первый — подтверждение")
+            showPanel = false
+            backArmedAt = 0
+            com.torrenttv.app.data.AppLog.log("player", "back: скрыл панель")
         }
     }
     BackHandler(enabled = showJump) { showJump = false }
