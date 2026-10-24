@@ -245,7 +245,7 @@ fun LivePlayerScreen(
             ) {
                 Text("⚠ Канал не открылся", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(6.dp))
-                Text(error, color = Color(0xFFF5B942), fontSize = 14.sp)
+                Text(error, color = Color(0xFFE8ECF4), fontSize = 14.sp)
                 Spacer(Modifier.height(12.dp))
                 Row {
                     androidx.tv.material3.Button(onClick = {
@@ -293,7 +293,7 @@ fun LivePlayerScreen(
                         )
                         Text(
                             "  ${hhmm(p.start)}–${hhmm(p.end)}",
-                            color = Color(0xFFF5B942),
+                            color = Color(0xFFE8ECF4),
                             fontSize = 14.sp,
                         )
                     }
@@ -365,7 +365,7 @@ private fun LiveButton(
         colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
             containerColor = Color(0xFF1F2430),
             contentColor = Color.White,
-            focusedContainerColor = Color(0xFFF5B942),
+            focusedContainerColor = Color(0xFFE8ECF4),
             focusedContentColor = Color(0xFF0E1116),
         ),
     ) {

@@ -790,7 +790,7 @@ fun OnlinePlayerScreen(
             }
             Text(
                 seekInfo,
-                color = Color(0xFFF5B942),
+                color = Color(0xFFE8ECF4),
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
@@ -830,7 +830,7 @@ fun OnlinePlayerScreen(
                             size = Size(size.width - stroke, size.height - stroke),
                         )
                         drawArc(
-                            color = Color(0xFFF5B942),
+                            color = Color(0xFFE8ECF4),
                             startAngle = -60f, sweepAngle = 110f, useCenter = false,
                             style = Stroke(stroke, cap = StrokeCap.Round),
                             topLeft = Offset(inset, inset),
@@ -847,7 +847,7 @@ fun OnlinePlayerScreen(
                 )
                 Text(
                     titleWithEp,
-                    color = Color(0xFFF5B942),
+                    color = Color(0xFFE8ECF4),
                     fontSize = 17.sp,
                     modifier = Modifier.padding(top = 8.dp),
                 )
@@ -865,7 +865,7 @@ fun OnlinePlayerScreen(
                             .fillMaxWidth((bufPct / 100f).coerceIn(0.02f, 1f))
                             .fillMaxHeight()
                             .clip(RoundedCornerShape(5.dp))
-                            .background(Color(0xFFF5B942)),
+                            .background(Color(0xFFE8ECF4)),
                     )
                 }
                 Text(
@@ -913,7 +913,7 @@ fun OnlinePlayerScreen(
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color(0xFF1F2430),
                             contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color(0xFF0E1116),
                         ),
                     ) { Text("🔄 Повторить", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) }
@@ -924,7 +924,7 @@ fun OnlinePlayerScreen(
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color(0xFF1F2430),
                             contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFFFD07A),
+                            focusedContainerColor = Color(0xFFFFFFFF),
                             focusedContentColor = Color(0xFF0E1116),
                         ),
                     ) { Text("← Назад", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) }
@@ -975,7 +975,7 @@ fun OnlinePlayerScreen(
                         colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
                             containerColor = Color(0xCC1F2430),
                             contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color(0xFF0E1116),
                         ),
                     ) { Text("⏭ Пропустить интро", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) }
@@ -1051,14 +1051,14 @@ fun OnlinePlayerScreen(
                                     Modifier
                                         .fillMaxWidth((shownMs.toFloat() / durMs).coerceIn(0f, 1f))
                                         .height(5.dp)
-                                        .background(if (jumpTarget != null) Color(0xFFFFD07A) else Color(0xFFF5B942)),
+                                        .background(if (jumpTarget != null) Color(0xFFFFFFFF) else Color(0xFFE8ECF4)),
                                 )
                             }
                         }
                         if (jumpTarget != null) {
                             Text(
                                 "⏱ %d:%02d — OK чтобы перейти".format(shownMs / 60000, (shownMs / 1000) % 60),
-                                color = Color(0xFFFFD07A),
+                                color = Color(0xFFFFFFFF),
                                 fontSize = 12.sp,
                             )
                         }
@@ -1094,7 +1094,7 @@ fun OnlinePlayerScreen(
                             colors = ClickableSurfaceDefaults.colors(
                                 containerColor = Color(0xFF1F2430),
                                 contentColor = Color.White,
-                                focusedContainerColor = Color(0xFFF5B942),
+                                focusedContainerColor = Color(0xFFE8ECF4),
                                 focusedContentColor = Color(0xFF0E1116),
                             ),
                         ) { Text(label, fontSize = 16.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) }
@@ -1169,7 +1169,7 @@ fun OnlinePlayerScreen(
                     Spacer(Modifier.height(6.dp))
                     Text(
                         "Следующая через $nextCountdown сек",
-                        color = Color(0xFFF5B942),
+                        color = Color(0xFFE8ECF4),
                         fontSize = 15.sp,
                     )
                     Spacer(Modifier.height(10.dp))
@@ -1191,7 +1191,7 @@ fun OnlinePlayerScreen(
                             colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
                                 containerColor = Color(0xFF1F2430),
                                 contentColor = Color.White,
-                                focusedContainerColor = Color(0xFFF5B942),
+                                focusedContainerColor = Color(0xFFE8ECF4),
                                 focusedContentColor = Color(0xFF0E1116),
                             ),
                         ) { Text("✕ Отмена", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)) }
@@ -1257,7 +1257,7 @@ fun OnlinePlayerScreen(
                         colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
                             containerColor = if (current) Color(0xFF3A5A2E) else Color(0xFF1F2430),
                             contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
                         ),
                     ) {
@@ -1345,9 +1345,9 @@ fun OnlinePlayerScreen(
                             .mouseClick { maxQuality = q; showQuality = false },
                         shape = clickableSurfaceShape(RoundedCornerShape(8.dp)),
                         colors = ClickableSurfaceDefaults.colors(
-                            containerColor = if (maxQuality == q) Color(0xFFF5B942) else Color(0xFF1F2430),
+                            containerColor = if (maxQuality == q) Color(0xFFE8ECF4) else Color(0xFF1F2430),
                             contentColor = if (maxQuality == q) Color(0xFF0E1116) else Color.White,
-                            focusedContainerColor = Color(0xFFFFD07A),
+                            focusedContainerColor = Color(0xFFFFFFFF),
                             focusedContentColor = Color(0xFF0E1116),
                             pressedContainerColor = Color(0xFFE0A82E),
                             pressedContentColor = Color(0xFF0E1116),
@@ -1378,9 +1378,9 @@ fun OnlinePlayerScreen(
                             .mouseClick { panelHideSec = sec; store.setPanelHideSec(sec); panelTick++ },
                         shape = clickableSurfaceShape(RoundedCornerShape(8.dp)),
                         colors = ClickableSurfaceDefaults.colors(
-                            containerColor = if (panelHideSec == sec) Color(0xFFF5B942) else Color(0xFF1F2430),
+                            containerColor = if (panelHideSec == sec) Color(0xFFE8ECF4) else Color(0xFF1F2430),
                             contentColor = if (panelHideSec == sec) Color(0xFF0E1116) else Color.White,
-                            focusedContainerColor = Color(0xFFFFD07A),
+                            focusedContainerColor = Color(0xFFFFFFFF),
                             focusedContentColor = Color(0xFF0E1116),
                             pressedContainerColor = Color(0xFFE0A82E),
                             pressedContentColor = Color(0xFF0E1116),
@@ -1411,7 +1411,7 @@ internal fun SettingsMenuItem(label: String, focusRequester: FocusRequester? = n
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color.Transparent,
             contentColor = Color.White,
-            focusedContainerColor = Color(0xFFF5B942),
+            focusedContainerColor = Color(0xFFE8ECF4),
             focusedContentColor = Color(0xFF0E1116),
             pressedContainerColor = Color(0xFFE0A82E),
             pressedContentColor = Color(0xFF0E1116),
@@ -1481,12 +1481,12 @@ fun TrailerScreen(item: MediaItem, onBack: () -> Unit) {    var link by remember
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = Color(0xFF1F2430),
                         contentColor = Color.White,
-                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContainerColor = Color(0xFFE8ECF4),
                         focusedContentColor = Color(0xFF0E1116),
                     ),
                 ) { Text("← Назад", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp)) }
             } else {
-                Text("🎬 Ищу трейлер на Rutube…", color = Color(0xFFF5B942), fontSize = 18.sp)
+                Text("🎬 Ищу трейлер на Rutube…", color = Color(0xFFE8ECF4), fontSize = 18.sp)
             }
         }
     }
@@ -1557,12 +1557,12 @@ fun RutubeWatchScreen(videoId: String, title: String, onBack: () -> Unit) {
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = Color(0xFF1F2430),
                         contentColor = Color.White,
-                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContainerColor = Color(0xFFE8ECF4),
                         focusedContentColor = Color(0xFF0E1116),
                     ),
                 ) { Text("← Назад", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp)) }
             } else {
-                Text("📺 Подключаюсь к Rutube…", color = Color(0xFFF5B942), fontSize = 18.sp)
+                Text("📺 Подключаюсь к Rutube…", color = Color(0xFFE8ECF4), fontSize = 18.sp)
             }
         }
     }
