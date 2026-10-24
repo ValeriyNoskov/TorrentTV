@@ -404,7 +404,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             SettingsNote(uploadState)
                         }
                         if (uploadUrl.isNotBlank()) {
-                            SettingsNote("Лог выгружен, адрес:\n${uploadUrl.trim()}")
+                            SettingsNote("✓ Лог отправлен")
                         }
                         SettingsNote("Включите запись, воспроизведите проблему и нажмите «Отправить логи».")
                         // Превью последних строк — видно, что запись идёт
@@ -954,12 +954,8 @@ private fun NetCheckScreen(onClose: () -> Unit) {
         if (uploadUrl.isNotBlank()) {
             Spacer(Modifier.height(10.dp))
             Text(
-                "Лог выгружен, адрес:",
-                color = Color.White.copy(alpha = 0.6f), fontSize = 16.sp,
-            )
-            Text(
-                uploadUrl.trim(),
-                color = Color(0xFF8AB4F8), fontSize = 24.sp, fontWeight = FontWeight.Bold,
+                "✓ Лог отправлен",
+                color = Color(0xFF8AB4F8), fontSize = 20.sp, fontWeight = FontWeight.Bold,
             )
         }
     }

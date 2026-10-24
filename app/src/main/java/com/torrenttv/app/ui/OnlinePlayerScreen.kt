@@ -206,7 +206,9 @@ fun OnlinePlayerScreen(
                                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                                     if (!url.isNullOrBlank()) {
                                         com.torrenttv.app.data.AppLog.log("upload", "автовыгрузка ок")
-                                        errorMsg = "Ошибка: ${error.errorCodeName}\nЛог отправлен: $url"
+                                        // URL выгрузки пользователю не показываем (не для него),
+                                        // разработчик получает адрес через gh gist list
+                                        errorMsg = "Ошибка: ${error.errorCodeName}\nЛог отправлен"
                                     } else {
                                         com.torrenttv.app.data.AppLog.log("upload", "автовыгрузка FAIL")
                                     }

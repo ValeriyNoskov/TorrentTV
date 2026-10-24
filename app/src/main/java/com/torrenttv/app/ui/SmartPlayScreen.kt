@@ -238,7 +238,7 @@ fun SmartPlayScreen(
                 }
                 if (uploadUrl.isNotBlank()) {
                     Spacer(Modifier.height(8.dp))
-                    Text("Лог отправлен: " + uploadUrl.trim(),
+                    Text("✓ Лог отправлен",
                         color = Color(0xFF8AB4F8), fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 }
             } else if (choices.isEmpty()) {
