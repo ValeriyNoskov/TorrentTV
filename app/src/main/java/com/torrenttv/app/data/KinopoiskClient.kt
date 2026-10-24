@@ -29,8 +29,8 @@ object KinopoiskClient {
 
     private var cacheDir: java.io.File? = null
     private val cache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, String>>()
-    private const val TTL_MS = 12 * 3600_000L       // свежий кэш: 12 часов
-    private const val MAX_ENTRIES = 250
+    private const val TTL_MS = 24 * 3600_000L       // свежий кэш: 24 часа
+    private const val MAX_ENTRIES = 500
 
     /** Вызывается из Activity при старте: включаем кэш ответов на диске. */
     fun attachCache(dir: java.io.File) {
