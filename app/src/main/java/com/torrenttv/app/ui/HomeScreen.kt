@@ -43,6 +43,9 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
+    // Возврат из ТВ: перечитываем избранное (звёздочки могли поменять)
+    var favTick by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) { favTick++ }
 
     var updateInfo by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
     var updateStatus by remember { mutableStateOf("") }
@@ -83,14 +86,21 @@ fun HomeScreen(
             // Живое ТВ — сразу с главной: каналы открываются одним нажатием.
             // Каналы берём из встроенного плейлиста (без сети), полный список — в разделе «📡 ТВ»
             item {
-                val tvPreview = remember { com.torrenttv.app.data.Iptv.builtIn(context).take(10) }
+                // На Главной — только ИЗБРАННЫЕ каналы: их отмечают звёздочкой
+                // в разделе «📡 ТВ». Пусто — блок не показываем, чтобы не
+                // засорять главный экран случайными каналами.
+                val favsNow = remember(favTick) { store.tvFavorites() }
+                val tvPreview = remember(favsNow) {
+                    val all = com.torrenttv.app.data.Iptv.builtIn(context)
+                    all.filter { favsNow.contains(it.url) }
+                }
                 if (tvPreview.isNotEmpty()) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(horizontal = 32.dp, vertical = 6.dp),
                     ) {
                         Text(
-                            "📡 Телевидение",
+                            "📡 Избранные каналы",
                             color = Color.White,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.SemiBold,

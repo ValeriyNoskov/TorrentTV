@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -38,6 +39,7 @@ import com.torrenttv.app.data.AppLog
 import com.torrenttv.app.data.Epg
 import com.torrenttv.app.data.Iptv
 import com.torrenttv.app.data.IptvChannel
+import coil.compose.AsyncImage
 import com.torrenttv.app.data.LocalStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -73,6 +75,8 @@ fun TvScreen(onPlay: (IptvChannel, List<IptvChannel>) -> Unit) {
     var epg by remember { mutableStateOf<Map<String, List<Epg.Program>>>(emptyMap()) }
     var clock by remember { mutableStateOf(System.currentTimeMillis()) }
     var refreshTick by remember { mutableStateOf(0) }
+    // Избранные каналы: ключ — адрес потока (имена в плейлистах различаются)
+    var favs by remember { mutableStateOf(store.tvFavorites()) }
 
     // Каналы: свой плейлист (если задан) + встроенный
     LaunchedEffect(refreshTick) {
@@ -108,8 +112,12 @@ fun TvScreen(onPlay: (IptvChannel, List<IptvChannel>) -> Unit) {
     }
 
     val groups = remember(channels) { Iptv.groups(channels) }
-    val shownChannels = remember(channels, group) {
-        if (group == "Все") channels else channels.filter { it.group == group }
+    val shownChannels = remember(channels, group, favs) {
+        when (group) {
+            "Все" -> channels
+            "★ Избранные" -> channels.filter { favs.contains(it.url) }
+            else -> channels.filter { it.group == group }
+        }
     }
     val shown = remember(shownChannels, epg, clock) {
         shownChannels.map { ch ->
@@ -162,6 +170,13 @@ fun TvScreen(onPlay: (IptvChannel, List<IptvChannel>) -> Unit) {
                 item {
                     TvPill(if (group == "Все") "✓ Все" else "Все", active = group == "Все") { group = "Все" }
                 }
+                item {
+                    TvPill(
+                        text = (if (group == "★ Избранные") "✓ ★ Избранные" else "★ Избранные") +
+                            if (favs.isNotEmpty()) " · ${favs.size}" else "",
+                        active = group == "★ Избранные",
+                    ) { group = "★ Избранные" }
+                }
                 items(groups) { (name, count) ->
                     TvPill(
                         text = if (group == name) "✓ $name · $count" else "$name · $count",
@@ -187,7 +202,18 @@ fun TvScreen(onPlay: (IptvChannel, List<IptvChannel>) -> Unit) {
                 modifier = Modifier.fillMaxSize(),
             ) {
                 items(shown, key = { it.channel.name + it.channel.url }) { entry ->
-                    ChannelTile(entry) { onPlay(entry.channel, shownChannels) }
+                    ChannelTile(
+                        entry = entry,
+                        isFav = favs.contains(entry.channel.url),
+                        onToggleFav = {
+                            val added = store.toggleTvFavorite(entry.channel.url)
+                            favs = store.tvFavorites()
+                            AppLog.log(
+                                "tv",
+                                if (added) "в избранное: «${entry.channel.name}»" else "из избранного: «${entry.channel.name}»",
+                            )
+                        },
+                    ) { onPlay(entry.channel, shownChannels) }
                 }
             }
         }
@@ -211,9 +237,14 @@ private fun TvPill(text: String, active: Boolean = false, onClick: () -> Unit) {
     }
 }
 
-/** Плитка канала: имя, «сейчас идёт», качество. */
+/** Плитка канала: логотип, имя, «сейчас идёт», кнопка избранного. */
 @Composable
-private fun ChannelTile(entry: TvEntry, onClick: () -> Unit) {
+private fun ChannelTile(
+    entry: TvEntry,
+    isFav: Boolean,
+    onToggleFav: () -> Unit,
+    onClick: () -> Unit,
+) {
     val channel = entry.channel
     androidx.tv.material3.Surface(
         onClick = onClick,
@@ -227,16 +258,50 @@ private fun ChannelTile(entry: TvEntry, onClick: () -> Unit) {
         modifier = Modifier.fillMaxWidth().aspectRatio(16f / 10f),
     ) {
         Column(
-            Modifier.fillMaxSize().padding(12.dp),
+            Modifier.fillMaxSize().padding(10.dp),
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(
-                "● ${channel.group}",
-                color = Color(0xFFF5B942),
-                fontSize = 11.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Логотип канала: пусто — вместо него бейдж группы
+                if (channel.logo.isNotBlank()) {
+                    AsyncImage(
+                        model = channel.logo,
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .height(30.dp)
+                            .width(52.dp)
+                            .background(Color(0xFF10141B), RoundedCornerShape(6.dp))
+                            .padding(3.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(
+                    "● ${channel.group}" + if (channel.quality.isNotBlank()) " · ${channel.quality}" else "",
+                    color = Color(0xFFF5B942),
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                // Избранное: отдельная кнопка, не мешает открытию канала
+                androidx.tv.material3.Surface(
+                    onClick = onToggleFav,
+                    shape = clickableSurfaceShape(RoundedCornerShape(8.dp)),
+                    colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                        containerColor = if (isFav) Color(0xFF3A2E14) else Color(0xFF232936),
+                        contentColor = if (isFav) Color(0xFFF5B942) else Color.White.copy(alpha = 0.6f),
+                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContentColor = Color(0xFF0E1116),
+                    ),
+                ) {
+                    Text(
+                        if (isFav) "★" else "☆",
+                        fontSize = 15.sp,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                    )
+                }
+            }
             Column {
                 Text(
                     channel.name,
@@ -274,7 +339,7 @@ private fun ChannelTile(entry: TvEntry, onClick: () -> Unit) {
                     }
                 } else {
                     Text(
-                        channel.quality.ifBlank { "прямой эфир" },
+                        "прямой эфир",
                         color = Color.White.copy(alpha = 0.4f),
                         fontSize = 12.sp,
                     )

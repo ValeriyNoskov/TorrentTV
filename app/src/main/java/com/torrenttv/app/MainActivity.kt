@@ -18,6 +18,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -177,7 +178,9 @@ private fun App() {
                     )
                 }
                 com.torrenttv.app.data.AppLog.log("app", "что нового: версия $current, описание ${if (notes.isNullOrBlank()) "нет" else "есть"}")
-                changelog = notes?.takeIf { it.isNotBlank() } ?: "Обновление установлено. Список изменений — в описании релиза."
+                // Окно поверх экрана больше НЕ показываем (просьба владельца:
+                // перекрывало приложение и не закрывалось с пульта).
+                // Список изменений — в описании релиза на GitHub.
             }
         }
     }
@@ -423,6 +426,11 @@ private fun App() {
     // Оверлей «Что нового»: показывается один раз после обновления,
     // закрывается кнопкой (или любой кнопкой пульта — фокус на «Понятно»)
     if (changelog.isNotBlank()) {
+        // Окно закрывается и кнопкой, и BACK: раньше фокус не ставился на
+        // «Понятно», и на пульте окно выглядело «незакрываемым».
+        val closeFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+        LaunchedEffect(changelog) { runCatching { closeFocus.requestFocus() } }
+        androidx.activity.compose.BackHandler(enabled = true) { changelog = "" }
         Box(
             Modifier
                 .fillMaxSize()
@@ -453,7 +461,7 @@ private fun App() {
                 )
                 androidx.tv.material3.Button(
                     onClick = { changelog = "" },
-                    modifier = Modifier.padding(top = 18.dp),
+                    modifier = Modifier.padding(top = 18.dp).focusRequester(closeFocus),
                 ) {
                     androidx.tv.material3.Text("Понятно", fontSize = 16.sp)
                 }

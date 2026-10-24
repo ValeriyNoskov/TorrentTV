@@ -1,71 +1,133 @@
 #EXTM3U
-# Проверено 24.10.2026 из Москвы: манифест 200 + первый сегмент 206.
-# Городские московские каналы и федеральные, вещающие в Москве.
+# Проверено 24.10.2026: поток отвечает и отдаёт HLS-манифест.
+# Порядок — как в стандартной сетке: Первый, Россия 1, Матч, НТВ, Пятый…
+# У каждого канала есть tvg-logo — в приложении видны логотипы.
+# Дубли НТВ +2/+4/+7 не включены: тот же эфир со сдвигом времени.
 
-#EXTINF:-1 tvg-id="Moskva24.ru" group-title="Москва",Москва 24 (1080p)
-https://stream.smotrim.ru/hls2/moscow_24/playlist_3.m3u8
-#EXTINF:-1 tvg-id="MoskvaDoverie.ru" group-title="Москва",Москва. Доверие (576p)
-https://stream.smotrim.ru/hls2/doverie/playlist_3.m3u8
-#EXTINF:-1 tvg-id="360.ru" group-title="Москва",360° (1080p)
-https://cdn-evacoder-tv.facecast.io/evacoder_hls_hi/CkxfR1xNUAJwTgtXTBZTAJli/index.m3u8
-#EXTINF:-1 tvg-id="360News.ru" group-title="Москва",360° News (1080p)
-https://live-vgtrksmotrim.cdnvideo.ru/vgtrksmotrim/smotrim-live-03-srt.smil/playlist.m3u8
-#EXTINF:-1 tvg-id="Mir24.ru" group-title="Москва",Мир 24 (1080p)
-http://hls.mirtv.cdnvideo.ru/mirtv-parampublish/mir24_2500/playlist.m3u8
-#EXTINF:-1 tvg-id="TVCentr.ru" group-title="Москва",ТВ Центр (576p)
+# --- Федеральные ---
+#EXTINF:-1 tvg-logo="" group-title="Федеральные",Первый канал
+https://zabava-htlive.cdn.ngenix.net/hls/CH_1TVSD/variant.m3u8
+#EXTINF:-1 tvg-logo="" group-title="Федеральные",Россия 1 HD
+https://live.smotrim.ru/vgtrk/0/russia1-hd/index.m3u8
+#EXTINF:-1 tvg-logo="https://www.kartina.tv/media/news/images/News/SEO/kanal-match-ultra.jpg" group-title="Федеральные",Матч! Ultra
+http://31.148.5.241/kanal_3/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/9r1BKzK.png" group-title="Федеральные",НТВ HD
+https://bl.rutube.ru/livestream/c37cd74192c6bc3d6cd6077c0c4fd686/index.m3u8?e=2077050299&s=HSWg81JrQ3OqmwuWkEIDAQ&scheme=https
+#EXTINF:-1 tvg-logo="https://i.imgur.com/KPXMa3U.png" group-title="Федеральные",Пятый канал
+https://i.imgur.com/KPXMa3U.png
+#EXTINF:-1 tvg-logo="" group-title="Федеральные",Карусель
+https://zabava-htlive.cdn.ngenix.net/hls/CH_KARUSEL/variant.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/VaWlnjZ.png" group-title="Федеральные",ОТР
+http://flussonic.linkintel.ru/otr/index.m3u8
+#EXTINF:-1 tvg-logo="" group-title="Федеральные",ТВ Центр
 https://tvc-hls.cdnvideo.ru/tvc-res/smil:vd9221.smil/playlist.m3u8
-#EXTINF:-1 tvg-id="GovoritMoskva.ru" group-title="Москва",Говорит Москва (радио)
+#EXTINF:-1 tvg-logo="" group-title="Федеральные",РЕН ТВ
+https://zabava-htlive.cdn.ngenix.net/hls/CH_RENTV/variant.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/ilUzAeb.png" group-title="Федеральные",СТС HD
+http://stream.mcquack.net/138/index.m3u8
+#EXTINF:-1 tvg-logo="" group-title="Федеральные",ТНТ
+https://zabava-htlive.cdn.ngenix.net/hls/CH_TNT/variant.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/gBokU5i.png" group-title="Федеральные",ТНТ4
+http://flussonic.linkintel.ru/tnt4/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/fhQFLEl.png" group-title="Федеральные",2x2
+https://bl.rutube.ru/livestream/392b4686b770bae2da6bf5ac4574add5/index.m3u8?e=2068731801&s=tenr-yHXUv1wibfka78s2A&scheme=https
+#EXTINF:-1 tvg-logo="https://i.imgur.com/XVRwgom.png" group-title="Федеральные",Домашний
+http://stream.mcquack.net/227/index.m3u8
+#EXTINF:-1 tvg-logo="" group-title="Федеральные",Пятница!
+https://zabava-htlive.cdn.ngenix.net/hls/CH_PYATNIZZA/variant.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/JLAvq8O.png" group-title="Федеральные",ТВ-3 HD
+http://stream.mcquack.net/136/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/4PAcpfM.png" group-title="Федеральные",Звезда HD
+https://tvzvezda.bonus-tv.ru/cdn/tvzvezda/playlist.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/yY39nMg.png" group-title="Федеральные",Спас
+https://tvspas.mediacdn.ru/cdn/spas/playlist.m3u8
+#EXTINF:-1 tvg-logo="" group-title="Федеральные",Супер
+https://zabava-htlive.cdn.ngenix.net/hls/CH_SUPER/variant.m3u8
+
+# --- Новости ---
+#EXTINF:-1 tvg-logo="https://i.imgur.com/gXbUMVy.png" group-title="Новости",Москва 24
+https://stream.smotrim.ru/hls/givc8/playlist.m3u8?entity=channel&id=798&sign=37881ef2e289f062ceff0dca6c24dc58
+#EXTINF:-1 tvg-logo="https://i.imgur.com/YXDeX8q.png" group-title="Новости",360° News
+https://live-vgtrksmotrim.cdnvideo.ru/vgtrksmotrim/smotrim-live-03-srt.smil/playlist.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/dj9c8Yd.png" group-title="Новости",Мир 24
+http://hls.mirtv.cdnvideo.ru/mirtv-parampublish/mir24_2500/playlist.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/r5HzA6J.png" group-title="Новости",Известия
+http://igi-hls.cdnvideo.ru/igi/igi_tcode/playlist.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/hKo8ApU.png" group-title="Новости",Current Time
+https://rfe-ingest.akamaized.net/hls/live/2033043/tvmc05/master.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/aeu5zIC.png" group-title="Новости",RT Documentary
+https://rt-doc.rttv.com/dvr/rtdru/playlist.m3u8
+
+# --- Кино ---
+#EXTINF:-1 tvg-logo="https://i.imgur.com/sMpamNO.png" group-title="Кино",Kino TV HD
+http://176.118.197.101/KinoTvHD/playlist.m3u8
+#EXTINF:-1 tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/%D0%9B%D0%BE%D0%B3%D0%BE%D1%82%D0%B8%D0%BF_%D0%BA%D0%B0%D0%BD%D0%B0%D0%BB%D0%B0_%D0%94%D0%BE%D0%BC_%D0%9A%D0%B8%D0%BD%D0%BE.png/960px-%D0%9B%D0%BE%D0%B3%D0%BE%D1%82%D0%B8%D0%BF_%D0%BA%D0%B0%D0%BD%D0%B0%D0%BB%D0%B0_%D0%94%D0%BE%D0%BC_%D0%9A%D0%B8%D0%BD%D0%BE.png" group-title="Кино",Дом кино
+http://stream.mcquack.net/236/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/8LPtPf6.png" group-title="Кино",Еврокино HD
+http://stream.mcquack.net/385/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/ZbOqfy4.png" group-title="Кино",Хорошее кино
+https://live-rian.cdnvideo.ru/rian/rus-radio/playlist.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/LL8GyCh.png" group-title="Кино",Индийское кино
+http://188.113.190.12/329/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/8RN3tQC.png" group-title="Кино",Мужское кино
+http://stream.mcquack.net/107/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/QRWKpmb.png" group-title="Кино",Наше мужское HD
+http://stream.mcquack.net/362/index.m3u8
+#EXTINF:-1 tvg-logo="https://xml-epgservice.cdnvideo.ru/EPGService/hs/xmldata/852f4b92-cae5-463e-aad6-cd8844c5a49/logo/69.png" group-title="Кино",Ретро
+http://stream.mcquack.net/191/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/ZMsyjSr.png" group-title="Кино",viju TV1000
+http://stream.mcquack.net/110/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/TMmyuzh.png" group-title="Кино",viju TV1000 action
+http://stream.mcquack.net/100/index.m3u8
+#EXTINF:-1 tvg-logo="https://www.cableman.ru/sites/default/files/viju_TV1000_%D0%BD%D0%BE%D0%B2%D0%B5%D0%BB%D0%BB%D0%B0_color_rgb_02%20%281%29.png" group-title="Кино",viju TV1000 novella
+http://46.53.200.153:7777/play/VIJU_TV_1000_novella/index.m3u8
+#EXTINF:-1 tvg-logo="https://rnnxdki1nv.a.trbcdn.net/viasat/production/tvchannels/dc243048-c5ad-4ccc-86c6-3a480874ec29/logos/flo59mr6lh1jf68g3021urgwtd5k" group-title="Кино",viju TV1000 romantica
+http://46.53.200.153:7777/play/Viju_Drama/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/aASNpKq.png" group-title="Кино",Классика (Smotrim)
+https://stream.smotrim.ru/hls/fasttv03/playlist_3.m3u8
+#EXTINF:-1 tvg-logo="https://cdn-st3.smotrim.ru/vh/pictures/svg/444/241/8.svg" group-title="Кино",Честный детектив
+https://live-vgtrksmotrim.cdnvideo.ru/vgtrksmotrim/smotrim-live-01.smil/playlist.m3u8
+
+# --- Сериалы ---
+#EXTINF:-1 tvg-logo="https://i.imgur.com/FfKBvz5.png" group-title="Сериалы",НТВ-Хит
+http://178.134.1.158:8081/ntvhit/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/4EFh0nu.png" group-title="Сериалы",Любовь (Smotrim)
+https://stream.smotrim.ru/hls/fasttv01/playlist_2.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/UY3fjYU.png" group-title="Сериалы",Мужское (Smotrim)
+https://stream.smotrim.ru/hls/fasttv02/playlist_3.m3u8
+
+# --- Познавательное ---
+#EXTINF:-1 tvg-logo="https://i.imgur.com/9lHQPdN.png" group-title="Познавательное",Живая природа HD
+http://stream.mcquack.net/225/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/dB3cJzO.png" group-title="Познавательное",Факты (Smotrim)
+https://stream.smotrim.ru/hls/fasttv06/playlist_3.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/7jxZnuS.png" group-title="Познавательное",Кухня
+http://stream.mcquack.net/179/index.m3u8
+
+# --- Детям ---
+#EXTINF:-1 tvg-logo="https://i.imgur.com/1hsNeTa.png" group-title="Детям",Детское (Smotrim)
+https://stream.smotrim.ru/hls/fasttv05/playlist_3.m3u8
+
+# --- Москва ---
+#EXTINF:-1 tvg-logo="" group-title="Москва",Москва. Доверие
+https://stream.smotrim.ru/hls2/doverie/playlist_3.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/VTJqdoX.png" group-title="Москва",360°
+https://cdn-evacoder-tv.facecast.io/evacoder_hls_hi/CkxfR1xNUAJwTgtXTBZTAJli/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/NEcqFse.png" group-title="Москва",Праздник (Smotrim)
+https://stream.smotrim.ru/hls/fasttv04/playlist_3.m3u8
+#EXTINF:-1 tvg-logo="" group-title="Москва",Говорит Москва (радио)
 https://video.govoritmoskva.ru/rufm/index.m3u8
 
-#EXTINF:-1 tvg-id="ChannelOne.ru" group-title="Федеральные",Первый канал (450p)
-https://zabava-htlive.cdn.ngenix.net/hls/CH_1TVSD/variant.m3u8
-#EXTINF:-1 tvg-id="Russia1.ru" group-title="Федеральные",Россия 1 HD (1080p)
-https://live.smotrim.ru/vgtrk/0/russia1-hd/index.m3u8
-#EXTINF:-1 tvg-id="NTV.ru" group-title="Федеральные",НТВ HD (1080p)
-https://cdn.ntv.ru/ntv0/playlist.m3u8
-#EXTINF:-1 tvg-id="NTV.ru" group-title="Федеральные",НТВ (576p)
-https://cdn.ntv.ru/ntv1/playlist.m3u8
-#EXTINF:-1 tvg-id="NTV.ru" group-title="Федеральные",НТВ +2 (576p)
-https://cdn.ntv.ru/ntv2/playlist.m3u8
-#EXTINF:-1 tvg-id="NTV.ru" group-title="Федеральные",НТВ +4 (576p)
-https://cdn.ntv.ru/ntv4/playlist.m3u8
-#EXTINF:-1 tvg-id="NTV.ru" group-title="Федеральные",НТВ +7 (576p)
-https://cdn.ntv.ru/ntv7/playlist.m3u8
-#EXTINF:-1 tvg-id="STS.ru" group-title="Федеральные",СТС (576p)
-http://tshift-1.telecoma.tv/sts/index.m3u8
-#EXTINF:-1 tvg-id="STS.ru" group-title="Федеральные",СТС HD (1080p)
-http://stream.mcquack.net/138/index.m3u8
-#EXTINF:-1 tvg-id="TNT.ru" group-title="Федеральные",ТНТ (540p)
-https://zabava-htlive.cdn.ngenix.net/hls/CH_TNT/variant.m3u8
-#EXTINF:-1 tvg-id="TNT4.ru" group-title="Федеральные",ТНТ4 (576p)
-https://zabava-htlive.cdn.ngenix.net/hls/CH_TNT4/variant.m3u8
-#EXTINF:-1 tvg-id="2x2.ru" group-title="Федеральные",2x2 (450p)
-https://zabava-htlive.cdn.ngenix.net/hls/CH_2X2/variant.m3u8
-#EXTINF:-1 tvg-id="Domashniy.ru" group-title="Федеральные",Домашний (540p)
-https://zabava-htlive.cdn.ngenix.net/hls/CH_DOMASHNIY/variant.m3u8
-#EXTINF:-1 tvg-id="Friday.ru" group-title="Федеральные",Пятница! (540p)
-https://zabava-htlive.cdn.ngenix.net/hls/CH_PYATNIZZA/variant.m3u8
-#EXTINF:-1 tvg-id="Karusel.ru" group-title="Федеральные",Карусель (450p)
-https://zabava-htlive.cdn.ngenix.net/hls/CH_KARUSEL/variant.m3u8
-#EXTINF:-1 tvg-id="OTR.ru" group-title="Федеральные",ОТР (450p)
-https://zabava-htlive.cdn.ngenix.net/hls/CH_OTR/variant.m3u8
-#EXTINF:-1 tvg-id="RENTV.ru" group-title="Федеральные",РЕН ТВ (576p)
-https://zabava-htlive.cdn.ngenix.net/hls/CH_RENTV/variant.m3u8
-#EXTINF:-1 tvg-id="TV3.ru" group-title="Федеральные",ТВ-3 (576p)
-https://zabava-htlive.cdn.ngenix.net/hls/CH_TV3/variant.m3u8
-#EXTINF:-1 tvg-id="Zvezda.ru" group-title="Федеральные",Звезда (576p)
-https://zabava-htlive.cdn.ngenix.net/hls/CH_ZVEZDA/variant.m3u8
-#EXTINF:-1 tvg-id="Spas.ru" group-title="Федеральные",Спас (576p)
-https://zabava-htlive.cdn.ngenix.net/hls/CH_SPAS/variant.m3u8
-#EXTINF:-1 tvg-id="Super.ru" group-title="Федеральные",Супер (576p)
-https://zabava-htlive.cdn.ngenix.net/hls/CH_SUPER/variant.m3u8
-#EXTINF:-1 tvg-id="MuzTV.ru" group-title="Музыка",BRIDGE (576p)
+# --- Музыка ---
+#EXTINF:-1 tvg-logo="https://i.imgur.com/4Ww7CsR.png" group-title="Музыка",1HD Music
+http://176.118.197.101/1HD/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/qYObfrG.png" group-title="Музыка",BRIDGE
 http://stream.mcquack.net/318/index.m3u8
-#EXTINF:-1 tvg-id="BridgeClassic.ru" group-title="Музыка",BRIDGE Classic (576p)
+#EXTINF:-1 tvg-logo="https://i.imgur.com/JJTQq81.png" group-title="Музыка",BRIDGE Classic
 http://stream.mcquack.net/272/index.m3u8
-#EXTINF:-1 tvg-id="BridgeDeluxe.ru" group-title="Музыка",BRIDGE Deluxe HD (576p)
-http://stream.mcquack.net/92/index.m3u8
-#EXTINF:-1 tvg-id="BridgeHits.ru" group-title="Музыка",BRIDGE Hits (576p)
+#EXTINF:-1 tvg-logo="https://i.imgur.com/sIW9oR4.png" group-title="Музыка",BRIDGE Hits
 http://stream.mcquack.net/320/index.m3u8
-#EXTINF:-1 tvg-id="BridgeRock.ru" group-title="Музыка",BRIDGE Rock (576p)
+#EXTINF:-1 tvg-logo="https://i.imgur.com/MHuwct2.png" group-title="Музыка",BRIDGE Rock
 http://178.134.1.158:8081/BRIDGEROCK/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/U0vKj3P.png" group-title="Музыка",Музыка Первого
+http://stream.mcquack.net/153/index.m3u8

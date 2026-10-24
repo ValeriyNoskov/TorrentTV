@@ -122,6 +122,24 @@ class LocalStore(context: Context) {
         return !existed
     }
 
+    // ---------- Избранные каналы ТВ ----------
+    // Ключ — адрес потока: имена каналов в разных плейлистах отличаются,
+    // а ссылка на поток уникальна.
+
+    fun tvFavorites(): Set<String> =
+        prefs.getStringSet("tv_favorites", emptySet())?.toSet() ?: emptySet()
+
+    fun isTvFavorite(url: String): Boolean = tvFavorites().contains(url)
+
+    /** Переключить; вернуть новое состояние (true = добавлено в избранное). */
+    fun toggleTvFavorite(url: String): Boolean {
+        val set = tvFavorites().toMutableSet()
+        val added = set.add(url)
+        if (!added) set.remove(url)
+        prefs.edit().putStringSet("tv_favorites", set).apply()
+        return added
+    }
+
     // ---------- Смотреть позже ----------
 
     fun watchLater(): List<MediaItem> = readList("watch_later")

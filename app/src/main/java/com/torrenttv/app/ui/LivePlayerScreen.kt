@@ -156,10 +156,14 @@ fun LivePlayerScreen(
     // Фокус на контейнере плеера: без него пульт «не видит» экран и ОК
     // после автоскрытия панели ничего не возвращал — меню пропадало навсегда.
     val keysFocus = remember { androidx.compose.ui.focus.FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { keysFocus.requestFocus() } }
-    // Панель скрылась — сразу возвращаем фокус на плеер (кнопок на экране нет)
+    val panelFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    // Панель открыта — фокус на её первой кнопке (иначе пульт «не видит» кнопки),
+    // панель скрыта — фокус на контейнере плеера (ОК возвращает панель)
     LaunchedEffect(showPanel) {
-        if (!showPanel) runCatching { keysFocus.requestFocus() }
+        kotlinx.coroutines.delay(60)
+        runCatching {
+            if (showPanel) panelFocus.requestFocus() else keysFocus.requestFocus()
+        }
     }
 
     Box(
@@ -167,7 +171,9 @@ fun LivePlayerScreen(
             .fillMaxSize()
             .background(Color.Black)
             .focusRequester(keysFocus)
-            .focusable()
+            // Перехватываем пульт только когда панель скрыта: иначе кнопки
+            // внутри не получают фокус (жалоба «кнопки не работают»)
+            .focusable(enabled = !showPanel)
             .onKeyEvent { e ->
                 if (e.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@onKeyEvent false
                 when (e.key) {
@@ -310,7 +316,7 @@ fun LivePlayerScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    LiveButton("⏮ Канал") { step(-1) }
+                    LiveButton("⏮ Канал", focus = panelFocus) { step(-1) }
                     LiveButton(if (playing) "⏸ Пауза" else "▶ Играть") {
                         if (player.isPlaying) player.pause() else player.play()
                         panelTick++
@@ -323,6 +329,12 @@ fun LivePlayerScreen(
                             player.prepare()
                             player.playWhenReady = true
                         }
+                    }
+                    val isFav = remember(current.url, panelTick) { store.isTvFavorite(current.url) }
+                    LiveButton(if (isFav) "★ В избранном" else "☆ В избранное") {
+                        val added = store.toggleTvFavorite(current.url)
+                        AppLog.log("tv", if (added) "в избранное: «${current.name}»" else "из избранного: «${current.name}»")
+                        panelTick++
                     }
                     LiveButton("✕ Выйти") { onBack() }
                     Spacer(Modifier.weight(1f))
@@ -338,9 +350,14 @@ fun LivePlayerScreen(
 }
 
 @Composable
-private fun LiveButton(text: String, onClick: () -> Unit) {
+private fun LiveButton(
+    text: String,
+    focus: androidx.compose.ui.focus.FocusRequester? = null,
+    onClick: () -> Unit,
+) {
     androidx.tv.material3.Surface(
         onClick = onClick,
+        modifier = if (focus != null) Modifier.focusRequester(focus) else Modifier,
         shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
         colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
             containerColor = Color(0xFF1F2430),
