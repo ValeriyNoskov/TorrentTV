@@ -106,6 +106,9 @@ fun OnlinePlayerScreen(
     /** «Другая раздача» — выйти в выбор раздач (позиция сохранится). */
     onPickTorrent: () -> Unit = {},
 ) {
+    // Экран не гаснет, пока играет фильм
+    KeepScreenOn()
+
     val context = LocalContext.current
     // Подпись с серией в заголовках плеера: «Название · S01E08» (или «· Серия 8»)
     val titleWithEp = remember(link) {

@@ -72,6 +72,9 @@ fun PlayerScreen(
     /** Запуск конкретного файла раздачи (из экрана файлов). */
     startIndex: Int = -1,
 ) {
+    // Экран не гаснет, пока играет фильм
+    KeepScreenOn()
+
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
     val scope = rememberCoroutineScope()

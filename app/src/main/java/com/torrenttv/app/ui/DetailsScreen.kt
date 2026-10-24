@@ -307,7 +307,9 @@ fun DetailsScreen(
             // ---------- Описание ----------
             if (item.overview.isNotBlank()) {
                 Text(
-                    text = item.overview,
+                    // Нормализация: «Год\n2026\nСтрана\nРоссия» →
+                    // «Год: 2026 · Страна: Россия» в одну строку
+                    text = item.normalizedOverview(),
                     color = Color.White.copy(alpha = 0.75f),
                     fontSize = 16.sp,
                     lineHeight = 24.sp,

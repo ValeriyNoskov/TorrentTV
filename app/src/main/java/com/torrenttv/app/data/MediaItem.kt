@@ -28,6 +28,49 @@ data class MediaItem(
     val storeKey: String get() = "$type-$id"
 
     val typeLabel: String get() = if (type == "movie") "Фильм" else "Сериал"
+/**
+     * Нормализация описания: источники (Rutube/трекеры) отдают текст
+     * построчно — «Год\n2026\nСтрана\nРоссия», и в карточке он выглядит
+     * столбиком без знаков препинания. Здесь пары «метка / значение»
+     * склеиваются в строку «Год: 2026 · Страна: Россия · …», а остальной
+     * текст собирается в сплошной абзац.
+     */
+    fun normalizedOverview(): String {
+        val lines = overview.replace("\r", "").split('\n')
+            .map { it.trim() }.filter { it.isNotBlank() }
+        if (lines.isEmpty()) return ""
+        val rest = lines.toMutableList()
+        // Повтор названия капсом в начале описания убираем
+        if (rest.size > 1 &&
+            rest.first().replace(" ", "").equals(title.replace(" ", ""), ignoreCase = true)
+        ) rest.removeAt(0)
+        val labels = setOf(
+            "год", "год выпуска", "год производства", "страна", "страны",
+            "премьера", "премьера в мире", "жанр", "жанры", "режиссёр", "режиссер",
+            "в ролях", "продюсер", "сценарий", "бюджет", "время", "продолжительность",
+            "возраст", "рейтинг",
+        )
+        val pairs = mutableListOf<String>()
+        val prose = mutableListOf<String>()
+        var i = 0
+        while (i < rest.size) {
+            val l = rest[i]
+            val noColon = l.trimEnd(':', ' ')
+            when {
+                noColon.lowercase() in labels && l.contains(':').not() -> {
+                    // Метка без значения в этой строке — значение на следующей
+                    if (i + 1 < rest.size) { pairs += "$noColon: ${rest[i + 1]}"; i += 2 }
+                    else { prose += l; i++ }
+                }
+                l.contains(": ") -> { pairs += l; i++ }
+                else -> { prose += l; i++ }
+            }
+        }
+        val head = pairs.joinToString("  ·  ")
+        val body = prose.joinToString(" ")
+        return listOf(head, body).filter { it.isNotBlank() }.joinToString("\n\n")
+    }
+
 
     fun toJson(): JSONObject = JSONObject()
         .put("id", id)

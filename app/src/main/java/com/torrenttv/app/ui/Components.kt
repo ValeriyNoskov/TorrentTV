@@ -72,6 +72,23 @@ fun clickableSurfaceShape(shape: Shape): ClickableSurfaceShape =
 fun Modifier.mouseClick(onClick: () -> Unit): Modifier =
     pointerInput(onClick) { detectTapGestures(onTap = { onClick() }) }
 
+/**
+ * Экран не гаснет, пока открыт плеер: телевизор засыпал по таймауту посреди
+ * фильма (стоит на паузе/долгая буферизация — и экран выключается).
+ * Флаг снимается при уходе с экрана автоматически.
+ */
+@Composable
+fun KeepScreenOn() {
+    val view = androidx.compose.ui.platform.LocalView.current
+    androidx.compose.runtime.DisposableEffect(view) {
+        val window = (view.context as? android.app.Activity)?.window
+        window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        onDispose {
+            window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+}
+
 /** Hero-баннер: бэкдроп первой карточки трендов + быстрый переход. */
 @Composable
 fun HeroBanner(item: MediaItem, onOpenDetails: (MediaItem) -> Unit) {
