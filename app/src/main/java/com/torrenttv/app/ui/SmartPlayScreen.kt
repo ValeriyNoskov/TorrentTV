@@ -164,6 +164,22 @@ fun SmartPlayScreen(
             Regex("S\\d{2}|\\d+\\s+[сС]езон|Сезон\\s*\\d", RegexOption.IGNORE_CASE).containsMatchIn(name) -> 3
             else -> 1
         }
+        // Умный отбор (ROADMAP №3): единый рейтинг — сначала качество
+        // (2160p/1080p → 720p), потом сиды; экранки (TS/CAM/SCREENER) всегда
+        // в самом низу, но не удаляются (вдруг других раздач нет)
+        fun camPenalty(name: String): Boolean =
+            Regex("""\b(TS|TC|CAM|CAMRip|TELESYNC|SCREENER|HDRip\W*CAM)\b""", RegexOption.IGNORE_CASE)
+                .containsMatchIn(name)
+        fun rank(r: TorrentResult): Long {
+            val quality = when (r.resolution) {
+                "2160p" -> 4
+                "1080p" -> 3
+                "720p" -> 2
+                else -> 1
+            }
+            // Сиды важнее качества, экранки — штраф в 1000 сидов
+            return r.seeds.toLong() * 10 + quality - (if (camPenalty(r.name)) 100_000L else 0L)
+        }
         val best = found.maxByOrNull { r ->
             r.seeds * (when (r.resolution) {
                 "1080p" -> 3
@@ -173,7 +189,7 @@ fun SmartPlayScreen(
             }) * (if (isTv) seasonBonus(r.name) else 1)
         }
         val torrentChoices = found
-            .sortedByDescending { it.seeds }
+            .sortedByDescending { rank(it) }
             .take(10)
             .map { SmartChoice.Torrent(it) }
 
