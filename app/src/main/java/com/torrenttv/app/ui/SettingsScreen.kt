@@ -250,7 +250,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 store.setJackettUrl(""); store.setJackettApiKey("")
                             }
                         }
-                        SettingsNote("Без Jackett работают встроенные apibay и Torrentio.")
+                        SettingsNote("Без Jackett работают встроенные источники.")
                     }
 
                     "update" -> {
@@ -307,7 +307,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 )
                             }
                         }
-                        SettingsNote("Обновления проверяются при запуске и качаются в фоне.")
+                        SettingsNote("Проверяется при запуске.")
                     }
 
                     "player" -> {
@@ -320,7 +320,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             extPlayer = !extPlayer
                             store.setUseExternalPlayer(extPlayer)
                         }
-                        SettingsNote("Видео будет открываться в VLC/MX Player, если он установлен.")
+                        SettingsNote("Нужен VLC или MX Player.")
                         // Размер карточек: три варианта, циклом
                         SettingsRow(
                             title = "Размер карточек",
@@ -406,10 +406,9 @@ fun SettingsScreen(onBack: () -> Unit) {
                         if (uploadUrl.isNotBlank()) {
                             SettingsNote("✓ Лог отправлен")
                         }
-                        SettingsNote("Включите запись, воспроизведите проблему и нажмите «Отправить логи».")
                         // Превью последних строк — видно, что запись идёт
                         Text(
-                            text = logTail.ifBlank { "(лог пуст — включите запись и подёргайте приложение)" },
+                            text = logTail.ifBlank { "(лог пуст)" },
                             color = Color.White.copy(alpha = 0.45f),
                             fontSize = 12.sp,
                             lineHeight = 16.sp,
@@ -427,7 +426,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             extKb = !extKb
                             store.setUseExternalKeyboard(extKb)
                         }
-                        SettingsNote("ВКЛ — системная клавиатура ТВ, ВЫКЛ — экранная клавиатура приложения.")
+                        SettingsNote("ВКЛ — клавиатура ТВ.")
                     }
 
                     "mdbase" -> {
@@ -453,7 +452,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 kpKey = ""; tmdbKey = ""
                             }
                         }
-                        SettingsNote("Свой ключ бесплатен: КП — kinopoiskapiunofficial.tech, TMDB — themoviedb.org.")
+                        SettingsNote("Ключи не обязательны — работают каталоги без них.")
                     }
 
                     "netcheck" -> {
@@ -466,7 +465,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             com.torrenttv.app.data.AppLog.log("ui", "нажал: «Запустить проверку» (Проверка сети)")
                             subscreen = "netcheck"
                         }
-                        SettingsNote("Крестик у источника — его блокирует провайдер, это не неисправность.")
+                        SettingsNote("Источник заблокирован провайдером.")
                     }
 
                     "torrserve" -> {
@@ -476,7 +475,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             valueOk = true,
                             modifier = Modifier.focusRequester(contentFocus),
                         ) { openEdit("ts", store.torrServeHost(), "http://127.0.0.1:8090") }
-                        SettingsNote("Необязательно: стрим через TorrServe быстрее. Без него работает встроенный движок.")
+                        SettingsNote("TorrServe — быстрее.")
                     }
 
                     else -> { // search
@@ -496,7 +495,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 if (keywords.size > 3) " …" else "",
                             valueOk = keywords.isNotEmpty(),
                         ) { subscreen = "keywords" }
-                        SettingsNote("Фильтры скрывают контент в каталогах, трендах и поиске.")
+                        SettingsNote("Применяются во всех каталогах.")
                     }
                 }
             }

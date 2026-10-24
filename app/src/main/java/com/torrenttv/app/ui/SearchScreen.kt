@@ -119,7 +119,7 @@ fun SearchScreen(
             }
             voiceLauncher.launch(intent)
         } catch (e: Exception) {
-            status = "Голосовой ввод недоступен на этом устройстве — используйте клавиатуру"
+            status = "Голосовой ввод недоступен"
         }
     }
 

@@ -187,8 +187,7 @@ fun SmartPlayScreen(
         done = choices.isNotEmpty()
         failed = choices.isEmpty()
         status = if (failed) {
-            "Ничего не нашлось. Источники: " + TorrentSearch.lastStats.joinToString(" ") { it.label() } +
-                " — нажмите «Отправить лог», я увижу причину"
+            "Ничего не нашлось"
         } else {
             "Выберите, где смотреть:"
         }

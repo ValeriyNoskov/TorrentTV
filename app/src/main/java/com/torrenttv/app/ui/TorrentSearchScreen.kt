@@ -143,7 +143,7 @@ fun TorrentSearchScreen(
             store.saveMagnet(item, path, episode?.sourceSuffix ?: "")
             onDone()
         } else {
-            status = "Не удалось скачать .torrent — проверьте Cookie в настройках"
+            status = "Не удалось скачать .torrent"
             selecting = null
         }
     }

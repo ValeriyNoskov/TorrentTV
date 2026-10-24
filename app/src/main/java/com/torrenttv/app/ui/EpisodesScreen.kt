@@ -105,11 +105,8 @@ fun EpisodesScreen(
             )
 
             seasons.isEmpty() -> Text(
-                if (KinopoiskClient.lastFailed) {
-                    "База КП недоступна (лимит или сбой) — попробуйте позже или задайте свой ключ в настройках"
-                } else {
-                    "Сезоны не найдены — воспользуйтесь «Автопоиском» на карточке"
-                },
+                // Коротко без объяснений причин — детали в логе
+                if (KinopoiskClient.lastFailed) "Эпизоды временно недоступны" else "Сезоны не найдены",
                 color = Color.White.copy(alpha = 0.6f),
                 fontSize = 15.sp,
                 modifier = Modifier.padding(top = 10.dp),

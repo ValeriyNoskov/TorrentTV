@@ -194,7 +194,7 @@ fun PlayerScreen(
             }
             restartFileIndex = null
             if (st2 == null) {
-                status = "Не удалось переключить серию — нажмите «Назад» и зайдите снова"
+                status = "Не удалось переключить серию"
                 return@LaunchedEffect
             }
             torrentFiles = st2.videoFiles()
