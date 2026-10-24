@@ -724,6 +724,15 @@ class LocalStore(context: Context) {
     fun setUseExternalPlayer(v: Boolean) {
         prefs.edit().putBoolean("use_external_player", v).apply()
     }
+    // ---------- Выбранный внешний плеер (для запуска без меню «Открыть с помощью») ----------
+
+    /** Пакет внешнего плеера, который владелец выбрал один раз ("" — не выбран). */
+    fun externalPlayerPackage(): String = prefs.getString("external_player_pkg", "") ?: ""
+
+    fun setExternalPlayerPackage(pkg: String) {
+        prefs.edit().putString("external_player_pkg", pkg).apply()
+    }
+
 
     /** Ввод: внешняя (системная IME) клавиатура вместо встроенной экранной. */
     fun useExternalKeyboard(): Boolean = prefs.getBoolean("external_keyboard", false)

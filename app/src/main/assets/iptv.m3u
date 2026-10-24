@@ -15,7 +15,7 @@ http://31.148.5.241/kanal_3/index.m3u8
 #EXTINF:-1 tvg-logo="https://i.imgur.com/9r1BKzK.png" group-title="Федеральные",НТВ HD
 https://bl.rutube.ru/livestream/c37cd74192c6bc3d6cd6077c0c4fd686/index.m3u8?e=2077050299&s=HSWg81JrQ3OqmwuWkEIDAQ&scheme=https
 #EXTINF:-1 tvg-logo="https://i.imgur.com/KPXMa3U.png" group-title="Федеральные",Пятый канал
-https://i.imgur.com/KPXMa3U.png
+https://edge1.1internet.tv/dash-live2/streams/5ch/dash-live/manifest.m3u8
 #EXTINF:-1 tvg-logo="" group-title="Федеральные",Карусель
 https://zabava-htlive.cdn.ngenix.net/hls/CH_KARUSEL/variant.m3u8
 #EXTINF:-1 tvg-logo="https://i.imgur.com/VaWlnjZ.png" group-title="Федеральные",ОТР

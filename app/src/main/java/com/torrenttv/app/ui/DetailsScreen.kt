@@ -28,9 +28,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.layout.Arrangement
 import androidx.tv.material3.Button
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Surface
@@ -121,6 +123,7 @@ fun DetailsScreen(
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             // ---------- Постер сверху ----------
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -149,9 +152,12 @@ fun DetailsScreen(
             Text(
                 item.title,
                 color = Color.White,
-                fontSize = 28.sp,
+                fontSize = 30.sp,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 14.dp),
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp),
             )
             Text(
                 text = buildString {
@@ -160,7 +166,10 @@ fun DetailsScreen(
                 },
                 color = Color(0xFFF5B942),
                 fontSize = 18.sp,
-                modifier = Modifier.padding(top = 4.dp),
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp),
             )
 
             // Рейтинги: КП и IMDb одним запросом, кеш 24 ч
@@ -300,9 +309,12 @@ fun DetailsScreen(
                 Text(
                     text = item.overview,
                     color = Color.White.copy(alpha = 0.75f),
-                    fontSize = 15.sp,
-                    lineHeight = 21.sp,
-                    modifier = Modifier.padding(top = 16.dp),
+                    fontSize = 16.sp,
+                    lineHeight = 24.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .widthIn(max = 1100.dp)
+                        .padding(top = 18.dp),
                 )
             }
 
@@ -349,9 +361,12 @@ fun DetailsScreen(
                 Text(
                     "🎬 Сезоны и серии",
                     color = Color(0xFFF5B942),
-                    fontSize = 16.sp,
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(top = 18.dp),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 22.dp),
                 )
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -426,9 +441,12 @@ fun DetailsScreen(
                 Text(
                     "🎬 Похожее",
                     color = Color(0xFFF5B942),
-                    fontSize = 18.sp,
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(top = 20.dp),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 22.dp),
                 )
                 androidx.compose.foundation.layout.FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),

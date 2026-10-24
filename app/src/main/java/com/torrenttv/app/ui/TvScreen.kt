@@ -237,6 +237,11 @@ private fun TvPill(text: String, active: Boolean = false, onClick: () -> Unit) {
     }
 }
 
+/** Инициалы для плашки вместо логотипа: «Первый канал» → «ПК». */
+private fun initials(name: String): String =
+    name.split(Regex("\\s+")).filter { it.isNotBlank() }.take(2)
+        .map { it.first().uppercaseChar() }.joinToString("")
+
 /** Плитка канала: логотип, имя, «сейчас идёт», кнопка избранного. */
 @Composable
 private fun ChannelTile(
@@ -262,20 +267,34 @@ private fun ChannelTile(
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Логотип канала: пусто — вместо него бейдж группы
-                if (channel.logo.isNotBlank()) {
-                    AsyncImage(
-                        model = channel.logo,
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier
-                            .height(30.dp)
-                            .width(52.dp)
-                            .background(Color(0xFF10141B), RoundedCornerShape(6.dp))
-                            .padding(3.dp),
+                // Логотип канала. Внешние хосты логотипов (imgur, wikimedia…)
+                // часто мертвы или пусты в плейлисте — тогда под картинкой
+                // видна плашка с инициалами: чёрных квадратов больше нет.
+                Box(
+                    Modifier
+                        .height(30.dp)
+                        .width(52.dp)
+                        .background(Color(0xFF10141B), RoundedCornerShape(6.dp))
+                        .padding(3.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        initials(channel.name),
+                        color = Color(0xFFF5B942),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
                     )
-                    Spacer(Modifier.width(8.dp))
+                    if (channel.logo.isNotBlank()) {
+                        AsyncImage(
+                            model = channel.logo,
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
                 }
+                Spacer(Modifier.width(8.dp))
                 Text(
                     "● ${channel.group}" + if (channel.quality.isNotBlank()) " · ${channel.quality}" else "",
                     color = Color(0xFFF5B942),

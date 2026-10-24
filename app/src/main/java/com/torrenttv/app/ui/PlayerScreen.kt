@@ -178,44 +178,15 @@ fun PlayerScreen(
                             (System.currentTimeMillis() - at) to got
                         }.getOrNull()
                     }
-                    // Хвост файла: у MKV оглавление (cues) лежит в конце —
-                    // без него ExoPlayer не находит индекс и падает
-                    // ERROR_CODE_TIMEOUT («Полдень» не запускался)
-                    val tail = withContext(Dispatchers.IO) {
-                        runCatching {
-                            val u = com.torrenttv.app.data.TorrServeService.streamUrl(tsHost, ts.hash, file)
-                            val c = java.net.URL(u).openConnection() as java.net.HttpURLConnection
-                            c.connectTimeout = 20_000
-                            c.readTimeout = 90_000
-                            c.requestMethod = "HEAD"
-                            c.connect()
-                            val size = c.contentLengthLong
-                            c.disconnect()
-                            if (size <= 0) return@runCatching Triple(-1L, -1L, -1L)
-                            val from = (size - 1_500_000L).coerceAtLeast(0L)
-                            val g = java.net.URL(u).openConnection() as java.net.HttpURLConnection
-                            g.connectTimeout = 20_000
-                            g.readTimeout = 90_000
-                            g.setRequestProperty("Range", "bytes=$from-${size - 1}")
-                            g.connect()
-                            val at = System.currentTimeMillis()
-                            var got = 0L
-                            val buf = ByteArray(131_072)
-                            g.inputStream.use { ins ->
-                                while (got < 1_500_000L) {
-                                    val n = ins.read(buf)
-                                    if (n <= 0) break
-                                    got += n
-                                }
-                            }
-                            g.disconnect()
-                            Triple(size, got, System.currentTimeMillis() - at)
-                        }.getOrNull()
-                    }
+                    // ВАЖНО: хвост файла больше НЕ читаем (было в v0.8.4–v0.8.6).
+                    // Запрос Range с конца переключал приоритеты TorrServe на
+                    // последние куски — голова файла переставала качаться, и
+                    // плеер стоял на первом кадре («Полдень»: картинка как на
+                    // паузе, через 10 с ERROR_CODE_TIMEOUT). MKV ExoPlayer
+                    // читает и без cues — seek чуть медленнее, зато играет.
                     com.torrenttv.app.data.AppLog.log(
                         "player",
-                        "torrserve: прогрев ${warm?.first ?: -1} мс, байт ${warm?.second ?: -1}; " +
-                            "хвост: размер=${tail?.first ?: -1} прочитано=${tail?.second ?: -1} за ${tail?.third ?: -1} мс",
+                        "torrserve: прогрев ${warm?.first ?: -1} мс, байт ${warm?.second ?: -1}",
                     )
                     // TorrServe отдаёт поток — играем ЕГО (всё качает сервер).
                     // Раньше при первом read() < 100 КБ приложение ошибочно
@@ -1313,14 +1284,40 @@ private fun VideoPlayer(
                         if (url == null) {
                             gearMsg = "Внешний плеер доступен при стриме через TorrServe"
                         } else {
-                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                            // Бесшовный запуск: берём плеер, выбранный владельцем
+                            // один раз (MX Player и т.п.) — без меню «Открыть
+                            // с помощью». Не выбран — берём единственный
+                            // установленный видеоплеер; меню — только в крайнем случае.
+                            val ls = com.torrenttv.app.data.LocalStore(context)
+                            val base = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
                                 setDataAndType(android.net.Uri.parse(url), "video/*")
                                 addFlags(
                                     android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
                                         android.content.Intent.FLAG_ACTIVITY_NEW_TASK
                                 )
                             }
-                            if (!runCatching { context.startActivity(intent) }.isSuccess) {
+                            val saved = ls.externalPlayerPackage()
+                            val ok = when {
+                                saved.isNotBlank() ->
+                                    runCatching { context.startActivity(base.apply { setPackage(saved) }) }
+                                        .getOrElse { false }.also { started ->
+                                            if (started == false) ls.setExternalPlayerPackage("")
+                                        }
+                                else -> {
+                                    val apps = runCatching {
+                                        context.packageManager.queryIntentActivities(base, 0)
+                                    }.getOrDefault(emptyList())
+                                    if (apps.size == 1) {
+                                        val pkg = apps.first().activityInfo.packageName
+                                        ls.setExternalPlayerPackage(pkg)
+                                        runCatching { context.startActivity(base.apply { setPackage(pkg) }) }
+                                            .getOrElse { false }
+                                    } else {
+                                        runCatching { context.startActivity(base) }.getOrElse { false }
+                                    }
+                                }
+                            }
+                            if (ok == false) {
                                 gearMsg = "Внешний плеер не найден — установите VLC или MX Player"
                             }
                         }

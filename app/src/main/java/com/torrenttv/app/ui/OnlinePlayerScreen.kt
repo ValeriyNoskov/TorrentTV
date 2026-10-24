@@ -36,6 +36,22 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -228,8 +244,31 @@ fun OnlinePlayerScreen(
             // TorrServe отдаёт первые байты, пока качает куски с пиров:
             // 60 сек на чтение, иначе media3 рвёт живой поток по таймауту
             .setReadTimeoutMs(if (isTorrserve) 120_000 else 15_000)
-        ExoPlayer.Builder(context)
+        // media3 1.11 включила «детектор зависаний»: если позиция не двигается
+        // 10 секунд, поток рвётся ошибкой ERROR_CODE_TIMEOUT, хотя он живой —
+        // торрент-стрим просто медленно наливает буфер на старте («Полдень»:
+        // картинка на паузе, перемотка работает, через 10 с ошибка).
+        // Для торрент-потоков этот детектор отключаем: ждём буферизацию сами.
+        runCatching {
+            androidx.media3.exoplayer.ExoPlayer.Builder.experimentalEnableStuckPlayingDetection = false
+        }
+        // Рендереры: системные MediaCodec + резервный FFmpeg-декодер
+        // (все известные аудиокодеки: AC3/EAC3/DTS/TrueHD/AAC/FLAC/Opus…).
+        // FFmpeg включается только там, где ТВ не тянет дорожку системно.
+        val renderers = androidx.media3.exoplayer.DefaultRenderersFactory(context)
+            .setExtensionRendererMode(
+                androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
+            )
+            .setEnableDecoderFallback(true)
+        ExoPlayer.Builder(context, renderers)
             .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(httpFactory))
+            // Буфер больше: торрент-поток неровный, лучше подождать, чем рвать
+            .setLoadControl(
+                androidx.media3.exoplayer.DefaultLoadControl.Builder()
+                    .setBufferDurationsMs(120_000, 300_000, 20_000, 45_000)
+                    .setBackBuffer(60_000, true)
+                    .build()
+            )
             .build()
             .apply {
                 // Скорость выбранная в панели — переживает пересоздание плеера
@@ -239,24 +278,31 @@ fun OnlinePlayerScreen(
                     .buildUpon()
                     .setPreferredAudioLanguage("rus")
                     .build()
-                // .m3u8 → HLS-источник, остальное — прогрессивный стрим
-                setMediaItem(
-                    ExoMediaItem.Builder()
-                        .setUri(link.url)
-                        .setMimeType(
-                            if (link.url.contains(".m3u8", ignoreCase = true))
-                                androidx.media3.common.MimeTypes.APPLICATION_M3U8
-                            else null
-                        )
-                        .build()
-                )
-                prepare()
-                // Продолжаем с сохранённого места (если смотрели раньше)
-                if (resumeSec > 30) {
-                    seekTo(resumeSec * 1000L)
-                    seekInfo = "▶ Продолжаем с %d:%02d".format(resumeSec / 60, resumeSec % 60)
+                // Режим «Всегда внешний плеер»: наш ExoPlayer НЕ запускаем —
+                // он не качает и не конкурирует с внешним плеером за поток.
+                // Видео играет внешний (VLC/MX Player), наш экран только ждёт
+                // возврата, чтобы вернуться в приложение без системных меню.
+                val extMode = store.useExternalPlayer()
+                if (!extMode) {
+                    // .m3u8 → HLS-источник, остальное — прогрессивный стрим
+                    setMediaItem(
+                        ExoMediaItem.Builder()
+                            .setUri(link.url)
+                            .setMimeType(
+                                if (link.url.contains(".m3u8", ignoreCase = true))
+                                    androidx.media3.common.MimeTypes.APPLICATION_M3U8
+                                else null
+                            )
+                            .build()
+                    )
+                    prepare()
+                    // Продолжаем с сохранённого места (если смотрели раньше)
+                    if (resumeSec > 30) {
+                        seekTo(resumeSec * 1000L)
+                        seekInfo = "▶ Продолжаем с %d:%02d".format(resumeSec / 60, resumeSec % 60)
+                    }
+                    playWhenReady = true
                 }
-                playWhenReady = true
                 addListener(object : Player.Listener {
                     override fun onPlaybackStateChanged(state: Int) {
                         playState = state
@@ -265,6 +311,23 @@ fun OnlinePlayerScreen(
                         if (state == Player.STATE_READY &&
                             System.currentTimeMillis() - lastErrorAt > 20_000
                         ) retryCount = 0
+                        // Диагностика: какие дорожки выбрал плеер (аудио/видео).
+                        // Нужна, если поток стоит на паузе: частая причина —
+                        // аудио E-AC3/DTS, которое телевизор не тянет.
+                        if (state == Player.STATE_READY) {
+                            runCatching {
+                                val kinds = mapOf(
+                                    androidx.media3.common.C.TRACK_TYPE_VIDEO to "видео",
+                                    androidx.media3.common.C.TRACK_TYPE_AUDIO to "аудио",
+                                    androidx.media3.common.C.TRACK_TYPE_TEXT to "субтитры",
+                                )
+                                val info = currentTracks.groups.joinToString(", ") { g ->
+                                    val f = g.getTrackFormat(0)
+                                    "${kinds[g.type] ?: g.type}:${f.sampleMimeType ?: "?"}/${f.language ?: "-"}"
+                                }
+                                com.torrenttv.app.data.AppLog.log("player", "дорожки: $info")
+                            }
+                        }
                     }
                     override fun onPlayerError(error: PlaybackException) {
                         com.torrenttv.app.data.AppLog.log(
@@ -440,11 +503,34 @@ fun OnlinePlayerScreen(
     // тихо перезапускаем (TorrServe иногда залипает; раньше — только руками)
     LaunchedEffect(player, retryTick) {
         var stuck = 0
+        var idleBuf = 0
         var lastPos = -1L
         var lastBuf = -1L
         while (true) {
             kotlinx.coroutines.delay(5000)
-            if (!player.isPlaying) { stuck = 0; continue }
+            if (!player.isPlaying) {
+                // Плеер «на паузе» сам по себе — это ещё не зависание, но если
+                // он в BUFFERING и буфер не растёт 30 с, поток реально встал.
+                // Пишем это в лог: причина видна без догадок (аудио/сеть/диск).
+                val pos = player.currentPosition
+                val buf = player.bufferedPosition
+                if (player.playbackState == Player.STATE_BUFFERING && pos == lastPos && buf == lastBuf) {
+                    idleBuf++
+                    if (idleBuf == 6) {
+                        com.torrenttv.app.data.AppLog.log(
+                            "player",
+                            "буферизация 30 с без данных: pos=${pos / 1000}s buf=${buf / 1024}КБ " +
+                                "длительность=${player.duration / 1000}s",
+                        )
+                    }
+                } else {
+                    idleBuf = 0
+                    lastPos = pos
+                    lastBuf = buf
+                }
+                stuck = 0
+                continue
+            }
             val pos = player.currentPosition
             val buf = player.bufferedPosition
             if (pos == lastPos && buf == lastBuf) {
@@ -563,29 +649,103 @@ fun OnlinePlayerScreen(
     // Галочка «Всегда внешний плеер»: сразу открываем во внешнем плеере и выходим
     val storePrefs = remember { com.torrenttv.app.data.LocalStore(context) }
     var extMsg by remember { mutableStateOf("") }
-    fun openExternal(auto: Boolean = false) {
-        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+    var extOpened by remember { mutableStateOf(false) }
+    // Список установленных плееров для разового выбора; после выбора пакет
+    // запоминается — дальше плеер открывается СРАЗУ, без системного меню
+    // «Открыть с помощью» (оно выскакивало при каждом запуске и после закрытия).
+    var showPlayerPick by remember { mutableStateOf(false) }
+    var playerApps by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    fun buildIntent(pkg: String?): android.content.Intent =
+        android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
             setDataAndType(
                 android.net.Uri.parse(link.url),
                 if (link.url.contains(".m3u8", true)) "application/x-mpegURL" else "video/*",
             )
+            if (pkg != null) setPackage(pkg)
             addFlags(
                 android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
                     android.content.Intent.FLAG_ACTIVITY_NEW_TASK
             )
         }
-        val ok = runCatching { context.startActivity(intent) }.isSuccess
-        if (!ok) {
-            extMsg = "Внешний плеер не найден — установите VLC или MX Player, либо выключите «Всегда внешний плеер» в настройках"
-        } else if (auto) {
-            exitPlayer()
+    fun launchIn(pkg: String, auto: Boolean): Boolean {
+        val ok = runCatching { context.startActivity(buildIntent(pkg)) }.isSuccess
+        if (ok && auto) exitPlayer()
+        return ok
+    }
+    fun openExternal(auto: Boolean = false) {
+        val saved = storePrefs.externalPlayerPackage()
+        if (saved.isNotBlank()) {
+            // Плеер уже выбран владельцем — открываем сразу, бесшовно
+            if (!launchIn(saved, auto)) {
+                storePrefs.setExternalPlayerPackage("") // плеер удалён — спросим заново
+                extMsg = "Выбранный плеер не найден — выберите другой"
+                showPlayerPick = true
+                playerApps = runCatching {
+                    context.packageManager.queryIntentActivities(buildIntent(null), 0)
+                        .map { it.loadLabel(context.packageManager).toString() to it.activityInfo.packageName }
+                        .sortedBy { it.first.lowercase() }
+                }.getOrDefault(emptyList())
+            }
+            return
+        }
+        val apps = runCatching {
+            context.packageManager.queryIntentActivities(buildIntent(null), 0)
+                .map { it.loadLabel(context.packageManager).toString() to it.activityInfo.packageName }
+                .sortedBy { it.first.lowercase() }
+        }.getOrDefault(emptyList())
+        when {
+            apps.isEmpty() -> {
+                extMsg = "Внешний плеер не найден — установите VLC или MX Player, либо выключите «Всегда внешний плеер» в настройках"
+            }
+            apps.size == 1 -> {
+                storePrefs.setExternalPlayerPackage(apps.first().second)
+                launchIn(apps.first().second, auto)
+            }
+            else -> {
+                playerApps = apps
+                showPlayerPick = true
+            }
         }
     }
     LaunchedEffect(Unit) {
-        if (storePrefs.useExternalPlayer()) openExternal(auto = true)
+        if (storePrefs.useExternalPlayer()) {
+            extOpened = true
+            openExternal(auto = false)
+        }
+    }
+    // Бесшовный возврат: закрыли VLC/MX Player → оказались прямо в приложении
+    // (на карточке фильма), без меню внешнего плеера и без чёрного экрана.
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME && extOpened) {
+                extOpened = false
+                exitPlayer()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
     }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
+        if (storePrefs.useExternalPlayer()) {
+            // Режим внешнего плеера: наш плеер не играет. Пока открыт VLC —
+            // этот экран не виден; после закрытия сразу уходим в приложение.
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxSize().padding(40.dp),
+            ) {
+                Text("🎬 Играет во внешнем плеере", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Закройте плеер кнопкой Назад на пульте — вернётесь в приложение",
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 16.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+            }
+        }
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
@@ -637,18 +797,88 @@ fun OnlinePlayerScreen(
             )
         }
 
-        // ⏳ Буферизация: чёрный экран — значит «грузим», а не «зависло»
+        // ⏳ Буферизация: спиннер + прогресс-бар + подсказки, как на макете.
+        // Чёрный экран — значит «грузим», а не «зависло».
         if (playState == Player.STATE_BUFFERING && errorMsg.isBlank()) {
+            // Вращающийся спиннер: дуга бежит по кругу (Compose-анимация,
+            // без material-зависимостей)
+            val spin = rememberInfiniteTransition(label = "spinner")
+            val angle by spin.animateFloat(
+                0f, 360f,
+                infiniteRepeatable(tween(1100, easing = LinearEasing)),
+                label = "angle",
+            )
             Column(
-                Modifier
-                    .align(Alignment.Center)
-                    .background(Color(0xE0151B26), RoundedCornerShape(16.dp))
-                    .padding(horizontal = 28.dp, vertical = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .widthIn(max = 720.dp),
             ) {
-                Text("⏳ Загружаю видео…", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(8.dp))
-                Text("$titleWithEp · буфер $bufPct%", color = Color(0xFFF5B942), fontSize = 15.sp)
+                // Круг с бегущей дугой
+                Box(Modifier.size(84.dp)) {
+                    Canvas(Modifier.fillMaxSize().rotate(angle)) {
+                        val stroke = 7.dp.toPx()
+                        val inset = stroke / 2
+                        drawArc(
+                            color = Color(0xFF2A3240),
+                            startAngle = 0f, sweepAngle = 360f, useCenter = false,
+                            style = Stroke(stroke, cap = StrokeCap.Round),
+                            topLeft = Offset(inset, inset),
+                            size = Size(size.width - stroke, size.height - stroke),
+                        )
+                        drawArc(
+                            color = Color(0xFFF5B942),
+                            startAngle = -60f, sweepAngle = 110f, useCenter = false,
+                            style = Stroke(stroke, cap = StrokeCap.Round),
+                            topLeft = Offset(inset, inset),
+                            size = Size(size.width - stroke, size.height - stroke),
+                        )
+                    }
+                }
+                Text(
+                    "Загружаю видео…",
+                    color = Color.White,
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 22.dp),
+                )
+                Text(
+                    titleWithEp,
+                    color = Color(0xFFF5B942),
+                    fontSize = 17.sp,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                // Прогресс-бар буфера: жёлтая полоса на тёмном фоне
+                Box(
+                    Modifier
+                        .padding(top = 18.dp)
+                        .width(420.dp)
+                        .height(10.dp)
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(Color(0xFF2A3240)),
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth((bufPct / 100f).coerceIn(0.02f, 1f))
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(Color(0xFFF5B942)),
+                    )
+                }
+                Text(
+                    "Буферизация $bufPct%",
+                    color = Color.White.copy(alpha = 0.75f),
+                    fontSize = 16.sp,
+                    modifier = Modifier.padding(top = 10.dp),
+                )
+                if (bufPct < 25) {
+                    Text(
+                        "Поток качает сервер — первые секунды могут занять минуту",
+                        color = Color.White.copy(alpha = 0.5f),
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
             }
         }
 

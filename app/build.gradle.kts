@@ -113,4 +113,9 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-hls:1.11.1")  // IPTV-потоки (.m3u8)
     implementation("androidx.media3:media3-exoplayer-dash:1.11.1") // Filmix отдаёт .mpd (DASH) — без него краш ClassNotFoundException
     implementation("androidx.media3:media3-ui:1.11.1")
+    // FFmpeg-декодер (аудио): AC3/E-AC3/DTS/TrueHD/AAC/MP3/FLAC/Opus/Vorbis…
+    // Нужен для торрентов и MKV: у телевизоров не все дорожки есть в MediaCodec,
+    // а без них плеер стоит на первом кадре. Включается ТОЛЬКО как резерв,
+    // если системный декодер не справился (EXTENSION_RENDERER_MODE_ON).
+    implementation("org.jellyfin.media3:media3-ffmpeg-decoder:1.6.1+1")
 }
