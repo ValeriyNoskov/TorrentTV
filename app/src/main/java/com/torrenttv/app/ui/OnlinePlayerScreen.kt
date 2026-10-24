@@ -82,6 +82,13 @@ fun OnlinePlayerScreen(
     onSelectFile: (Int) -> Unit = {},
 ) {
     val context = LocalContext.current
+    // Каждый вход в плеер — в лог: по выгрузке видно цепочку «нажал → открылся → ошибка»
+    androidx.compose.runtime.LaunchedEffect(link.url) {
+        com.torrenttv.app.data.AppLog.log(
+            "online",
+            "открыл плеер: «$title» ${link.label} (сезон=${link.season} серия=${link.episode})",
+        )
+    }
     val store = remember { com.torrenttv.app.data.LocalStore(context) }
     // Ключ источника: своя позиция на каждую ссылку (и серию) онлайн-просмотра
     val onlineKey = item.storeKey + ":online" +
@@ -445,7 +452,9 @@ fun OnlinePlayerScreen(
         // Ошибка воспроизведения: сообщение + Повторить/Назад (не вечный чёрный экран)
         if (errorMsg.isNotBlank()) {
             val retryFocus = remember { FocusRequester() }
-            runCatching { LaunchedEffect(Unit) { retryFocus.requestFocus() } }
+            // runCatching ВНУТРИ LaunchedEffect: фокус-таргет может быть ещё не готов —
+            // защита снаружи краш не ловит (выполняется из корутины позже)
+            LaunchedEffect(Unit) { runCatching { retryFocus.requestFocus() } }
             Column(
                 Modifier
                     .align(Alignment.Center)
@@ -620,7 +629,7 @@ fun OnlinePlayerScreen(
         // Меню настроек (↑ на пульте): качество, дорожки, внешний плеер
         if (showSettings) {
             val firstItemFocus = remember { FocusRequester() }
-            runCatching { LaunchedEffect(showSettings) { firstItemFocus.requestFocus() } }
+            LaunchedEffect(showSettings) { runCatching { firstItemFocus.requestFocus() } }
             Column(
                 Modifier
                     .align(Alignment.CenterEnd)
@@ -857,7 +866,7 @@ fun TrailerScreen(item: MediaItem, onBack: () -> Unit) {    var link by remember
                 )
                 Spacer(Modifier.height(16.dp))
                 val backFocus = remember { FocusRequester() }
-                runCatching { LaunchedEffect(Unit) { backFocus.requestFocus() } }
+                LaunchedEffect(Unit) { runCatching { backFocus.requestFocus() } }
                 Surface(
                     onClick = onBack,
                     modifier = Modifier.focusRequester(backFocus),
@@ -933,7 +942,7 @@ fun RutubeWatchScreen(videoId: String, title: String, onBack: () -> Unit) {
                 )
                 Spacer(Modifier.height(16.dp))
                 val backFocus = remember { FocusRequester() }
-                runCatching { LaunchedEffect(Unit) { backFocus.requestFocus() } }
+                LaunchedEffect(Unit) { runCatching { backFocus.requestFocus() } }
                 Surface(
                     onClick = onBack,
                     modifier = Modifier.focusRequester(backFocus),

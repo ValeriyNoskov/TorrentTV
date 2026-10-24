@@ -102,8 +102,13 @@ object AppLog {
         val prev = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { t, e ->
             runCatching {
+                // Хвост событий рядом со стеком: краш всегда приходит с контекстом
+                // «что пользователь делал перед вылетом» (главная жалоба — вылет
+                // без следа в логе, когда стек был, а события терялись)
+                val tail = synchronized(buf) { buf.takeLast(30).joinToString("\n") }
                 crashFile().appendText(
                     "\n=== ${fmt.format(Date())} thread=${t.name} ===\n" +
+                        "last events:\n$tail\n\n" +
                         android.util.Log.getStackTraceString(e),
                 )
             }
