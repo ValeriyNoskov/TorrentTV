@@ -42,6 +42,8 @@ import androidx.tv.material3.ClickableSurfaceShape
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import androidx.activity.compose.BackHandler
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import coil.compose.AsyncImage
 import androidx.compose.foundation.layout.Arrangement
 import com.torrenttv.app.data.Genre
@@ -354,9 +356,12 @@ fun ContinueRow(
         }
     }
 
-    // Диалог удаления: появился при зажатии OK на карточке
+    // Диалог удаления: появился при зажатии OK на карточке.
+    // Фокус сразу на «Убрать» — чтобы OK не ушёл в карточку под модалкой
     removeTarget?.let { target ->
         BackHandler { removeTarget = null }
+        val removeFocus = remember { FocusRequester() }
+        LaunchedEffect(target) { runCatching { removeFocus.requestFocus() } }
         Box(
             Modifier
                 .fillMaxSize()
@@ -383,10 +388,13 @@ fun ContinueRow(
                     modifier = Modifier.padding(top = 6.dp, bottom = 14.dp),
                 )
                 Row {
-                    Button(onClick = {
-                        removeTarget = null
-                        onRemove?.invoke(target)
-                    }) { Text("✕ Убрать") }
+                    Button(
+                        onClick = {
+                            removeTarget = null
+                            onRemove?.invoke(target)
+                        },
+                        modifier = Modifier.focusRequester(removeFocus),
+                    ) { Text("✕ Убрать") }
                     Spacer(Modifier.width(10.dp))
                     Button(onClick = { removeTarget = null }) { Text("Отмена") }
                 }

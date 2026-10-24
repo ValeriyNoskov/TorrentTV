@@ -10,7 +10,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -111,7 +113,14 @@ fun DetailsScreen(
 
             Spacer(Modifier.width(28.dp))
 
-            Column {
+            // Колонка скроллится: длинное описание не наезжает на «Похожее»
+            // и кнопку «Назад», всё остаётся доступным
+            Column(
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .verticalScroll(rememberScrollState()),
+            ) {
                 Text(item.title, color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Bold)
                 Text(
                     text = buildString {
@@ -161,13 +170,27 @@ fun DetailsScreen(
                 }
 
                 if (menu) {
+                    val menuFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+                    LaunchedEffect(menu) { runCatching { menuFocus.requestFocus() } }
                     Spacer(Modifier.height(10.dp))
                     @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
                     androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         if (item.type == "tv") {
-                            Button(onClick = { menu = false; onEpisodes(0) }) { Text("🎬 Эпизоды") }
+                            Button(
+                                onClick = { menu = false; onEpisodes(0) },
+                                modifier = Modifier.focusRequester(menuFocus),
+                            ) { Text("🎬 Эпизоды") }
+                        } else {
+                            // Для фильмов фокус — на первом доступном пункте
+                            Button(
+                                onClick = { menu = false; onManualSearch() },
+                                modifier = if (item.type != "tv") Modifier.focusRequester(menuFocus) else Modifier,
+                            ) { Text("🔍 Выбрать раздачу") }
                         }
-                        Button(onClick = { menu = false; onManualSearch() }) { Text("🔍 Выбрать раздачу") }
+                        if (item.type == "tv") {
+                            Spacer(Modifier.width(12.dp))
+                            Button(onClick = { menu = false; onManualSearch() }) { Text("🔍 Выбрать раздачу") }
+                        }
                         Spacer(Modifier.width(12.dp))
                         Button(onClick = { menu = false; onEnterMagnet() }) {
                             Text(if (magnet) "🔗 Заменить magnet" else "🔗 Указать magnet")
