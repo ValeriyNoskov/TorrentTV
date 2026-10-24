@@ -46,7 +46,6 @@ fun HomeScreen(
     var favorites by remember { mutableStateOf(store.favorites()) }
     var watchLater by remember { mutableStateOf(store.watchLater()) }
     var progress by remember { mutableStateOf(store.continueWatching()) }
-    var heroItem by remember { mutableStateOf<MediaItem?>(null) }
     var newReleases by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var updateInfo by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
     var updateStatus by remember { mutableStateOf("") }
@@ -59,12 +58,8 @@ fun HomeScreen(
 
     LaunchedEffect(Unit) {
         UpdateManager.checkForUpdate(currentVersion) { updateInfo = it }
-        heroItem = withContext(Dispatchers.IO) {
-            // Hero — новинка месяца с широким кадром; фолбэк — тренды
-            val fresh = MediaApi.newReleases().filter { store.isAllowed(it) }
-            newReleases = fresh.take(20)
-            fresh.firstOrNull { it.backdropUrl.isNotBlank() } ?: fresh.firstOrNull()
-                ?: MediaApi.trending(1).filter { store.isAllowed(it) }.firstOrNull()
+        newReleases = withContext(Dispatchers.IO) {
+            MediaApi.newReleases().filter { store.isAllowed(it) }.take(20)
         }
     }
 
@@ -84,18 +79,7 @@ fun HomeScreen(
                     )
                 }
             }
-            heroItem?.let { hero ->
-                item { HeroBanner(hero, onOpenDetails) }
-            }
-            if (newReleases.isNotEmpty()) {
-                item {
-                    MediaRow(
-                        title = "🆕 Новинки",
-                        items = newReleases,
-                        onClick = onOpenDetails,
-                    )
-                }
-            }
+            // Продолжить просмотр — первым, это самое нужное
             if (progress.isNotEmpty()) {
                 item {
                     // Карточки с прогресс-барами: досмотрено, серия, «осталось N мин»
@@ -110,6 +94,15 @@ fun HomeScreen(
                             }
                             progress = store.continueWatching()
                         },
+                    )
+                }
+            }
+            if (newReleases.isNotEmpty()) {
+                item {
+                    MediaRow(
+                        title = "🆕 Новинки",
+                        items = newReleases,
+                        onClick = onOpenDetails,
                     )
                 }
             }

@@ -65,6 +65,50 @@ object MediaApi {
     fun topRatedTv(page: Int = 1): List<MediaItem> =
         src({ KinopoiskClient.topRatedTv(page) }, { TmdbClient.topRatedTv(page) }, { RutrackerrCatalog.popularTv(page) })
 
+    // ---------- Полки каталога: новинки / русские / зарубежные ----------
+
+    /** Новинки-фильмы (свежие релизы — на них сразу есть раздачи). */
+    fun newMovies(page: Int = 1): List<MediaItem> =
+        src({ KinopoiskClient.popularMovies(page) }, { TmdbClient.newMovies(page) }, { RutrackerrCatalog.popularMovies(page) })
+
+    /** Новинки-сериалы. */
+    fun newTv(page: Int = 1): List<MediaItem> =
+        src({ KinopoiskClient.popularTv(page) }, { TmdbClient.newTv(page) }, { RutrackerrCatalog.popularTv(page) })
+
+    /** Русские фильмы (производство РФ — КП сам даёт страну, TMDB — по языку). */
+    fun russianMovies(page: Int = 1): List<MediaItem> =
+        src(
+            {
+                KinopoiskClient.popularMovies(page).let { all ->
+                    val ru = all.filter { it.originalLanguage == "ru" }
+                    // У КП язык может быть не заполнен — лучше показать все, чем пусто
+                    if (ru.isEmpty()) all else ru
+                }
+            },
+            { TmdbClient.russianMovies(page) },
+        )
+
+    /** Русские сериалы. */
+    fun russianTv(page: Int = 1): List<MediaItem> =
+        src(
+            { KinopoiskClient.popularTv(page).filter { it.originalLanguage == "ru" } },
+            { TmdbClient.russianTv(page) },
+        )
+
+    /** Зарубежные фильмы: популярные минус русские. */
+    fun foreignMovies(page: Int = 1): List<MediaItem> =
+        src(
+            { KinopoiskClient.popularMovies(page).filter { it.originalLanguage != "ru" } },
+            { TmdbClient.foreignMovies(page) },
+        )
+
+    /** Зарубежные сериалы. */
+    fun foreignTv(page: Int = 1): List<MediaItem> =
+        src(
+            { KinopoiskClient.popularTv(page).filter { it.originalLanguage != "ru" } },
+            { TmdbClient.foreignTv(page) },
+        )
+
     fun moviesByGenre(genreId: Int, page: Int = 1): List<MediaItem> =
         src({ KinopoiskClient.moviesByGenre(genreId, page) }, { TmdbClient.moviesByGenre(genreId, page) }, { RutrackerrCatalog.byGenre(genreId, page) })
 

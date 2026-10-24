@@ -93,8 +93,19 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit) {
             }
         }
         item {
+            // Новинки — первыми: свежие релизы, на них сразу есть раздачи
             PagedMediaRow(
-                title = "Популярные $noun",
+                title = "🆕 Новинки",
+                loader = { page ->
+                    if (mode == "movies") MediaApi.newMovies(page) else MediaApi.newTv(page)
+                },
+                onOpen = onOpenDetails,
+                filterFn = { store.isAllowed(it) },
+            )
+        }
+        item {
+            PagedMediaRow(
+                title = "🔥 Популярные $noun",
                 loader = { page ->
                     when (mode) {
                         "movies" -> MediaApi.popularMovies(page)
@@ -108,9 +119,19 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit) {
         }
         item {
             PagedMediaRow(
-                title = "Топ $noun",
+                title = "🇷🇺 Русские $noun",
                 loader = { page ->
-                    if (mode == "movies") MediaApi.topRatedMovies(page) else MediaApi.topRatedTv(page)
+                    if (mode == "movies") MediaApi.russianMovies(page) else MediaApi.russianTv(page)
+                },
+                onOpen = onOpenDetails,
+                filterFn = { store.isAllowed(it) },
+            )
+        }
+        item {
+            PagedMediaRow(
+                title = "🌍 Зарубежные $noun",
+                loader = { page ->
+                    if (mode == "movies") MediaApi.foreignMovies(page) else MediaApi.foreignTv(page)
                 },
                 onOpen = onOpenDetails,
                 filterFn = { store.isAllowed(it) },

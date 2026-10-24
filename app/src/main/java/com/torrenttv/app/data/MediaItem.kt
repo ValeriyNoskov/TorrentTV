@@ -17,6 +17,8 @@ data class MediaItem(
     val overview: String = "",
     val imdbId: String = "",
     val originalTitle: String = "",
+    /** Оригинальный язык (tmdb original_language): «ru» — русское производство. */
+    val originalLanguage: String = "",
 ) {
     /** Ключ для локального хранения (прогресс/избранное). */
     val storeKey: String get() = "$type-$id"
@@ -36,6 +38,7 @@ data class MediaItem(
         .put("overview", overview)
         .put("imdbId", imdbId)
         .put("originalTitle", originalTitle)
+        .put("originalLanguage", originalLanguage)
 
     companion object {
         fun fromJson(o: JSONObject): MediaItem = MediaItem(
@@ -52,9 +55,10 @@ data class MediaItem(
             countryIds = o.optJSONArray("countryIds")?.let { arr ->
                 (0 until arr.length()).map { arr.optInt(it) }
             } ?: emptyList(),
-            overview = o.optString("overview", ""),
-            imdbId = o.optString("imdbId", ""),
-            originalTitle = o.optString("originalTitle", ""),
+            overview = o.safeString("overview"),
+            imdbId = o.safeString("imdbId"),
+            originalTitle = o.safeString("originalTitle"),
+            originalLanguage = o.safeString("originalLanguage"),
         )
     }
 }

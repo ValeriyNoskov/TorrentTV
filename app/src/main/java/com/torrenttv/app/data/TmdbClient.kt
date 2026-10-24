@@ -105,8 +105,9 @@ object TmdbClient {
                 genreIds = genreIds,
                 overview = o.optString("overview", ""),
                 imdbId = o.optString("imdb_id", ""),
-                originalTitle = o.optString("original_title", "")
-                    .ifBlank { o.optString("original_name") },
+                originalTitle = o.safeString("original_title")
+                    .ifBlank { o.safeString("original_name") },
+                originalLanguage = o.safeString("original_language"),
             )
         }
     }
@@ -170,6 +171,70 @@ object TmdbClient {
                 ),
             ),
         )
+
+    // ---------- Полки каталога: новинки / русские / зарубежные ----------
+
+    /** Срок «новинки»: вышло не раньше, чем 1 год назад, и не в будущем. */
+    private val freshFrom: String
+        get() = java.time.LocalDate.now().minusYears(1).toString()
+    private val freshTo: String
+        get() = java.time.LocalDate.now().toString()
+
+    /** Новинки-фильмы: вышли за последний год, есть голоса (не мёртвые премьеры). */
+    fun newMovies(page: Int = 1): List<MediaItem> =
+        parseList(
+            get(
+                "/discover/movie",
+                mapOf(
+                    "sort_by" to "primary_release_date.desc",
+                    "primary_release_date.gte" to freshFrom,
+                    "primary_release_date.lte" to freshTo,
+                    "vote_count.gte" to "10",
+                    "page" to page.toString(),
+                ),
+            ),
+        )
+
+    /** Новинки-сериалы. */
+    fun newTv(page: Int = 1): List<MediaItem> =
+        parseList(
+            get(
+                "/discover/tv",
+                mapOf(
+                    "sort_by" to "first_air_date.desc",
+                    "first_air_date.gte" to freshFrom,
+                    "first_air_date.lte" to freshTo,
+                    "vote_count.gte" to "10",
+                    "page" to page.toString(),
+                ),
+            ),
+        )
+
+    /** Русские фильмы (оригинальный язык — русский). */
+    fun russianMovies(page: Int = 1): List<MediaItem> =
+        parseList(
+            get(
+                "/discover/movie",
+                mapOf("with_original_language" to "ru", "sort_by" to "popularity.desc", "page" to page.toString()),
+            ),
+        )
+
+    /** Русские сериалы. */
+    fun russianTv(page: Int = 1): List<MediaItem> =
+        parseList(
+            get(
+                "/discover/tv",
+                mapOf("with_original_language" to "ru", "sort_by" to "popularity.desc", "page" to page.toString()),
+            ),
+        )
+
+    /** Зарубежные фильмы: популярные, но не русские (фильтр по языку на клиенте). */
+    fun foreignMovies(page: Int = 1): List<MediaItem> =
+        popularMovies(page).filter { it.originalLanguage != "ru" }
+
+    /** Зарубежные сериалы. */
+    fun foreignTv(page: Int = 1): List<MediaItem> =
+        popularTv(page).filter { it.originalLanguage != "ru" }
 
     /** Похожее для карточки-углубления. */
     fun similar(item: MediaItem): List<MediaItem> =
