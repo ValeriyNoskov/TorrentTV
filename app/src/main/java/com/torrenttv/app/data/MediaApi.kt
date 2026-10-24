@@ -31,9 +31,38 @@ object MediaApi {
                 ?.takeIf { it !is List<*> || it.isNotEmpty() }
         }
 
-    fun search(query: String): List<MediaItem> =
-        pick({ RutrackerrCatalog.search(query) }, { KinopoiskClient.search(query) }, { TmdbClient.search(query) })
-            ?: emptyList()
+    fun search(query: String): List<MediaItem> {
+        val rt = runCatching { RutrackerrCatalog.search(query) }.getOrDefault(emptyList())
+        if (rt.isEmpty()) {
+            // Рутрекер молчит — как раньше: первый непустой источник
+            return pick({ KinopoiskClient.search(query) }, { TmdbClient.search(query) }).orEmpty()
+        }
+        // ROADMAP №2: карточки Рутрекера + параллельный запрос КП — достаём
+        // постер/год/IMDb, чтобы поиск не выглядел «заглушками». Сопоставление
+        // строгое, как в enrich: тип обязан совпасть, спорные годы — не берём
+        val kp = runCatching { KinopoiskClient.search(query) }.getOrDefault(emptyList())
+        if (kp.isEmpty()) return rt
+        return rt.map { card ->
+            val cand = kp.filter { c ->
+                val a = c.title.lowercase().replace('ё', 'е')
+                val b = card.title.lowercase().replace('ё', 'е')
+                c.type == card.type && a.isNotBlank() && (a.contains(b) || b.contains(a))
+            }
+            val best = cand.filter { c ->
+                if (card.year.isNotBlank()) c.year == card.year
+                else cand.distinctBy { it.year }.size <= 1
+            }.maxByOrNull { c ->
+                ((if (c.year == card.year) 2 else 0) + if (c.title.equals(card.title, true)) 1 else 0).toDouble()
+            } ?: return@map card
+            card.copy(
+                posterUrl = best.posterUrl.ifBlank { card.posterUrl },
+                year = best.year.ifBlank { card.year },
+                imdbId = best.imdbId.ifBlank { card.imdbId },
+                overview = best.overview.ifBlank { card.overview },
+                rating = if (best.rating > 0) best.rating else card.rating,
+            )
+        }
+    }
 
     /**
      * Обогащение «пустой» карточки (заглушки из поиска раздач, без меты):
