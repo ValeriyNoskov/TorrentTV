@@ -125,12 +125,16 @@ fun OnlinePlayerScreen(
     val player = remember(link.url, retryTick) {
         // CDN проверяет Referer: у Filmix — filmix.ac, у HDRezka — её зеркало.
         // TorrServe (label="torrserve") — локальный стрим, Referer не нужен.
-        val referer = if (link.label == "torrserve") "" else link.referer.ifBlank { "https://filmix.ac/" }
+        // TorrServe-движок узнаём по адресу, а не по метке ссылки:
+        // SmartPlay создаёт ссылки с произвольными label («⚡ Играть сразу…»),
+        // из-за метки не срабатывали retry/таймауты
+        val isTorrserve = link.url.contains("127.0.0.1:8090")
+        val referer = if (isTorrserve) "" else link.referer.ifBlank { "https://filmix.ac/" }
         val httpFactory = DefaultHttpDataSource.Factory()
             .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
             .apply { if (referer.isNotBlank()) setDefaultRequestProperties(mapOf("Referer" to referer)) }
             .setConnectTimeoutMs(15_000)
-            .setReadTimeoutMs(if (link.label == "torrserve") 60_000 else 15_000)
+            .setReadTimeoutMs(if (isTorrserve) 60_000 else 15_000)
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(httpFactory))
             .build()
@@ -169,9 +173,9 @@ fun OnlinePlayerScreen(
                             "player",
                             "playback error: ${error.errorCodeName} code=${error.errorCode} retry=$retryCount link=${link.url.take(120)}",
                         )
-                        // TorrServe часто отдаёт 3003, если файл ещё «дозревает» —
+                        // TorrServe часто не успевает скачать начало новой серии —
                         // молча перезапускаем плеер до 3 раз, без алармов
-                        if (link.label == "torrserve" && retryCount < 3) {
+                        if (isTorrserve && retryCount < 3) {
                             retryCount++
                             seekInfo = "🔄 Запускаю поток (попытка ${retryCount + 1})…"
                             panelTick++
@@ -188,7 +192,7 @@ fun OnlinePlayerScreen(
                                 }.getOrNull()
                                 if (!url.isNullOrBlank()) {
                                     com.torrenttv.app.data.AppLog.log("upload", "auto sent -> $url")
-                                    errorMsg = "Ошибка: ${error.errorCodeName}\nЛог уже отправлен: $url\nСкажи разработчику этот адрес."
+                                    errorMsg = "Ошибка: ${error.errorCodeName}\nЛог отправлен: $url"
                                 }
                             }
                         }

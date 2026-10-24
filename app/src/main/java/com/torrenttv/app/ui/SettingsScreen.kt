@@ -72,7 +72,7 @@ private val SECTIONS = listOf(
     Triple("search", "🔍 Поиск и фильтры", "Что скрывать из каталогов и поиска"),
     Triple("jackett", "🔗 Jackett", "Дополнительный провайдер автопоиска торрентов"),
     Triple("netcheck", "🩺 Проверка сети", "Какие источники доступны с этого устройства"),
-    Triple("logs", "📝 Логи", "Запись событий и отправка логов разработчику"),
+    Triple("logs", "📝 Логи", "Запись событий и выгрузка лога в Gist"),
     Triple("torrserve", "🚀 TorrServe", "Внешний движок торрентов — надёжнее внутреннего"),
     Triple("player", "📺 Плеер", "Встроенный или внешний плеер (VLC, MX Player)"),
     Triple("input", "⌨ Ввод", "Клавиатура: внешняя (системная) или встроенная"),
@@ -368,7 +368,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                         }
 
                         SettingsRow(
-                            title = "📤 Отправить логи разработчику",
+                            title = "📤 Выгрузить лог в Gist",
                             value = if (uploading) "…" else "Выложить и показать адрес",
                         ) {
                             if (!uploading) {
@@ -406,7 +406,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             SettingsNote(uploadState)
                         }
                         if (uploadUrl.isNotBlank()) {
-                            SettingsNote("Назовите разработчику этот адрес:\n${uploadUrl.trim()}")
+                            SettingsNote("Лог выгружен, адрес:\n${uploadUrl.trim()}")
                         }
                         SettingsNote(
                             "Как пользоваться: включите «Запись логов», воспроизведите проблему " +
@@ -967,7 +967,7 @@ private fun NetCheckScreen(onClose: () -> Unit) {
                     }
                 },
                 enabled = !uploading,
-            ) { Text(if (uploading) "⏳ Отправляю…" else "📤 Отправить лог разработчику") }
+            ) { Text(if (uploading) "⏳ Отправляю…" else "📤 Выгрузить лог в Gist") }
             if (uploadState.isNotBlank()) {
                 Spacer(Modifier.width(16.dp))
                 Text(uploadState, color = Color(0xFFF5B942), fontSize = 17.sp)
@@ -976,7 +976,7 @@ private fun NetCheckScreen(onClose: () -> Unit) {
         if (uploadUrl.isNotBlank()) {
             Spacer(Modifier.height(10.dp))
             Text(
-                "Назовите разработчику этот адрес:",
+                "Лог выгружен, адрес:",
                 color = Color.White.copy(alpha = 0.6f), fontSize = 16.sp,
             )
             Text(
