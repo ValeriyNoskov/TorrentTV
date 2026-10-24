@@ -15,8 +15,8 @@ android {
         applicationId = "com.torrenttv.app"
         minSdk = 29          // Android 10 — минимальная версия Android TV по требованию
         targetSdk = 34
-        versionCode = 120
-        versionName = "0.8.4"
+        versionCode = 121
+        versionName = "0.8.5"
         // Ключи метаданных задаются в gradle.properties: kpApiKey=... (kinopoisk.dev) или tmdbApiKey=...
         buildConfigField("String", "KP_API_KEY", "\"${findProperty("kpApiKey") ?: ""}\"")
         buildConfigField("String", "TMDB_API_KEY", "\"${findProperty("tmdbApiKey") ?: ""}\"")
@@ -76,19 +76,19 @@ android {
 
 dependencies {
     // Compose for TV (стабильная версия)
-    implementation("androidx.tv:tv-material:1.0.0")
+    implementation("androidx.tv:tv-material:1.1.0")
 
     // Compose базовый
-    implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.activity:activity-compose:1.9.2")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")
-    implementation("androidx.compose.ui:ui:1.7.4")
-    implementation("androidx.compose.ui:ui-tooling-preview:1.7.4")
-    implementation("androidx.compose.foundation:foundation:1.7.4")
-    implementation("androidx.compose.material:material-icons-core:1.7.4")
+    implementation("androidx.core:core-ktx:1.17.0")
+    implementation("androidx.activity:activity-compose:1.13.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
+    implementation("androidx.compose.ui:ui:1.10.6")
+    implementation("androidx.compose.ui:ui-tooling-preview:1.10.6")
+    implementation("androidx.compose.foundation:foundation:1.10.6")
+    implementation("androidx.compose.material:material-icons-core:1.7.8")
 
     // Загрузка постеров
-    implementation("io.coil-kt:coil-compose:2.6.0")
+    implementation("io.coil-kt:coil-compose:2.7.0")
 
     // Сеть (TMDB, GitHub-обновления)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

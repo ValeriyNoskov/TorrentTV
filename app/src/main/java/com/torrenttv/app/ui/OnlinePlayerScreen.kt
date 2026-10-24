@@ -269,7 +269,9 @@ fun OnlinePlayerScreen(
                     override fun onPlayerError(error: PlaybackException) {
                         com.torrenttv.app.data.AppLog.log(
                             "player",
-                            "playback error: ${error.errorCodeName} code=${error.errorCode} retry=$retryCount link=${link.url.take(120)}",
+                            "playback error: ${error.errorCodeName} code=${error.errorCode} retry=$retryCount " +
+                                "причина=${error.cause?.javaClass?.simpleName}: ${error.cause?.message?.take(160)} " +
+                                "link=${link.url.take(120)}",
                         )
                         // TorrServe часто не успевает скачать начало новой серии —
                         // молча перезапускаем плеер, без алармов.

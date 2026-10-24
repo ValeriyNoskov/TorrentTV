@@ -209,42 +209,55 @@ fun PlayerScreen(
                         "torrserve: прогрев ${warm?.first ?: -1} мс, байт ${warm?.second ?: -1}; " +
                             "хвост: размер=${tail?.first ?: -1} прочитано=${tail?.second ?: -1} за ${tail?.third ?: -1} мс",
                     )
-                    torrLink = com.torrenttv.app.data.TorrServeService.streamUrl(tsHost, ts.hash, file)
-                    // Серии для переключения в плеере: видео-файлы в естественном
-                    // порядке (E01, E02…), индекс текущего — по запущенному файлу
-                    val video = ts.files.filter {
-                        it.path.substringAfterLast('.', "").lowercase() in TorrentEngine.VIDEO_EXT
-                    }.sortedWith { x, y -> TorrentEngine.naturalCompare(x.path, y.path) }
-                    tsAllFiles = video
-                    tsFiles = video.mapIndexed { i, f -> i to f.path }
-                    tsCurrent = video.indexOfFirst { it.path == file.path }
-                    tsHostStr = tsHost
-                    tsHashStr = ts.hash
-                    // Номер серии для раздельного прогресса («Продолжить»)
-                    fun epNumOf(path: String): Int =
-                        Regex("[Ee](\\d{1,3})").find(path.substringAfterLast('/'))?.groupValues?.get(1)?.toIntOrNull() ?: 0
-                    tsEpNum = epNumOf(file.path)
-                    // Zona-стиль для TorrServe: сериал впервые — сразу список серий
-                    val firstRun = episode == null && startIndex < 0 && !store.hasLastFile(item)
-                    tsShowFiles = firstRun && tsFiles.size > 1
-                    if (!tsShowFiles && episode == null && startIndex < 0) {
-                        store.saveLastFile(item, tsCurrent)
-                    }
-                    // Предзагрузка следующей серии фоном (как у Stremio):
-                    // пока смотрим текущую, TorrServe качает следующую
-                    scope.launch(Dispatchers.IO) {
-                        val order = ts.files.filter {
+                    // ДИАГНОСТИКА «Полдня»: TorrServe отдавал только 823 байта
+                    // (заголовок MKV) и замолкал — ExoPlayer падал ERROR_CODE_TIMEOUT,
+                    // хотя сервер с ПК отдавал 1.5 МБ хвоста. Если прогрев прочитал
+                    // меньше 100 КБ, поток фактически мёртв: сразу играем встроенным
+                    // движком, не тратя 10 секунд зрителя на таймаут.
+                    val warmBytes = warm?.second ?: -1
+                    if (warmBytes in 0..99_999) {
+                        com.torrenttv.app.data.AppLog.log(
+                            "player",
+                            "torrserve: поток молчит ($warmBytes байт) → встроенный движок",
+                        )
+                    } else {
+                        torrLink = com.torrenttv.app.data.TorrServeService.streamUrl(tsHost, ts.hash, file)
+                        // Серии для переключения в плеере: видео-файлы в естественном
+                        // порядке (E01, E02…), индекс текущего — по запущенному файлу
+                        val video = ts.files.filter {
                             it.path.substringAfterLast('.', "").lowercase() in TorrentEngine.VIDEO_EXT
-                        }.sortedWith { x, y ->
-                            TorrentEngine.naturalCompare(x.path, y.path)
+                        }.sortedWith { x, y -> TorrentEngine.naturalCompare(x.path, y.path) }
+                        tsAllFiles = video
+                        tsFiles = video.mapIndexed { i, f -> i to f.path }
+                        tsCurrent = video.indexOfFirst { it.path == file.path }
+                        tsHostStr = tsHost
+                        tsHashStr = ts.hash
+                        // Номер серии для раздельного прогресса («Продолжить»)
+                        fun epNumOf(path: String): Int =
+                            Regex("[Ee](\\d{1,3})").find(path.substringAfterLast('/'))?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                        tsEpNum = epNumOf(file.path)
+                        // Zona-стиль для TorrServe: сериал впервые — сразу список серий
+                        val firstRun = episode == null && startIndex < 0 && !store.hasLastFile(item)
+                        tsShowFiles = firstRun && tsFiles.size > 1
+                        if (!tsShowFiles && episode == null && startIndex < 0) {
+                            store.saveLastFile(item, tsCurrent)
                         }
-                        val pos = order.indexOfFirst { it.path == file.path }
-                        val next = if (pos >= 0) order.getOrNull(pos + 1) else null
-                        if (next != null) {
-                            com.torrenttv.app.data.TorrServeService.preloadFile(tsHost, ts.hash, next) { }
+                        // Предзагрузка следующей серии фоном (как у Stremio):
+                        // пока смотрим текущую, TorrServe качает следующую
+                        scope.launch(Dispatchers.IO) {
+                            val order = ts.files.filter {
+                                it.path.substringAfterLast('.', "").lowercase() in TorrentEngine.VIDEO_EXT
+                            }.sortedWith { x, y ->
+                                TorrentEngine.naturalCompare(x.path, y.path)
+                            }
+                            val pos = order.indexOfFirst { it.path == file.path }
+                            val next = if (pos >= 0) order.getOrNull(pos + 1) else null
+                            if (next != null) {
+                                com.torrenttv.app.data.TorrServeService.preloadFile(tsHost, ts.hash, next) { }
+                            }
                         }
+                        return@LaunchedEffect
                     }
-                    return@LaunchedEffect
                 }
                 com.torrenttv.app.data.AppLog.log("player", "torrserve: no buffer, fallback to internal engine")
             } else {

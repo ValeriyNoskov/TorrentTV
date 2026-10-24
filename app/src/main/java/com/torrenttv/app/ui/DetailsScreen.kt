@@ -69,6 +69,10 @@ fun DetailsScreen(
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
     var fav by remember { mutableStateOf(store.isFavorite(item)) }
+    // Фильм есть в «Продолжить просмотр» → в «Ещё» доступна кнопка убрать.
+    // Раньше это было только длинным нажатием на карточке в ряду, и в самой
+    // карточке кнопка пропала (владелец искал — «куда делась»).
+    var inHistory by remember(item.storeKey) { mutableStateOf(store.hasProgress(item)) }
     var later by remember { mutableStateOf(store.isWatchLater(item)) }
     // Статус: Смотрю / Буду смотреть / Просмотрено (цикл кнопкой)
     var statusTag by remember { mutableStateOf(store.itemStatus(item)) }
@@ -78,7 +82,8 @@ fun DetailsScreen(
     var magnet by remember { mutableStateOf(store.getMagnet(item) != null) }
     var status by remember { mutableStateOf("") }
     var similar by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
-    var menu by remember { mutableStateOf(false) }
+    // «Похожее» больше не занимает экран: ряд открывается кнопкой
+    var showSimilar by remember { mutableStateOf(false) }
     // Карточка без меты (заглушка из поиска раздач): дотягиваем постер/описание
     // с КП прямо на экране деталей — иначе «нет постера» (жалоба по «Спецам»)
     var itemState by remember(item.storeKey) { mutableStateOf(item) }
@@ -295,8 +300,41 @@ fun DetailsScreen(
                             )
                         }) { Text(if (fav) "★ В избранном" else "☆ В избранное") }
                     }
+                    // Дальше — всё остальное ОТКРЫТО, без «Ещё»: кнопки
+                    // компактные (34dp, 13sp), ряд прокручивается пультом.
+                    // «magnet» убран из интерфейса — это техническая настройка,
+                    // пользователю она не нужна.
                     item {
-                        Button(onClick = { menu = !menu }) { Text("⋯ Ещё") }
+                        MiniButton("🔍 Раздача") { onManualSearch() }
+                    }
+                    item {
+                        MiniButton(if (later) "✓ Позже" else "＋ Позже") {
+                            later = store.toggleWatchLater(item)
+                        }
+                    }
+                    item {
+                        MiniButton(statusLabel(statusTag)) {
+                            statusTag = store.cycleItemStatus(item)
+                        }
+                    }
+                    if (inHistory) {
+                        item {
+                            MiniButton("✕ Из просмотра") {
+                                store.removeProgress(item)
+                                inHistory = false
+                                com.torrenttv.app.data.AppLog.log(
+                                    "ui",
+                                    "нажал: «Убрать из просмотра» «${item.title}»",
+                                )
+                            }
+                        }
+                    }
+                    if (similar.isNotEmpty()) {
+                        item {
+                            MiniButton(if (showSimilar) "🎬 Похожее ✓" else "🎬 Похожее") {
+                                showSimilar = !showSimilar
+                            }
+                        }
                     }
                 }
 
@@ -322,34 +360,6 @@ fun DetailsScreen(
                                     maxLines = 1,
                                 )
                             }
-                        }
-                    }
-                }
-
-                if (menu) {
-                    val menuFocus = remember { androidx.compose.ui.focus.FocusRequester() }
-                    LaunchedEffect(menu) { runCatching { menuFocus.requestFocus() } }
-                    Spacer(Modifier.height(10.dp))
-                    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
-                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        // «Эпизоды» больше не здесь — для сериалов она всегда видна рядом с «Смотреть»
-                        Button(
-                            onClick = { menu = false; onManualSearch() },
-                            modifier = Modifier.focusRequester(menuFocus),
-                        ) { Text("🔍 Выбрать раздачу") }
-                        Spacer(Modifier.width(12.dp))
-                        Button(onClick = { menu = false; onEnterMagnet() }) {
-                            Text(if (magnet) "🔗 Заменить magnet" else "🔗 Указать magnet")
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        Button(onClick = { later = store.toggleWatchLater(item); menu = false }) {
-                            Text(if (later) "✓ Смотреть позже" else "＋ Смотреть позже")
-                        }
-                        Button(onClick = {
-                            statusTag = store.cycleItemStatus(item)
-                            menu = false
-                        }) {
-                            Text(statusLabel(statusTag))
                         }
                     }
                 }
@@ -449,12 +459,26 @@ fun DetailsScreen(
 
         // Похожее — только по кнопке «⋯ Ещё»: владелец просил не занимать
         // этим экран карточки (ряд отвлекает от «Смотреть»)
-        if (menu && similar.isNotEmpty()) {
+        if (showSimilar && similar.isNotEmpty()) {
             Box(Modifier.weight(0.45f)) {
                 MediaRow("Похожее", similar, onOpenDetails)
             }
         }
 
         Button(onClick = onBack) { Text("← Назад") }
+    }
+}
+
+/**
+ * Компактная кнопка карточки: 34dp высоты, 13sp — все действия помещаются
+ * в один ряд и не выглядят «огромными» на ТВ (просьба владельца).
+ */
+@Composable
+private fun MiniButton(text: String, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier.height(34.dp),
+    ) {
+        Text(text, fontSize = 13.sp, maxLines = 1)
     }
 }
