@@ -476,6 +476,15 @@ class LocalStore(context: Context) {
         prefs.edit().putString("torrserve_host", v.trim().removeSuffix("/")).apply()
     }
 
+    // ---------- Плеер: автоскрытие панели управления ----------
+
+    /** Секунд до автоскрытия панели плеера (0 = не прятать). Дефолт 20. */
+    fun panelHideSec(): Int = prefs.getString("panel_hide_sec", "20")?.toIntOrNull()?.coerceIn(0, 120) ?: 20
+
+    fun setPanelHideSec(sec: Int) {
+        prefs.edit().putString("panel_hide_sec", sec.toString()).apply()
+    }
+
     // ---------- Плеер: запоминание настроек (как в Just/Next Player) ----------
 
     /** Масштаб картинки: 0 = Вписать, 1 = Растянуть, 2 = Заполнить. */

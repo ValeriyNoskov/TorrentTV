@@ -213,11 +213,18 @@ fun SearchScreen(
             val t = c.title.lowercase().replace('ё', 'е')
             t.length >= 3 && (n.contains(t) || t.contains(n))
         } ?: results.firstOrNull { c -> c.posterUrl.isNotBlank() && n.contains(c.title.lowercase().take(6)) }
-        val item = card ?: MediaItem(
-            id = kotlin.math.abs(("qt-" + name).hashCode()),
-            type = "movie",
-            title = name.substringBefore('[').substringBefore('(').trim().ifBlank { name },
-        )
+        val item = card ?: run {
+            // Заглушка: год и тип — из самой раздачи («…S01…2026» → сериал 2026).
+            // Без этого «Спецы»-сериал 2026 получал постер фильма 2017
+            val year = Regex("""(19|20)\d{2}""").find(name)?.value.orEmpty()
+            val isTv = Regex("""(?i)\bS\d{1,2}\b|\d{1,2}x\d{1,3}\b|сезон|серии|E\d{1,3}\b""").containsMatchIn(name)
+            MediaItem(
+                id = kotlin.math.abs(("qt-" + name).hashCode()),
+                type = if (isTv) "tv" else "movie",
+                title = name.substringBefore('[').substringBefore('(').trim().ifBlank { name },
+                year = year,
+            )
+        }
         return item to (card?.posterUrl ?: "")
     }
 

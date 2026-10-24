@@ -44,10 +44,31 @@ object MediaApi {
     fun enrich(item: MediaItem): MediaItem {
         if (item.title.isBlank()) return item
         val cards = try { KinopoiskClient.search(item.title) } catch (e: Exception) { emptyList() }
-        val card = cards.firstOrNull { c ->
+        // Сопоставление строгое: чужой постер хуже, чем его отсутствие.
+        // «Спецы»-сериал 2026 получали постер фильма 2017 — если год или тип
+        // не совпали, КП-мету НЕ берём
+        val candidates = cards.filter { c ->
             val a = c.title.lowercase().replace('ё', 'е')
             val b = item.title.lowercase().replace('ё', 'е')
             a.isNotBlank() && (a.contains(b) || b.contains(a))
+        }
+        val yearKnown = item.year.isNotBlank()
+        val card = candidates.filter { c ->
+            // Тип: не берём фильм вместо сериала и наоборот
+            c.type == item.type
+        }.filter { c ->
+            when {
+                // Год известен — только точное совпадение
+                yearKnown -> c.year == item.year
+                // Год неизвестен, а кандидаты спорят (разные годы/типы вокруг
+                // одного названия — «Спецы» 2017 фильм и 2026 сериал) —
+                // однозначности нет, КП-мету не берём
+                candidates.distinctBy { it.year to it.type }.size > 1 -> false
+                else -> true
+            }
+        }.maxByOrNull { c ->
+            // Приоритет: совпадение года > точность названия
+            ((if (c.year == item.year) 2 else 0) + if (c.title.equals(item.title, true)) 1 else 0).toDouble()
         }
         var poster = card?.posterUrl.orEmpty()
         var overview = card?.overview.orEmpty()

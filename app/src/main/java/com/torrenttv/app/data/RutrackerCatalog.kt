@@ -108,12 +108,25 @@ object RutrackerrCatalog {
     /** Жанры-категории Рутрекера (id = hashCode слага — по нему находим slug). */
     fun genres(): List<Genre> = GENRES.map { (slug, name) -> Genre(genreId(slug), name) }
 
+    /** Жанры для фильтров каталога: пары (slug, название). */
+    fun genreList(): List<Pair<String, String>> = GENRES
+
+    /** Базовый адрес трекера (для сборки URL фильтров). */
+    val baseUrl: String get() = BASE
+
+    /** Страница каталога по готовому URL (категория/год/популярное). */
+    fun categoryByUrl(url: String): List<MediaItem> = category(url, 1)
+
     private fun genreId(slug: String): Int = kotlin.math.abs(("rtg-" + slug).hashCode())
 
     fun byGenre(id: Int, page: Int): List<MediaItem> {
         val slug = GENRES.firstOrNull { genreId(it.first) == id }?.first ?: return emptyList()
         return category("$BASE/$slug/", page)
     }
+
+    /** Каталог по году: серверный xfsearch трекера (/xfsearch/year/2024/). */
+    fun byYear(year: String, page: Int): List<MediaItem> =
+        if (year.isBlank()) emptyList() else category("$BASE/xfsearch/year/$year/", page)
 
     /** Разбор страницы категории/подобного списка: карточки rutef_movie. */
     private fun category(url: String, page: Int): List<MediaItem> {
@@ -133,7 +146,18 @@ object RutrackerrCatalog {
             val m = Regex("""^(.*?)\s*\((\d{4})\)""").find(titleAll)
             val title = (m?.groupValues?.get(1) ?: titleAll).trim()
             val year = m?.groupValues?.get(2) ?: ""
-            val isTv = b.contains("/serialy/")
+            // Страна текстом: «<b>Страна:</b> США, Великобритания»
+            val country = Regex("""Страна:</b>\s*([^<]+)""").find(b)
+                ?.groupValues?.get(1)?.trim().orEmpty()
+            // Жанры карточки — ссылки в блоке rutef_genrus: href="/boeviki/">Боевики</a>
+            val genrusBlock = b.substringAfter("rutef_genrus", "").substringBefore("</div>")
+            val genres = Regex("""href="/([a-z_]+)/"""").findAll(genrusBlock)
+                .map { it.groupValues[1] }
+                .filter { it != "xfsearch" }
+                .distinct()
+                .toList()
+            // Сериал, если среди жанров есть «Сериалы» (/serialy/)
+            val isTv = genres.contains("serialy")
             val poster = Regex("""<img src="([^"]+)"""").find(b)?.groupValues?.get(1)
                 ?.takeIf { !it.contains("none_poster") }
                 ?.let { if (it.startsWith("http")) it else BASE + it } ?: ""
@@ -143,6 +167,8 @@ object RutrackerrCatalog {
                 title = title,
                 year = year,
                 posterUrl = poster,
+                country = country,
+                rtGenres = genres,
                 // Служебный адрес страницы раздачи — для «Похожего»
                 originalTitle = "@rt:" + (if (url.startsWith("http")) url else BASE + url),
             )

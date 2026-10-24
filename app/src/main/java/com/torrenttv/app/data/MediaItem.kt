@@ -17,6 +17,10 @@ data class MediaItem(
     val overview: String = "",
     val imdbId: String = "",
     val originalTitle: String = "",
+    /** Страна производства текстом («США, Великобритания») — Рутрекер-каталог. */
+    val country: String = "",
+    /** Slug'и жанров Рутрекера (/boeviki/, /serialy/…) для фильтров каталога. */
+    val rtGenres: List<String> = emptyList(),
     /** Оригинальный язык (tmdb original_language): «ru» — русское производство. */
     val originalLanguage: String = "",
 ) {
@@ -38,6 +42,8 @@ data class MediaItem(
         .put("overview", overview)
         .put("imdbId", imdbId)
         .put("originalTitle", originalTitle)
+        .put("country", country)
+        .put("rtGenres", JSONArray(rtGenres))
         .put("originalLanguage", originalLanguage)
 
     companion object {
@@ -58,6 +64,10 @@ data class MediaItem(
             overview = o.safeString("overview"),
             imdbId = o.safeString("imdbId"),
             originalTitle = o.safeString("originalTitle"),
+            country = o.safeString("country"),
+            rtGenres = o.optJSONArray("rtGenres")?.let { arr ->
+                (0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }
+            } ?: emptyList(),
             originalLanguage = o.safeString("originalLanguage"),
         )
     }

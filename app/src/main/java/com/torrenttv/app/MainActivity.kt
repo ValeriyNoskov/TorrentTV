@@ -24,6 +24,7 @@ import com.torrenttv.app.ui.CatalogScreen
 import com.torrenttv.app.ui.DetailsScreen
 import com.torrenttv.app.ui.EpisodesScreen
 import com.torrenttv.app.ui.TrailerScreen
+import com.torrenttv.app.ui.TorrentsScreen
 import com.torrenttv.app.ui.FavoritesScreen
 import com.torrenttv.app.ui.ContinueScreen
 import com.torrenttv.app.ui.WatchLaterScreen
@@ -44,6 +45,7 @@ sealed interface Screen {
     data object Movies : Screen
     data object TvShows : Screen
     data object Shows : Screen
+    data object Torrents : Screen
     data object Favorites : Screen
     data object Continue : Screen
     data object WatchLater : Screen
@@ -147,6 +149,7 @@ private fun App() {
             Screen.Movies -> "Фильмы"
             Screen.TvShows -> "Сериалы"
             Screen.Shows -> "Шоу"
+            Screen.Torrents -> "Торренты"
             Screen.Favorites -> "Избранное"
             Screen.Continue -> "Продолжить"
             Screen.WatchLater -> "Смотреть позже"
@@ -223,6 +226,7 @@ private fun App() {
                 Screen.Movies -> CatalogScreen(mode = "movies", onOpenDetails = { screen = Screen.Details(it) })
                 Screen.TvShows -> CatalogScreen(mode = "tv", onOpenDetails = { screen = Screen.Details(it) })
                 Screen.Shows -> CatalogScreen(mode = "shows", onOpenDetails = { screen = Screen.Details(it) })
+                Screen.Torrents -> TorrentsScreen(onOpenDetails = { screen = Screen.Details(it) })
                 Screen.Favorites -> FavoritesScreen(onOpenDetails = { screen = Screen.Details(it) })
                 Screen.Continue -> ContinueScreen(onOpenDetails = { screen = Screen.Details(it) })
                 Screen.WatchLater -> WatchLaterScreen(onOpenDetails = { screen = Screen.Details(it) })

@@ -137,14 +137,18 @@ fun OnlinePlayerScreen(
     var errorMsg by remember { mutableStateOf("") }
     var bufPct by remember { mutableIntStateOf(0) }
     // Панель контролов при действии пульта (счётчик действий — триггер показа).
-    // Видна сразу при входе — пользователь видит, что плеер жив
+    // Видна сразу при входе — пользователь видит, что плеер жив.
+    // Время автоскрытия — настройка в ⚙ (дефолт 20 сек, 0 = не прятать)
     var panelTick by remember { mutableStateOf(1) }
     var showPanel by remember { mutableStateOf(true) }
-    LaunchedEffect(panelTick) {
+    var panelHideSec by remember { mutableStateOf(store.panelHideSec()) }
+    LaunchedEffect(panelTick, panelHideSec) {
         if (panelTick > 0 && !showSettings && !showQuality && !showTrackMenu) {
             showPanel = true
-            kotlinx.coroutines.delay(4000)
-            if (!showSettings && !showQuality && !showTrackMenu) showPanel = false
+            if (panelHideSec > 0) {
+                kotlinx.coroutines.delay(panelHideSec * 1000L)
+                if (!showSettings && !showQuality && !showTrackMenu) showPanel = false
+            }
         }
     }
     LaunchedEffect(showPanel) {
@@ -872,6 +876,39 @@ fun OnlinePlayerScreen(
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = if (maxQuality == q) Color(0xFFF5B942) else Color(0xFF1F2430),
                             contentColor = if (maxQuality == q) Color(0xFF0E1116) else Color.White,
+                            focusedContainerColor = Color(0xFFFFD07A),
+                            focusedContentColor = Color(0xFF0E1116),
+                            pressedContainerColor = Color(0xFFE0A82E),
+                            pressedContentColor = Color(0xFF0E1116),
+                        ),
+                    ) {
+                        Text(
+                            label,
+                            fontSize = 15.sp,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Скрытие панели",
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+                val hideOptions = listOf(10 to "10 сек", 20 to "20 сек", 30 to "30 сек", 60 to "1 мин", 0 to "Не прятать")
+                for ((sec, label) in hideOptions) {
+                    androidx.tv.material3.Surface(
+                        onClick = { panelHideSec = sec; store.setPanelHideSec(sec); panelTick++ },
+                        modifier = Modifier
+                            .width(220.dp)
+                            .padding(vertical = 3.dp)
+                            .mouseClick { panelHideSec = sec; store.setPanelHideSec(sec); panelTick++ },
+                        shape = clickableSurfaceShape(RoundedCornerShape(8.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = if (panelHideSec == sec) Color(0xFFF5B942) else Color(0xFF1F2430),
+                            contentColor = if (panelHideSec == sec) Color(0xFF0E1116) else Color.White,
                             focusedContainerColor = Color(0xFFFFD07A),
                             focusedContentColor = Color(0xFF0E1116),
                             pressedContainerColor = Color(0xFFE0A82E),

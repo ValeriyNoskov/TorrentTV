@@ -679,11 +679,15 @@ private fun VideoPlayer(
     var showPanel by remember { mutableStateOf(true) }
     var panelTick by remember { mutableStateOf(0) }
     val playFocus = remember { FocusRequester() }
-    LaunchedEffect(panelTick) {
+    // Время автоскрытия — настройка из ⚙ (дефолт 20 сек, 0 = не прятать)
+    var panelHideSec by remember { mutableStateOf(store.panelHideSec()) }
+    LaunchedEffect(panelTick, panelHideSec) {
         if (panelTick > 0 && !showFiles && !showGear && !showTrackMenu) {
             showPanel = true
-            kotlinx.coroutines.delay(4500)
-            if (!showFiles && !showGear && !showTrackMenu) showPanel = false
+            if (panelHideSec > 0) {
+                kotlinx.coroutines.delay(panelHideSec * 1000L)
+                if (!showFiles && !showGear && !showTrackMenu) showPanel = false
+            }
         }
     }
     runCatching { LaunchedEffect(showPanel) { if (showPanel) playFocus.requestFocus() } }
@@ -1249,6 +1253,42 @@ private fun VideoPlayer(
                         focusedContentColor = Color.Black,
                     ),
                 ) { Text("⤴ Внешний плеер", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
+                Spacer(Modifier.height(4.dp))
+                // Скрытие панели: цикл по вариантам прямо в меню (выбор сохраняется)
+                androidx.tv.material3.Surface(
+                    onClick = {
+                        // Цикл 10 → 20 → 30 → 60 → не прятать → 10 …
+                        val options = listOf(10, 20, 30, 60, 0)
+                        val cur = options.indexOf(panelHideSec).takeIf { it >= 0 } ?: 1
+                        panelHideSec = options[(cur + 1) % options.size]
+                        store.setPanelHideSec(panelHideSec)
+                        panelTick++
+                        gearMsg = "Панель скрывается через " + when (panelHideSec) {
+                            0 -> "никогда"
+                            60 -> "1 мин"
+                            else -> "$panelHideSec сек"
+                        }
+                    },
+                    shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+                    ),
+                    colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                        containerColor = Color.Transparent,
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContentColor = Color.Black,
+                    ),
+                ) {
+                    Text(
+                        "🕘 Скрытие панели: " + when (panelHideSec) {
+                            0 -> "не прятать"
+                            60 -> "1 мин"
+                            else -> "$panelHideSec сек"
+                        },
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                    )
+                }
             }
         }
         if (gearMsg.isNotBlank() && seekInfo.isBlank() && errorMsg.isBlank()) {
