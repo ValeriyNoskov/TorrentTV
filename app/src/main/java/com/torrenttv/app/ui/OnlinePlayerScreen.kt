@@ -136,6 +136,11 @@ fun OnlinePlayerScreen(
     var playState by remember { mutableStateOf(Player.STATE_IDLE) }
     // Авто-следующая серия: серия закончилась — отсчёт и переход (как в движковом)
     var nextCountdown by remember { mutableStateOf<Int?>(null) }
+    // Скорость воспроизведения: подпись кнопки панели (значение — speeds[speedIdx])
+    var speedIdx by remember { mutableStateOf(0) }
+    var speedLabel by remember { mutableStateOf("1×") }
+    // Скорость нужно переустанавливать после пересоздания плеера — перенесено
+    // ниже, после объявления player (см. LaunchedEffect(player, retryTick))
     LaunchedEffect(playState) {
         if (playState == Player.STATE_ENDED && files.size > 1 &&
             currentFile >= 0 && currentFile + 1 < files.size
@@ -201,6 +206,8 @@ fun OnlinePlayerScreen(
             .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(httpFactory))
             .build()
             .apply {
+                // Скорость выбранная в панели — переживает пересоздание плеера
+                setPlaybackSpeed(listOf(1f, 1.25f, 1.5f, 2f, 0.75f)[speedIdx])
                 // Русский звук по умолчанию (дубляж), если дорожки размечены
                 trackSelectionParameters = trackSelectionParameters
                     .buildUpon()
@@ -388,6 +395,37 @@ fun OnlinePlayerScreen(
         }
         player.addListener(listener)
         onDispose { player.removeListener(listener) }
+    }
+
+    // Детектор зависания стрима: играет, но позиция И буфер стоят 30+ сек —
+    // тихо перезапускаем (TorrServe иногда залипает; раньше — только руками)
+    LaunchedEffect(player, retryTick) {
+        var stuck = 0
+        var lastPos = -1L
+        var lastBuf = -1L
+        while (true) {
+            kotlinx.coroutines.delay(5000)
+            if (!player.isPlaying) { stuck = 0; continue }
+            val pos = player.currentPosition
+            val buf = player.bufferedPosition
+            if (pos == lastPos && buf == lastBuf) {
+                stuck++
+                if (stuck >= 6) { // 6 × 5 сек = 30 секунд без движения
+                    com.torrenttv.app.data.AppLog.log(
+                        "player",
+                        "стрим завис (30 сек без движения, pos=$pos) — авто-перезапуск",
+                    )
+                    seekInfo = "🔄 Стрим завис — перезапускаю…"
+                    panelTick++
+                    retryTick++ // пересоздаёт плеер; позиция подтянется из «Продолжить»
+                    break
+                }
+            } else {
+                stuck = 0
+                lastPos = pos
+                lastBuf = buf
+            }
+        }
     }
 
     // ---------- Единый обработчик пульта: работает при ЛЮБОМ фокусе ----------
@@ -631,6 +669,7 @@ fun OnlinePlayerScreen(
             var posMs by remember { mutableStateOf(0L) }
             var durMs by remember { mutableStateOf(0L) }
             var bufFrac by remember { mutableStateOf(0f) }
+            // «Пропустить интро» — только в первые 90 сек (ROADMAP №6)
             LaunchedEffect(panelTick) {
                 while (true) {
                     posMs = player.currentPosition
@@ -638,6 +677,28 @@ fun OnlinePlayerScreen(
                     bufFrac = player.bufferedPercentage / 100f
                     playing = player.isPlaying
                     kotlinx.coroutines.delay(400)
+                }
+            }
+            if (posMs in 15_000L..90_000L) {
+                Box(
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 32.dp, bottom = 110.dp),
+                ) {
+                    androidx.tv.material3.Surface(
+                        onClick = {
+                            player.seekTo(90_000L)
+                            seekInfo = "⏭ Интро пропущено"
+                            panelTick++
+                        },
+                        shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+                        colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xCC1F2430),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContentColor = Color(0xFF0E1116),
+                        ),
+                    ) { Text("⏭ Пропустить интро", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) }
                 }
             }
             Column(
@@ -782,6 +843,16 @@ fun OnlinePlayerScreen(
                     }
                     Spacer(Modifier.weight(1f))
                     Btn("⏱") { showJump = true; panelTick++ }
+                    Spacer(Modifier.width(10.dp))
+                    // Скорость: цикл 1× → 1.25× → 1.5× → 2× → 0.75× → 1× (ROADMAP №8)
+                    Btn(speedLabel) {
+                        val speeds = listOf(1f, 1.25f, 1.5f, 2f, 0.75f)
+                        speedIdx = (speedIdx + 1) % speeds.size
+                        player.setPlaybackSpeed(speeds[speedIdx])
+                        speedLabel = if (speeds[speedIdx] == 1f) "1×" else "${speeds[speedIdx]}×"
+                        seekInfo = "Скорость ${speeds[speedIdx]}×"
+                        panelTick++
+                    }
                     Spacer(Modifier.width(10.dp))
                     Btn("🎵") { showTrackMenu = true; panelTick++ }
                     Spacer(Modifier.width(10.dp))
