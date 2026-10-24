@@ -120,7 +120,15 @@ object MediaApi {
 
     /** Сезоны и эпизоды сериала. */
     fun seasons(item: MediaItem): List<Season> =
-        src({ KinopoiskClient.seasons(item) }, { TmdbClient.seasons(item) })
+        src({ KinopoiskClient.seasons(item) }, { TmdbClient.seasons(item) }).ifEmpty {
+            // Фолбэк: карточка без кинопоиск-id (торрент/рутрекер) — КП по такому id
+            // отдаёт пустоту. Ищем тайтл поиском и берём сезоны по найденному id.
+            val found = KinopoiskClient.search(item.title).firstOrNull { cand ->
+                cand.type == "tv" && cand.title.equals(item.title, ignoreCase = true)
+            } ?: KinopoiskClient.search(item.title).firstOrNull { it.type == "tv" }
+            found?.let { AppLog.log("episodes", "сезоны по найденному id: «${item.title}» → «${it.title}» id=${it.id}") }
+            found?.let { KinopoiskClient.seasons(it) } ?: emptyList()
+        }
 
     fun movieGenres(): List<Genre> =
         src({ KinopoiskClient.movieGenres() }, { TmdbClient.movieGenres() }, { RutrackerrCatalog.genres() })

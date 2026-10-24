@@ -32,6 +32,7 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.torrenttv.app.data.AppLog
 import com.torrenttv.app.data.Episode
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
@@ -64,6 +65,7 @@ fun EpisodesScreen(
     LaunchedEffect(item) {
         seasons = withContext(Dispatchers.IO) { MediaApi.seasons(item) }
         loading = false
+        AppLog.log("episodes", "«${item.title}»: загружено сезонов ${seasons.size} (id=${item.id})")
         if (seasons.isNotEmpty() && selected == null) {
             selected = initialSeason?.takeIf { s -> seasons.any { it.number == s } }
                 ?: seasons.first().number

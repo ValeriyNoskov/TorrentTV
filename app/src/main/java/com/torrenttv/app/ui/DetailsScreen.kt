@@ -214,7 +214,10 @@ fun DetailsScreen(
                     // Сериал — кнопка «Эпизоды» всегда на виду (Zona-стиль),
                     // не спрятана в меню
                     if (item.type == "tv") {
-                        Button(onClick = { onEpisodes(0) }) { Text("🎬 Эпизоды") }
+                        Button(onClick = {
+                            com.torrenttv.app.data.AppLog.log("ui", "нажал: «Эпизоды» на карточке «${item.title}»")
+                            onEpisodes(0)
+                        }) { Text("🎬 Эпизоды") }
                         Spacer(Modifier.width(16.dp))
                     }
                     // Трейлер: играет ВНУТРИ приложения (поиск по Rutube API,
