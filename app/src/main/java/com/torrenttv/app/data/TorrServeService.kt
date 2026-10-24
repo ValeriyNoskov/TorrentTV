@@ -40,6 +40,7 @@ object TorrServeService {
 
     /** Один раз за сессию пробуем сами открыть TorrServe (его Activity стартует сервер). */
     @Volatile private var launchAttempted = false
+    @Volatile private var lastLaunchAt = 0L
 
     /**
      * Готов ли TorrServe к работе: отвечает на /echo. Если установлен, но спит —
@@ -49,18 +50,33 @@ object TorrServeService {
     fun ensureRunning(ctx: Context, host: String, waitMs: Long = 10_000L): Boolean {
         if (echo(host)) return true
         if (!isInstalled(ctx)) return false
-        if (!launchAttempted) {
-            launchAttempted = true
-            runCatching {
-                ctx.packageManager.getLaunchIntentForPackage(PACKAGE)?.let { intent ->
-                    intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                    ctx.startActivity(intent)
-                }
+        // Повторные попытки запуска: раньше — один раз за процесс, после
+        // первого неуспеха TorrServe не поднимался до перезапуска приложения
+        val now = System.currentTimeMillis()
+        if (launchAttempted && now - lastLaunchAt < 60_000L) return false
+        launchAttempted = true
+        lastLaunchAt = now
+        runCatching {
+            ctx.packageManager.getLaunchIntentForPackage(PACKAGE)?.let { intent ->
+                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                ctx.startActivity(intent)
             }
-            val deadline = System.currentTimeMillis() + waitMs
-            while (System.currentTimeMillis() < deadline) {
-                Thread.sleep(2000)
-                if (echo(host)) return true
+        }
+        val deadline = System.currentTimeMillis() + waitMs
+        while (System.currentTimeMillis() < deadline) {
+            Thread.sleep(2000)
+            if (echo(host)) {
+                // TorrServe поднялся — сразу возвращаем пользователя в ВНосКино:
+                // старт чужой активити выносит её вперёд, оставлять там нельзя
+                runCatching {
+                    val back = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)
+                    back?.addFlags(
+                        android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                            android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                    )
+                    ctx.startActivity(back)
+                }
+                return true
             }
         }
         return false

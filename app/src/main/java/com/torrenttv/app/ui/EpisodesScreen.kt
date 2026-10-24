@@ -66,13 +66,17 @@ fun EpisodesScreen(
     var loading by remember { mutableStateOf(true) }
     var selected by remember { mutableStateOf<Int?>(null) } // null = первый сезон
     var tick by remember { mutableStateOf(0) } // перерисовка статусов после поиска источника
+    // Причина пустого списка («TorrServe не отвечает») — вместо немого «не найдены»
+    var failReason by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(item) {
         seasons = withContext(Dispatchers.IO) { MediaApi.seasons(item) }
         // Главный источник при торрентовом показе — сама раздача: файлы в ней и
         // есть серии. КП/TMDB тут только украшение (названия серий), когда доступны.
         if (seasons.isEmpty()) {
-            seasons = withContext(Dispatchers.IO) { seasonsFromTorrents(item, store, context) }
+            val (fromTorrents, reason) = withContext(Dispatchers.IO) { seasonsFromTorrents(item, store, context) }
+            seasons = fromTorrents
+            failReason = reason
             if (seasons.isNotEmpty()) {
                 AppLog.log("episodes", "«${item.title}»: сезоны из раздачи — ${seasons.sumOf { it.episodes.size }} серий")
             }
@@ -105,8 +109,9 @@ fun EpisodesScreen(
             )
 
             seasons.isEmpty() -> Text(
-                // Коротко без объяснений причин — детали в логе
-                if (KinopoiskClient.lastFailed) "Эпизоды временно недоступны" else "Сезоны не найдены",
+                // Причина вместо немого «не найдены»: TorrServe / лимит КП / нет раздач
+                failReason
+                    ?: (if (KinopoiskClient.lastFailed) "Эпизоды временно недоступны" else "Сезоны не найдены"),
                 color = Color.White.copy(alpha = 0.6f),
                 fontSize = 15.sp,
                 modifier = Modifier.padding(top = 10.dp),
@@ -207,9 +212,16 @@ private suspend fun seasonsFromTorrents(
     item: MediaItem,
     store: LocalStore,
     context: android.content.Context,
-): List<Season> {
+): Pair<List<Season>, String?> {
     val host = store.torrServeHost()
-    if (host.isBlank() || !TorrServeService.ensureRunning(context, host)) return emptyList()
+    if (host.isBlank()) {
+        AppLog.log("episodes", "torrserve: адрес не задан — эпизоды из раздачи недоступны")
+        return emptyList<Season>() to "TorrServe не настроен (Настройки → TorrServe)"
+    }
+    if (!TorrServeService.ensureRunning(context, host)) {
+        AppLog.log("episodes", "torrserve: не отвечает ($host) — эпизоды из раздачи недоступны")
+        return emptyList<Season>() to "TorrServe не отвечает — откройте приложение TorrServe и повторите"
+    }
     val found: List<TorrentResult> = try {
         // Полный набор параметров, как в SmartPlayScreen: jackett/приватные
         // трекеры/исключения — иначе поиск сужен и «Спецы» не находятся
@@ -248,9 +260,9 @@ private suspend fun seasonsFromTorrents(
         if (bySeason.isEmpty()) continue
         val magnet = TorrentSearch.toMagnet(r)
         for (eps in bySeason.values) for (ep in eps) store.saveMagnet(item, magnet, ep.sourceSuffix)
-        return bySeason.map { (num, eps) -> Season(num, eps.sortedBy { it.episode }) }.sortedBy { it.number }
+        return bySeason.map { (num, eps) -> Season(num, eps.sortedBy { it.episode }) }.sortedBy { it.number } to null
     }
-    return emptyList()
+    return emptyList<Season>() to "Раздач с сериями не нашлось"
 }
 
 @Composable
