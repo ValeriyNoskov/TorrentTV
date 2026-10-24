@@ -328,13 +328,33 @@ object KinopoiskClient {
     fun tvByGenre(genreId: Int, page: Int = 1): List<MediaItem> =
         byType(page, type = "TV_SERIES", order = "RATING", genreId = genreId)
 
-    private fun byType(page: Int, type: String, order: String, genreId: Int? = null): List<MediaItem> {
+    /** Id страны «Россия» в КП API — для полок русского кино. */
+    private val RUSSIA_COUNTRY_ID = 34
+
+    /** Русские фильмы: КП отдаёт только производство РФ (страна=34). */
+    fun popularRussianMovies(page: Int = 1): List<MediaItem> =
+        byType(page, type = "FILM", order = "NUM_VOTE", countryId = RUSSIA_COUNTRY_ID)
+
+    /** Русские сериалы тем же фильтром страны. */
+    fun popularRussianTv(page: Int = 1): List<MediaItem> =
+        byType(page, type = "TV_SERIES", order = "NUM_VOTE", countryId = RUSSIA_COUNTRY_ID)
+
+    private fun byType(
+        page: Int,
+        type: String,
+        order: String,
+        genreId: Int? = null,
+        countryId: Int? = null,
+    ): List<MediaItem> {
         val params = mutableMapOf(
             "type" to type,
             "order" to order,
             "page" to page.toString(),
         )
         genreId?.let { params["genres"] = it.toString() }
+        // Страна производства: без неё «русская полка» показывала мировые
+        // тренды (жалоба «на Главной только иностранщина»)
+        countryId?.let { params["countries"] = it.toString() }
         return parseItems(get("/api/v2.2/films", params), "items")
     }
 

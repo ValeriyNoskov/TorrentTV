@@ -131,24 +131,30 @@ object MediaApi {
     fun newTv(page: Int = 1): List<MediaItem> =
         pick({ RutrackerrCatalog.newItems(page) }, { KinopoiskClient.popularTv(page) }) ?: emptyList()
 
-    /** Русские фильмы (производство РФ — КП сам даёт страну, TMDB — по языку). */
+    /** Страна производства по тексту трекера («Россия, США»). */
+    private fun isRussianCountry(c: String): Boolean =
+        c.contains("Россия", ignoreCase = true) ||
+            c.contains("СССР", ignoreCase = true) ||
+            c.contains("Русск", ignoreCase = true)
+
+    /** Русские фильмы: КП с фильтром страны (34), иначе — трекер с отбором по стране. */
     fun russianMovies(page: Int = 1): List<MediaItem> =
         pick(
-            { RutrackerrCatalog.popularMovies(page) },
+            { KinopoiskClient.popularRussianMovies(page) },
             {
-                KinopoiskClient.popularMovies(page).let { all ->
-                    val ru = all.filter { it.originalLanguage == "ru" }
-                    // У КП язык может быть не заполнен — лучше показать все, чем пусто
-                    if (ru.isEmpty()) all else ru
-                }
+                // Трекер отдаёт всё популярное подряд — оставляем только
+                // раздачи с российской/советской страной производства
+                RutrackerrCatalog.popularMovies(page).filter { isRussianCountry(it.country) }
             },
         ) ?: emptyList()
 
-    /** Русские сериалы. */
+    /** Русские сериалы: тот же фильтр страны. */
     fun russianTv(page: Int = 1): List<MediaItem> =
         pick(
-            { RutrackerrCatalog.popularTv(page) },
-            { KinopoiskClient.popularTv(page).filter { it.originalLanguage == "ru" } },
+            { KinopoiskClient.popularRussianTv(page) },
+            {
+                RutrackerrCatalog.popularTv(page).filter { isRussianCountry(it.country) }
+            },
         ) ?: emptyList()
 
     /** Зарубежные фильмы: популярные минус русские. */

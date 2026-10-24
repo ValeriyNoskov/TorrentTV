@@ -170,9 +170,44 @@ fun PlayerScreen(
                             (System.currentTimeMillis() - at) to n
                         }.getOrNull()
                     }
+                    // Хвост файла: у MKV оглавление (cues) лежит в конце —
+                    // без него ExoPlayer не находит индекс и падает
+                    // ERROR_CODE_TIMEOUT («Полдень» не запускался)
+                    val tail = withContext(Dispatchers.IO) {
+                        runCatching {
+                            val u = com.torrenttv.app.data.TorrServeService.streamUrl(tsHost, ts.hash, file)
+                            val c = java.net.URL(u).openConnection() as java.net.HttpURLConnection
+                            c.connectTimeout = 20_000
+                            c.readTimeout = 90_000
+                            c.requestMethod = "HEAD"
+                            c.connect()
+                            val size = c.contentLengthLong
+                            c.disconnect()
+                            if (size <= 0) return@runCatching Triple(-1L, -1L, -1L)
+                            val from = (size - 1_500_000L).coerceAtLeast(0L)
+                            val g = java.net.URL(u).openConnection() as java.net.HttpURLConnection
+                            g.connectTimeout = 20_000
+                            g.readTimeout = 90_000
+                            g.setRequestProperty("Range", "bytes=$from-${size - 1}")
+                            g.connect()
+                            val at = System.currentTimeMillis()
+                            var got = 0L
+                            val buf = ByteArray(131_072)
+                            g.inputStream.use { ins ->
+                                while (got < 1_500_000L) {
+                                    val n = ins.read(buf)
+                                    if (n <= 0) break
+                                    got += n
+                                }
+                            }
+                            g.disconnect()
+                            Triple(size, got, System.currentTimeMillis() - at)
+                        }.getOrNull()
+                    }
                     com.torrenttv.app.data.AppLog.log(
                         "player",
-                        "torrserve: прогрев ${warm?.first ?: -1} мс, байт ${warm?.second ?: -1}",
+                        "torrserve: прогрев ${warm?.first ?: -1} мс, байт ${warm?.second ?: -1}; " +
+                            "хвост: размер=${tail?.first ?: -1} прочитано=${tail?.second ?: -1} за ${tail?.third ?: -1} мс",
                     )
                     torrLink = com.torrenttv.app.data.TorrServeService.streamUrl(tsHost, ts.hash, file)
                     // Серии для переключения в плеере: видео-файлы в естественном

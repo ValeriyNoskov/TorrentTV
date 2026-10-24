@@ -89,6 +89,8 @@ https://stream.smotrim.ru/hls/fasttv03/playlist_3.m3u8
 https://live-vgtrksmotrim.cdnvideo.ru/vgtrksmotrim/smotrim-live-01.smil/playlist.m3u8
 
 # --- Сериалы ---
+#EXTINF:-1 tvg-logo="https://i.imgur.com/cQN0P2B.png" group-title="Кино",Русский роман
+http://stream.mcquack.net/266/index.m3u8
 #EXTINF:-1 tvg-logo="https://i.imgur.com/FfKBvz5.png" group-title="Сериалы",НТВ-Хит
 http://178.134.1.158:8081/ntvhit/index.m3u8
 #EXTINF:-1 tvg-logo="https://i.imgur.com/4EFh0nu.png" group-title="Сериалы",Любовь (Smotrim)

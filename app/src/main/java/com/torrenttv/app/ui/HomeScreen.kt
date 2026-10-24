@@ -145,7 +145,27 @@ fun HomeScreen(
                     }
                 }
             }
-            // Тренды — первыми, это витрина
+            // Русское — первыми: раньше на Главной были только мировые
+            // тренды, и выглядело как «одна иностранщина»
+            item {
+                PagedMediaRow(
+                    title = "🇷🇺 Русские фильмы",
+                    loader = { page -> MediaApi.russianMovies(page) },
+                    onOpen = onOpenDetails,
+                    filterFn = { store.isAllowed(it) },
+                    onTitleClick = { onOpenCatalog("movies") },
+                )
+            }
+            item {
+                PagedMediaRow(
+                    title = "🇷🇺 Русские сериалы",
+                    loader = { page -> MediaApi.russianTv(page) },
+                    onOpen = onOpenDetails,
+                    filterFn = { store.isAllowed(it) },
+                    onTitleClick = { onOpenCatalog("tv") },
+                )
+            }
+            // Тренды — витрина мира
             item {
                 PagedMediaRow(
                     title = "🔥 Сейчас в тренде",

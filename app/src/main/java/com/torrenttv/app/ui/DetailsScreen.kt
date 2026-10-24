@@ -447,8 +447,9 @@ fun DetailsScreen(
             }
         }
 
-        // Похожее
-        if (similar.isNotEmpty()) {
+        // Похожее — только по кнопке «⋯ Ещё»: владелец просил не занимать
+        // этим экран карточки (ряд отвлекает от «Смотреть»)
+        if (menu && similar.isNotEmpty()) {
             Box(Modifier.weight(0.45f)) {
                 MediaRow("Похожее", similar, onOpenDetails)
             }
