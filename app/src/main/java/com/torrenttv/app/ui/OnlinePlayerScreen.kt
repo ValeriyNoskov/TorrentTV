@@ -137,7 +137,14 @@ fun OnlinePlayerScreen(
             if (!showSettings && !showQuality && !showTrackMenu) showPanel = false
         }
     }
-    LaunchedEffect(showPanel) { if (showPanel) runCatching { playBtnFocus.requestFocus() } }
+    LaunchedEffect(showPanel) {
+        if (showPanel) {
+            // Задержка: PlayerView (AndroidView) запрашивает native-фокус в
+            // factory и перебивает фокус-запрос — ставим ▶ после него
+            kotlinx.coroutines.delay(200)
+            runCatching { playBtnFocus.requestFocus() }
+        }
+    }
 
     val player = remember(link.url, retryTick) {
         // CDN проверяет Referer: у Filmix — filmix.ac, у HDRezka — её зеркало.
@@ -319,12 +326,12 @@ fun OnlinePlayerScreen(
             return false
         }
         // Панель видима — стрелки/OK управляют ФОКУСОМ по кнопкам панели
-        // (как в Zona), глобальные действия пульта уступают
+        // (как в Zona), глобальные действия пульта уступают.
+        // ↑ настройки НЕ открывает — только шестерёнка ⚙ (жалоба владельца)
         if (showPanel) {
             when (keyCode) {
-                KeyEvent.KEYCODE_DPAD_UP -> { showSettings = !showSettings; panelTick++; return true }
                 KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
-                KeyEvent.KEYCODE_DPAD_DOWN,
+                KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> return false
             }
         }
@@ -337,8 +344,8 @@ fun OnlinePlayerScreen(
                 panelTick++
                 true
             }
-            KeyEvent.KEYCODE_DPAD_UP -> { showSettings = !showSettings; panelTick++; true }
-            KeyEvent.KEYCODE_DPAD_DOWN -> { panelTick++; true }
+            // ↑/↓ вне панели — показываем панель (без настроек)
+            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> { panelTick++; true }
             // OK — пауза/продолжить (как в YouTube TV)
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
                 if (player.isPlaying) player.pause() else player.play()
@@ -370,6 +377,14 @@ fun OnlinePlayerScreen(
         onDispose { MainActivity.remoteKeyHandler = null }
     }
 
+    // Выход из плеера: сначала ПАУЗА — иначе после возврата в меню звук
+    // продолжал играть (жалоба «плеер работает в фоне»)
+    fun exitPlayer() {
+        runCatching { player.pause() }
+        com.torrenttv.app.data.AppLog.log("player", "выход: пауза, возвращаюсь в меню")
+        onBack()
+    }
+
     // BACK-иерархия: в Compose активен ПОСЛЕДНИЙ зарегистрированный enabled —
     // поэтому базовый выход первым, оверлеи — после (перекрывают его).
     // Выход из плеера — только двойным BACK (3 сек): первый показ панели /
@@ -378,7 +393,7 @@ fun OnlinePlayerScreen(
         val now = System.currentTimeMillis()
         if (now - backArmedAt < 3000) {
             com.torrenttv.app.data.AppLog.log("player", "back: выход из плеера (подтверждён)")
-            onBack()
+            exitPlayer()
         } else {
             backArmedAt = now
             seekInfo = "⚠ BACK ещё раз — выход"
@@ -409,7 +424,7 @@ fun OnlinePlayerScreen(
         if (!ok) {
             extMsg = "Внешний плеер не найден — установите VLC или MX Player, либо выключите «Всегда внешний плеер» в настройках"
         } else if (auto) {
-            onBack()
+            exitPlayer()
         }
     }
     LaunchedEffect(Unit) {
@@ -570,7 +585,6 @@ fun OnlinePlayerScreen(
                 // позицию по 1 минуте, OK — прыжок. Раньше таймлайн был
                 // только индикатором без прокрутки
                 var jumpTarget by remember { mutableStateOf<Long?>(null) }
-                val tlFocus = remember { FocusRequester() }
                 androidx.tv.material3.Surface(
                     onClick = {
                         jumpTarget?.let { player.seekTo(it) }
@@ -581,7 +595,6 @@ fun OnlinePlayerScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(26.dp)
-                        .focusRequester(tlFocus)
                         .focusable()
                         .onKeyEvent { e: androidx.compose.ui.input.key.KeyEvent ->
                             if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
@@ -693,61 +706,13 @@ fun OnlinePlayerScreen(
                         Btn("☰ Серии (${files.size})") { showFiles = true; panelTick++ }
                     }
                     Spacer(Modifier.weight(1f))
+                    Btn("⏱") { showJump = true; panelTick++ }
+                    Spacer(Modifier.width(10.dp))
                     Btn("🎵") { showTrackMenu = true; panelTick++ }
                     Spacer(Modifier.width(10.dp))
                     Btn("⤴") { openExternal() }
                     Spacer(Modifier.width(10.dp))
                     Btn("⚙") { showQuality = true; panelTick++ }
-                }
-            }
-        }
-
-        // Меню настроек (↑ на пульте): качество, дорожки, внешний плеер
-        if (showSettings) {
-            val firstItemFocus = remember { FocusRequester() }
-            LaunchedEffect(showSettings) { runCatching { firstItemFocus.requestFocus() } }
-            Column(
-                Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 48.dp)
-                    .background(Color(0xF0151B26), RoundedCornerShape(14.dp))
-                    .padding(14.dp),
-            ) {
-                Text(
-                    "Настройки плеера",
-                    color = Color(0xFFF5B942),
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(bottom = 10.dp),
-                )
-                SettingsMenuItem(
-                    label = "Качество: ${maxQuality?.let { "${it}p" } ?: "авто"}",
-                    focusRequester = firstItemFocus,
-                ) {
-                    showSettings = false
-                    showQuality = true
-                }
-                Spacer(Modifier.height(6.dp))
-                SettingsMenuItem(label = "🎵 Дорожки и субтитры") {
-                    showSettings = false
-                    showTrackMenu = true
-                }
-                if (files.size > 1) {
-                    Spacer(Modifier.height(6.dp))
-                    SettingsMenuItem(label = "☰ Серии (${files.size})") {
-                        showSettings = false
-                        showFiles = true
-                    }
-                }
-                Spacer(Modifier.height(6.dp))
-                SettingsMenuItem(label = "⤴ Внешний плеер") {
-                    showSettings = false
-                    openExternal()
-                }
-                Spacer(Modifier.height(6.dp))
-                SettingsMenuItem(label = "⏱ Перейти к…") {
-                    showSettings = false
-                    showJump = true
                 }
             }
         }
