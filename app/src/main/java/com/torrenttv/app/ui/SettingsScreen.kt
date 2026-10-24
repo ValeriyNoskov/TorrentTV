@@ -64,6 +64,7 @@ private const val COUNTRIES_PAGE = 12
 
 /** Разделы настроек: id, заголовок, краткое описание. */
 private val SECTIONS = listOf(
+    Triple("update", "⬆ Обновление", "Проверить и установить новую версию"),
     Triple("search", "🔍 Поиск и фильтры", "Что скрывать из каталогов и поиска"),
     Triple("jackett", "🔗 Jackett", "Дополнительный провайдер автопоиска торрентов"),
     Triple("netcheck", "🩺 Проверка сети", "Какие источники доступны с этого устройства"),
@@ -210,8 +211,8 @@ fun SettingsScreen(onBack: () -> Unit) {
                         )
                     }
 
-                    "player" -> {
-                        // Проверка обновлений вручную (обычно она автоматом при старте)
+                    "update" -> {
+                        // Проверка обновлений — отдельный раздел, не прячем в «Плеере»
                         var updInfo by remember { mutableStateOf<com.torrenttv.app.update.UpdateManager.UpdateInfo?>(null) }
                         var updMsg by remember { mutableStateOf("") }
                         var updBusy by remember { mutableStateOf(false) }
@@ -219,7 +220,11 @@ fun SettingsScreen(onBack: () -> Unit) {
                             title = "⬆ Проверить обновления",
                             value = when {
                                 updBusy -> "Проверяю…"
-                                updInfo != null -> "Доступна v${updInfo!!.version} — нажмите для установки"
+                                updInfo != null ->
+                                    if (com.torrenttv.app.update.UpdateManager.readyToInstall(updInfo!!))
+                                        "v${updInfo!!.version} скачано — нажмите для установки"
+                                    else
+                                        "Доступна v${updInfo!!.version} — нажмите для установки"
                                 updMsg.isNotBlank() -> updMsg
                                 else -> "Текущая: v" + com.torrenttv.app.BuildConfig.VERSION_NAME
                             },
@@ -242,10 +247,20 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 ) { info ->
                                     updInfo = info
                                     updBusy = false
-                                    updMsg = if (info == null) "✓ У вас последняя версия" else ""
+                                    // Найдено — качаем сразу в фоне, установка будет мгновенной
+                                    if (info == null) updMsg = "✓ У вас последняя версия"
+                                    else com.torrenttv.app.update.UpdateManager.startBackgroundDownload(context, info)
                                 }
                             }
                         }
+                        SettingsNote(
+                            "Обновления проверяются автоматически при запуске приложения. " +
+                                "Найденное обновление скачивается в фоне — кнопка «Обновить» " +
+                                "устанавливает его без ожидания."
+                        )
+                    }
+
+                    "player" -> {
                         SettingsRow(
                             title = if (extPlayer) "✅ Всегда внешний плеер" else "⬜ Всегда внешний плеер",
                             value = if (extPlayer) "ВКЛ — видео открывается в VLC/MX Player" else "ВЫКЛ — встроенный плеер",

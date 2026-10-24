@@ -205,6 +205,10 @@ class LocalStore(context: Context) {
     fun lastFile(item: MediaItem): Int =
         prefs.getInt("lastfile:" + item.storeKey, -1)
 
+    /** Серию этой раздачи уже выбирали/смотрели? */
+    fun hasLastFile(item: MediaItem): Boolean =
+        prefs.contains("lastfile:" + item.storeKey)
+
     // ---------- Настройки фильтрации поиска ----------
 
     /** Исключённые жанры (id TMDB). */

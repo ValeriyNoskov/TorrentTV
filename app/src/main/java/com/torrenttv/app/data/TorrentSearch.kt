@@ -178,9 +178,10 @@ object TorrentSearch {
         // Иначе apibay/btdig подсовывают нерелевант с сотней сидов и «Играть сразу»
         // запускает не тот фильм. Если ни один источник не дал релевантного —
         // оставляем как есть (лучше честное «ничего не нашлось», чем мусор).
-        val tokens = (listOfNotNull(query.takeIf { it.isNotBlank() }, altQuery))
+        val tokens = (listOfNotNull(query.takeIf { it.isRealText() }, altQuery))
             .flatMap { it.lowercase().split(Regex("[^a-zа-яё0-9]+")) }
-            .filter { it.length >= 4 }
+            // 3 символа: «спецы», «джокер» — значимые; «и», «на» — нет
+            .filter { it.length >= 3 && it != "null" }
             .distinct()
         val mergedRaw = if (tokens.isNotEmpty()) {
             val rel = calls.map { c -> c.res.filter { r -> tokens.any { r.name.lowercase().contains(it) } } }

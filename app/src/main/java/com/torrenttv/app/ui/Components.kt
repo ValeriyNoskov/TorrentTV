@@ -1,6 +1,8 @@
 package com.torrenttv.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.tv.material3.Button
 import androidx.compose.foundation.layout.Box
@@ -604,6 +606,7 @@ fun SideNav(active: Screen, onTab: (Screen) -> Unit) {
             .width(104.dp)
             .fillMaxHeight()
             .background(Color(0xFF12161F))
+            .verticalScroll(rememberScrollState())
             .padding(vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -624,7 +627,7 @@ fun SideNav(active: Screen, onTab: (Screen) -> Unit) {
         SideBarButton("⭐", "Избранное", Screen.Favorites, active, onTab)
         SideBarButton("🔍", "Поиск", Screen.Search, active, onTab)
         SideBarButton("⚙", "Настройки", Screen.Settings, active, onTab)
-        Spacer(Modifier.weight(1f))
+        // Сразу после настроек — всегда видна, никаких прыжков вниз
         SideBarExitButton()
     }
 }
@@ -672,11 +675,9 @@ fun SideBarButton(
 @Composable
 fun SideBarExitButton() {
     val context = androidx.compose.ui.platform.LocalContext.current
+    var confirm by remember { mutableStateOf(false) }
     androidx.tv.material3.Surface(
-        onClick = {
-            com.torrenttv.app.data.AppLog.log("app", "выход через боковое меню")
-            (context as? android.app.Activity)?.finishAffinity()
-        },
+        onClick = { confirm = true },
         modifier = Modifier.width(92.dp),
         shape = clickableSurfaceShape(RoundedCornerShape(12.dp)),
         colors = ClickableSurfaceDefaults.colors(
@@ -698,6 +699,50 @@ fun SideBarExitButton() {
                 fontSize = 11.sp,
                 maxLines = 1,
             )
+        }
+    }
+
+    // Подтверждение: случайно нажать «Выход» не страшно — фокус на «Отмене»
+    if (confirm) {
+        androidx.activity.compose.BackHandler { confirm = false }
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color(0x66000000)),
+            contentAlignment = Alignment.Center,
+        ) {
+            val cancelFocus = remember { FocusRequester() }
+            LaunchedEffect(Unit) { runCatching { cancelFocus.requestFocus() } }
+            Column(
+                Modifier
+                    .width(420.dp)
+                    .background(Color(0xF0151B26), RoundedCornerShape(14.dp))
+                    .padding(18.dp),
+            ) {
+                Text(
+                    "Выйти из приложения?",
+                    color = Color(0xFFF5B942),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    "Нажали случайно? Выберите «Отмена».",
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(top = 6.dp, bottom = 14.dp),
+                )
+                Row {
+                    androidx.tv.material3.Button(
+                        onClick = { confirm = false },
+                        modifier = Modifier.focusRequester(cancelFocus),
+                    ) { Text("Отмена") }
+                    Spacer(Modifier.width(10.dp))
+                    androidx.tv.material3.Button(onClick = {
+                        com.torrenttv.app.data.AppLog.log("app", "выход через боковое меню (подтверждён)")
+                        (context as? android.app.Activity)?.finishAffinity()
+                    }) { Text("Выйти") }
+                }
+            }
         }
     }
 }

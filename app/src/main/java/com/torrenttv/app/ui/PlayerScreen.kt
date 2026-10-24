@@ -88,6 +88,9 @@ fun PlayerScreen(
     // Серии внутри торрента: (файл, имя) + выбор другой серии
     var torrentFiles by remember { mutableStateOf<List<Pair<Int, String>>>(emptyList()) }
     var restartFileIndex by remember { mutableStateOf<Int?>(null) }
+    // Оверлеи объявлены заранее: состояние нужно уже в LaunchedEffect старта
+    var showFiles by remember { mutableStateOf(false) }
+    var showPanel by remember { mutableStateOf(true) }
 
     // Приоритет движков: 1) TorrServe (внешний), 2) внутренний jlibtorrent
     LaunchedEffect(magnet) {
@@ -191,8 +194,16 @@ fun PlayerScreen(
         )
         torrentFiles = st.videoFiles()
         stream = st
-        // Запомнить серию, с которой смотрели (для сериалов без episode-меты)
-        if (episode == null) store.saveLastFile(item, st.fileIndex)
+        // Zona-стиль: сериал смотрим впервые — сначала СПИСОК СЕРИЙ,
+        // пользователь сам выбирает (например, 8-ю), а не E01 по умолчанию
+        val firstRun = episode == null && startIndex < 0 && !store.hasLastFile(item)
+        if (firstRun && torrentFiles.size > 1) {
+            showFiles = true
+            showPanel = true
+        } else {
+            // Запомнить серию, с которой смотрели (для сериалов без episode-меты)
+            if (episode == null) store.saveLastFile(item, st.fileIndex)
+        }
 
         // Перемотка в середину: поднимаем приоритет кусков вокруг позиции продолжения
         val watching = withContext(Dispatchers.IO) {
@@ -564,7 +575,6 @@ private fun VideoPlayer(
     BackHandler { onBack() }
 
     var showTrackMenu by remember { mutableStateOf(false) }
-    var showFiles by remember { mutableStateOf(false) }
     var showGear by remember { mutableStateOf(false) }
     var showJump by remember { mutableStateOf(false) }
     var gearMsg by remember { mutableStateOf("") }
@@ -585,8 +595,9 @@ private fun VideoPlayer(
     var scaleIdx by remember { mutableStateOf(store.playerScale().coerceIn(0, scales.size - 1)) }
 
     // ---------- Панель «как MX»: показывается при действии пульта ----------
-    var panelTick by remember { mutableStateOf(1) }   // панель видна сразу при входе
+    var showFiles by remember { mutableStateOf(false) }
     var showPanel by remember { mutableStateOf(true) }
+    var panelTick by remember { mutableStateOf(0) }
     val playFocus = remember { FocusRequester() }
     LaunchedEffect(panelTick) {
         if (panelTick > 0 && !showFiles && !showGear && !showTrackMenu) {

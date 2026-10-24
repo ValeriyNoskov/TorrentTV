@@ -32,9 +32,10 @@ object EztvProvider {
         val out = mutableListOf<TorrentResult>()
         for (i in 0 until arr.length()) {
             val o = arr.getJSONObject(i)
-            val hash = o.optString("hash").lowercase()
+            val hash = o.safeString("hash").lowercase()
             if (hash.length != 40) continue
-            val name = o.optString("title")
+            val name = o.safeString("title")
+            if (name.isBlank()) continue
             out += TorrentResult(
                 name = name,
                 infoHash = hash,
@@ -66,7 +67,7 @@ object SolidTorrentsProvider {
             val o = arr.getJSONObject(i)
             val hash = (o.optString("infoHash").ifBlank { o.optString("info_hash") }).lowercase()
             if (hash.length != 40) continue
-            val name = o.optString("title").ifBlank { o.optString("name") }
+            val name = o.safeString("title").ifBlank { o.safeString("name") }
             val size = o.optJSONObject("size")?.optLong("value")
                 ?: o.optLong("size", 0)
             val seeds = o.optInt("seeders", 0)
@@ -276,7 +277,7 @@ object KnabenProvider {
             val o = arr.getJSONObject(i)
             val hash = o.optString("infoHash").lowercase()
             if (hash.length != 40) continue
-            val name = o.optString("name")
+            val name = o.safeString("name")
             if (name.isBlank()) continue
             out += TorrentResult(
                 name = name,

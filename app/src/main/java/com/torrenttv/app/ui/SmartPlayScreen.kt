@@ -38,6 +38,7 @@ import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
 import com.torrenttv.app.data.TorrServeService
 import com.torrenttv.app.data.TorrentResult
+import com.torrenttv.app.data.isRealText
 import com.torrenttv.app.data.TorrentSearch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -98,8 +99,17 @@ fun SmartPlayScreen(
     LaunchedEffect(item) {
         // Служебный адрес страницы Рутрекера (@rt:...) не должен уходить в поиск
         val rtPage = item.originalTitle.takeIf { it.startsWith("@rt:") }
-        val query = rtPage?.let { item.title } ?: item.originalTitle.ifBlank { item.title }
-        val altQuery = item.title.takeIf { it.isNotBlank() && !it.equals(query, true) }
+        // Guard: title/originalTitle могут быть «null»-строкой из битого JSON —
+        // такой мусор в поиск не отправляем, берём честное название
+        val rawQuery = rtPage?.let { item.title } ?: item.originalTitle.ifBlank { item.title }
+        val query = rawQuery.takeIf { it.isRealText() }
+            ?: item.title.takeIf { it.isRealText() }
+            ?: ""
+        val altQuery = item.title.takeIf { it.isRealText() && !it.equals(query, true) }
+        if (query.isBlank()) {
+            com.torrenttv.app.data.AppLog.log("smart", "sources: пустой запрос — поиск не запускаю")
+            return@LaunchedEffect
+        }
         val isTv = item.type != "movie"
         com.torrenttv.app.data.AppLog.log("smart", "sources: \"$query\" isTv=$isTv")
 

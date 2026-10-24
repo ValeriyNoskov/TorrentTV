@@ -162,6 +162,12 @@ fun DetailsScreen(
                         modifier = Modifier.focusRequester(watchFocus),
                     ) { Text("▶ Смотреть") }
                     Spacer(Modifier.width(16.dp))
+                    // Сериал — кнопка «Эпизоды» всегда на виду (Zona-стиль),
+                    // не спрятана в меню
+                    if (item.type == "tv") {
+                        Button(onClick = { onEpisodes(0) }) { Text("🎬 Эпизоды") }
+                        Spacer(Modifier.width(16.dp))
+                    }
                     // Трейлер: играет ВНУТРИ приложения (поиск по Rutube API,
                     // HLS в нашем плеере) — на приставке не нужны Rutube-приложение и браузер
                     Button(onClick = onTrailer) { Text("🎬 Трейлер") }
@@ -175,22 +181,11 @@ fun DetailsScreen(
                     Spacer(Modifier.height(10.dp))
                     @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
                     androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        if (item.type == "tv") {
-                            Button(
-                                onClick = { menu = false; onEpisodes(0) },
-                                modifier = Modifier.focusRequester(menuFocus),
-                            ) { Text("🎬 Эпизоды") }
-                        } else {
-                            // Для фильмов фокус — на первом доступном пункте
-                            Button(
-                                onClick = { menu = false; onManualSearch() },
-                                modifier = if (item.type != "tv") Modifier.focusRequester(menuFocus) else Modifier,
-                            ) { Text("🔍 Выбрать раздачу") }
-                        }
-                        if (item.type == "tv") {
-                            Spacer(Modifier.width(12.dp))
-                            Button(onClick = { menu = false; onManualSearch() }) { Text("🔍 Выбрать раздачу") }
-                        }
+                        // «Эпизоды» больше не здесь — для сериалов она всегда видна рядом с «Смотреть»
+                        Button(
+                            onClick = { menu = false; onManualSearch() },
+                            modifier = Modifier.focusRequester(menuFocus),
+                        ) { Text("🔍 Выбрать раздачу") }
                         Spacer(Modifier.width(12.dp))
                         Button(onClick = { menu = false; onEnterMagnet() }) {
                             Text(if (magnet) "🔗 Заменить magnet" else "🔗 Указать magnet")

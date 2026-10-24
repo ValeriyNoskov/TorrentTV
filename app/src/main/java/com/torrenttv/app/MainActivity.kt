@@ -57,6 +57,7 @@ sealed interface Screen {
     ) : Screen
     data class Watch(val item: MediaItem) : Screen
     data class Trailer(val item: MediaItem) : Screen
+    data class RutubeWatch(val videoId: String, val title: String, val thumb: String) : Screen
     data class Player(val item: MediaItem, val episode: com.torrenttv.app.data.Episode? = null, val fileIndex: Int = -1) : Screen
     data class TorrentFiles(val item: MediaItem, val magnet: String) : Screen
     data class TorrentResults(
@@ -176,6 +177,9 @@ private fun App() {
                     onOpenResults = { card, q, list, pmap ->
                         screen = Screen.TorrentResults(card, q, list, poster = card.posterUrl, posterMap = pmap)
                     },
+                    onWatchRutube = { vid, title, thumb ->
+                        screen = Screen.RutubeWatch(vid, title, thumb)
+                    },
                     onTorrentSearch = { q ->
                         // Прямой торрент-поиск по запросу: фиктивная карточка
                         screen = Screen.TorrentSearch(
@@ -222,6 +226,12 @@ private fun App() {
             is Screen.Trailer -> TrailerScreen(
                 item = s.item,
                 onBack = { screen = Screen.Details(s.item) },
+            )
+
+            is Screen.RutubeWatch -> com.torrenttv.app.ui.RutubeWatchScreen(
+                videoId = s.videoId,
+                title = s.title,
+                onBack = { screen = Screen.Search },
             )
 
             is Screen.Episodes -> EpisodesScreen(

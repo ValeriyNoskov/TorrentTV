@@ -40,11 +40,11 @@ data class MediaItem(
     companion object {
         fun fromJson(o: JSONObject): MediaItem = MediaItem(
             id = o.getInt("id"),
-            type = o.optString("type", "movie"),
-            title = o.optString("title", ""),
-            year = o.optString("year", ""),
-            posterUrl = o.optString("poster", ""),
-            backdropUrl = o.optString("backdrop", ""),
+            type = o.safeString("type", "movie"),
+            title = o.safeString("title", ""),
+            year = o.safeString("year", ""),
+            posterUrl = o.safeString("poster", ""),
+            backdropUrl = o.safeString("backdrop", ""),
             rating = o.optDouble("rating", 0.0),
             genreIds = o.optJSONArray("genreIds")?.let { arr ->
                 (0 until arr.length()).map { arr.optInt(it) }

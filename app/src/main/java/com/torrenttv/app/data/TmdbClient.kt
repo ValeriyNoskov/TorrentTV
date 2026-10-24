@@ -86,8 +86,8 @@ object TmdbClient {
                 else -> o.optString("media_type")
             }
             if (type != "movie" && type != "tv") return@mapNotNull null
-            val title = o.optString("title", "").ifBlank { o.optString("name") }
-            if (title.isBlank()) return@mapNotNull null
+            val title = o.safeString("title").ifBlank { o.safeString("name") }
+            if (!title.isRealText()) return@mapNotNull null
             val date = o.optString("release_date", "").ifBlank { o.optString("first_air_date", "") }
             val genreIds = o.optJSONArray("genre_ids")?.let { garr ->
                 (0 until garr.length()).map { garr.optInt(it) }

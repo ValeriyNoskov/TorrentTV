@@ -73,6 +73,8 @@ fun SearchScreen(
     onPlayTorrent: (MediaItem) -> Unit = {},
     /** Раздача из поиска: полный список раздач запроса (сорт. «лучшая сверху»). */
     onOpenResults: (MediaItem, String, List<com.torrenttv.app.data.TorrentResult>, Map<String, String>) -> Unit = { _, _, _, _ -> },
+    /** Выбрано видео с Rutube — открыть экран просмотра. */
+    onWatchRutube: (String, String, String) -> Unit = { _, _, _ -> },
 ) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
@@ -80,6 +82,8 @@ fun SearchScreen(
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var torrents by remember { mutableStateOf<List<com.torrenttv.app.data.TorrentResult>>(emptyList()) }
+    // Полные фильмы/серии с Rutube (без обманок: обзоров/реакций/нарезок)
+    var rutubeVideos by remember { mutableStateOf<List<com.torrenttv.app.data.RutubeService.RutubeVideo>>(emptyList()) }
     // Постер и описание раздач: ключ — название раздачи
     var torrentMeta by remember { mutableStateOf<Map<String, Pair<String, String>>>(emptyMap()) }
     var loading by remember { mutableStateOf(false) }
@@ -147,10 +151,16 @@ fun SearchScreen(
                     ).first
                 }.getOrDefault(emptyList())
             }
+            // Rutube: полные фильмы/серии по запросу
+            val rt = async(Dispatchers.IO) {
+                runCatching { com.torrenttv.app.data.RutubeService.searchContent(query) }
+                    .getOrDefault(emptyList())
+            }
             // Раздачи показываем сразу, не дожидаясь фильмов
             torrents = tr.await()
                 .sortedByDescending { it.seeds }
                 .take(16)
+            rutubeVideos = rt.await()
             loading = false
             // Постер и описание раздач — со страниц Рутрекера ФОНОМ:
             // карточки уже видны, постеры появляются по мере загрузки
@@ -392,6 +402,57 @@ fun SearchScreen(
             Text("Фильмов не найдено.", color = Color.White.copy(alpha = 0.5f), fontSize = 15.sp, modifier = Modifier.padding(top = 10.dp))
             Button(onClick = { onTorrentSearch(query) }, modifier = Modifier.padding(top = 8.dp)) {
                 Text("🧲 Искать «$query» в торрентах")
+            }
+        }
+
+        // ---------- Rutube: полные фильмы/серии, без обзоров и нарезок ----------
+        if (rutubeVideos.isNotEmpty()) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 10.dp)) {
+                Text(
+                    text = "📺 Rutube: ${rutubeVideos.size}",
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 15.sp,
+                )
+            }
+            LazyRow(contentPadding = PaddingValues(vertical = 6.dp)) {
+                items(rutubeVideos.size) { i ->
+                    val v = rutubeVideos[i]
+                    Surface(
+                        onClick = { onWatchRutube(v.id, v.title, v.thumb) },
+                        modifier = Modifier.width(200.dp).padding(6.dp),
+                        shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF1F2430),
+                            focusedContainerColor = Color(0xFF3A2E14),
+                        ),
+                    ) {
+                        Column(Modifier.padding(10.dp)) {
+                            if (v.thumb.isNotBlank()) {
+                                coil.compose.AsyncImage(
+                                    model = v.thumb,
+                                    contentDescription = v.title,
+                                    modifier = Modifier.fillMaxWidth().height(112.dp),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                )
+                                Spacer(Modifier.height(8.dp))
+                            }
+                            Text(
+                                v.title,
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                maxLines = 2,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            )
+                            val mins = v.durationSec / 60
+                            Text(
+                                "▶ $mins мин · Rutube",
+                                color = Color(0xFFF5B942),
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                        }
+                    }
+                }
             }
         }
 

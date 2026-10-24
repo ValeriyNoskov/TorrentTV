@@ -630,8 +630,7 @@ internal fun SettingsMenuItem(label: String, focusRequester: FocusRequester? = n
  * (на ТВ-приставке их часто нет — кнопка раньше была «мёртвая»).
  */
 @Composable
-fun TrailerScreen(item: MediaItem, onBack: () -> Unit) {
-    var link by remember { mutableStateOf<OnlineLink?>(null) }
+fun TrailerScreen(item: MediaItem, onBack: () -> Unit) {    var link by remember { mutableStateOf<OnlineLink?>(null) }
     var failed by remember { mutableStateOf(false) }
 
     LaunchedEffect(item) {
@@ -687,6 +686,82 @@ fun TrailerScreen(item: MediaItem, onBack: () -> Unit) {
                 ) { Text("← Назад", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp)) }
             } else {
                 Text("🎬 Ищу трейлер на Rutube…", color = Color(0xFFF5B942), fontSize = 18.sp)
+            }
+        }
+    }
+}
+
+/**
+ * Просмотр полного фильма/серии с Rutube: получаем HLS по id видео
+ * и открываем обычный онлайн-плеер. Прогресс сохраняется — попадёт
+ * в «Продолжить просмотр».
+ */
+@Composable
+fun RutubeWatchScreen(videoId: String, title: String, onBack: () -> Unit) {
+    var link by remember { mutableStateOf<OnlineLink?>(null) }
+    var failed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(videoId) {
+        val hls = withContext(Dispatchers.IO) {
+            com.torrenttv.app.data.RutubeService.videoHls(videoId)
+        }
+        link = hls?.let { OnlineLink(url = it, label = "rutube") }
+        failed = hls == null
+    }
+
+    val tl = link
+    if (tl != null) {
+        // Заглушка MediaItem: у Rutube-видео нет карточки Кинопоиска;
+        // id детерминированный — прогресс «Продолжить» привяжется к видео
+        val pseudoItem = remember(videoId, title) {
+            MediaItem(
+                id = videoId.hashCode(),
+                type = "movie",
+                title = title,
+            )
+        }
+        OnlinePlayerScreen(
+            link = tl,
+            item = pseudoItem,
+            title = "Rutube · $title",
+            onBack = onBack,
+            saveProgress = true,
+        )
+        return
+    }
+
+    androidx.compose.foundation.layout.Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0E1116)),
+    ) {
+        Column(
+            Modifier.align(Alignment.Center),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            if (failed) {
+                Text(
+                    "Не удалось открыть видео на Rutube 🤷",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.height(16.dp))
+                val backFocus = remember { FocusRequester() }
+                LaunchedEffect(Unit) { backFocus.requestFocus() }
+                Surface(
+                    onClick = onBack,
+                    modifier = Modifier.focusRequester(backFocus),
+                    shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color(0xFF1F2430),
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContentColor = Color(0xFF0E1116),
+                    ),
+                ) { Text("← Назад", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp)) }
+            } else {
+                Text("📺 Подключаюсь к Rutube…", color = Color(0xFFF5B942), fontSize = 18.sp)
             }
         }
     }

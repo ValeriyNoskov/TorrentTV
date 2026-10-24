@@ -29,9 +29,10 @@ object ApibayProvider {
         val out = mutableListOf<TorrentResult>()
         for (i in 0 until arr.length()) {
             val o = arr.getJSONObject(i)
-            val hash = o.optString("info_hash")
+            val hash = o.safeString("info_hash")
             if (hash.length != 40) continue
-            val name = o.optString("name")
+            val name = o.safeString("name")
+            if (name.isBlank()) continue
             out += TorrentResult(
                 name = name,
                 infoHash = hash.lowercase(),
