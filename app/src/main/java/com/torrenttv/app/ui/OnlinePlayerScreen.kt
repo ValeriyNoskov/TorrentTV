@@ -115,8 +115,14 @@ fun OnlinePlayerScreen(
         }
     }
     // Ключ источника: своя позиция на каждую ссылку (и серию) онлайн-просмотра
-    val onlineKey = item.storeKey + ":online" +
-        (if (link.season > 0) ":s%02de%02d".format(link.season, link.episode) else "")
+    val onlineSuffix = if (link.season > 0) ":s%02de%02d".format(link.season, link.episode) else ""
+    val onlineKey = item.storeKey + ":online" + onlineSuffix
+    // Ключи отметки «просмотрено» под конкретную серию: обычный (эта карточка)
+    // + нормализованный (один на тайтл — работает и для другой раздачи)
+    fun watchedKeys(suffix: String): List<String> = listOf(
+        item.storeKey + ":online" + suffix,
+        store.normWatchKey(itemState.title, suffix),
+    )
     // С какой секунды продолжать («Продолжить просмотр» + запасное хранилище серий)
     val resumeSec = remember {
         store.continueWatching().firstOrNull { it.sourceKey == onlineKey }?.positionSec
@@ -299,10 +305,12 @@ fun OnlinePlayerScreen(
             val dur = (player.duration / 1000).toInt()
             if (pos > 10 && dur > 0) {
                 // Досмотрено до конца — удаляем из «Продолжить просмотр»
-                // и помечаем серию просмотренной (галочка в списках)
+                // и помечаем серию просмотренной (галочка в списках) под
+                // обоими ключами: обычным (эта карточка) и нормализованным
+                // (одинаковым для любых раздач того же тайтла)
                 if (pos >= dur * 95 / 100) {
                     store.removeProgress(itemState)
-                    store.markWatchedKey(onlineKey)
+                    store.markWatchedKeys(watchedKeys(onlineSuffix))
                 } else store.saveProgress(itemState, pos, dur, onlineKey)
             }
         }
@@ -312,7 +320,7 @@ fun OnlinePlayerScreen(
             val pos = (player.currentPosition / 1000).toInt()
             val dur = (player.duration / 1000).toInt()
             if (saveProgress && pos > 10 && dur > 0) {
-                if (pos >= dur * 95 / 100) store.markWatchedKey(onlineKey)
+                if (pos >= dur * 95 / 100) store.markWatchedKeys(watchedKeys(onlineSuffix))
                 else store.saveProgress(itemState, pos, dur, onlineKey)
             }
             player.release()
@@ -956,15 +964,16 @@ fun OnlinePlayerScreen(
                     val ep = Regex("[Ee](\\d{1,3})").find(path.substringAfterLast('/'))
                         ?.groupValues?.get(1)?.toIntOrNull() ?: return null
                     return if (link.season > 0)
-                        item.storeKey + ":online" + ":s%02de%02d".format(link.season, ep)
-                    else item.storeKey + ":online"
+                        ":s%02de%02d".format(link.season, ep)
+                    else ""
                 }
                 items(files.size) { n ->
                     val (idx, name) = files[n]
                     val current = idx == currentFile
-                    // Галочка: серия отмечена просмотренной (кнопкой или досмотрена)
+                    // Галочка: серия отмечена просмотренной (кнопкой или досмотрена) —
+                    // смотрим оба ключа (эта карточка + нормализованный на тайтл)
                     @Suppress("UNUSED_EXPRESSION") watchedTick
-                    val watched = store.isWatchedKey(watchedKeyOf(idx) ?: "")
+                    val watched = store.isWatchedAny(watchedKeys(watchedKeyOf(idx) ?: ""))
                     androidx.tv.material3.Surface(
                         onClick = {
                             showFiles = false
@@ -993,13 +1002,13 @@ fun OnlinePlayerScreen(
                 }
                 // Ручная отметка: кнопка — текущая серия просмотрена / снять отметку
                 item {
-                    val curKey = watchedKeyOf(currentFile)
-                    if (curKey != null) {
+                    val curSuffix = watchedKeyOf(currentFile)
+                    if (curSuffix != null) {
                         @Suppress("UNUSED_EXPRESSION") watchedTick
-                        val watched = store.isWatchedKey(curKey)
+                        val watched = store.isWatchedAny(watchedKeys(curSuffix))
                         androidx.tv.material3.Surface(
                             onClick = {
-                                store.markWatchedKey(curKey, !watched)
+                                store.markWatchedKeys(watchedKeys(curSuffix), !watched)
                                 com.torrenttv.app.data.AppLog.log(
                                     "player",
                                     if (!watched) "серия отмечена просмотренной" else "отметка просмотренной снята",

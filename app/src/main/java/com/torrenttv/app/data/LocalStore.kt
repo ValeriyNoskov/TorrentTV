@@ -301,6 +301,27 @@ class LocalStore(context: Context) {
         prefs.edit().putStringSet("watched", next).apply()
     }
 
+    /** Отметить просмотренной сразу под несколькими ключами (обычный + нормализованный). */
+    fun markWatchedKeys(keys: List<String>, watched: Boolean = true) {
+        val set = prefs.getStringSet("watched", emptySet()) ?: emptySet()
+        val next = if (watched) set + keys else set - keys.toSet()
+        prefs.edit().putStringSet("watched", next).apply()
+    }
+
+    /** Серия отмечена просмотренной хотя бы под одним из ключей? */
+    fun isWatchedAny(keys: List<String>): Boolean {
+        val set = prefs.getStringSet("watched", emptySet()) ?: emptySet()
+        return keys.any { it in set }
+    }
+
+    /**
+     * Нормализованный ключ просмотра: одинаковый для ЛЮБЫХ раздач одного
+     * тайтла («Спецы» с Рутрекера и с apibay — один и тот же сериал).
+     * Название без регистра и пунктуации + суффикс серии (":s01e08").
+     */
+    fun normWatchKey(title: String, suffix: String): String =
+        "norm:" + title.lowercase().filter { it.isLetterOrDigit() } + suffix
+
     /** Серия отмечена просмотренной (кнопкой или досмотрена ≥95%)? */
     fun isWatchedKey(key: String): Boolean =
         prefs.getStringSet("watched", emptySet())?.contains(key) == true

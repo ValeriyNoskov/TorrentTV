@@ -203,9 +203,15 @@ fun EpisodesScreen(
                                  fontWeight = FontWeight.Bold,
                                  modifier = Modifier.width(78.dp),
                              )
-                             // ✓ — серия просмотрена (кнопкой в плеере или досмотрена ≥95%)
+                             // ✓ — серия просмотрена (кнопкой в плеере или досмотрена ≥95%);
+                             // проверяем оба ключа: эта карточка + нормализованный
+                             // (один на тайтл — галочка переживает смену раздачи)
                              @Suppress("UNUSED_EXPRESSION") tick
-                             if (store.isWatchedKey(item.storeKey + ":online" + ep.sourceSuffix)) {
+                             if (store.isWatchedAny(listOf(
+                                     item.storeKey + ":online" + ep.sourceSuffix,
+                                     store.normWatchKey(item.title, ep.sourceSuffix),
+                                 ))
+                             ) {
                                  Text(
                                      text = "✓",
                                      color = Color(0xFF9CCC65),
