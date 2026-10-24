@@ -25,8 +25,6 @@ import com.torrenttv.app.ui.EpisodesScreen
 import com.torrenttv.app.ui.FavoritesScreen
 import com.torrenttv.app.ui.HomeScreen
 import com.torrenttv.app.ui.MagnetEntryScreen
-import com.torrenttv.app.ui.OnlinePlayerScreen
-import com.torrenttv.app.ui.OnlineScreen
 import com.torrenttv.app.ui.PlayerScreen
 import com.torrenttv.app.ui.SearchScreen
 import com.torrenttv.app.ui.SettingsScreen
@@ -57,8 +55,6 @@ sealed interface Screen {
         val autoStart: Boolean = true,
     ) : Screen
     data class Watch(val item: MediaItem) : Screen
-    data class Online(val item: MediaItem) : Screen
-    data class OnlinePlayer(val item: MediaItem, val link: com.torrenttv.app.data.OnlineService.OnlineLink) : Screen
     data class Player(val item: MediaItem, val episode: com.torrenttv.app.data.Episode? = null, val fileIndex: Int = -1) : Screen
     data class TorrentFiles(val item: MediaItem, val magnet: String) : Screen
     data class TorrentResults(
@@ -181,21 +177,18 @@ private fun App() {
                 onBack = { screen = Screen.Home },
                 onWatch = { screen = Screen.Player(s.item) },
                 onEnterMagnet = { screen = Screen.MagnetEntry(s.item) },
-                // Zona-флоу: «Смотреть» → онлайн (Filmix→HDRezka) → торрент, автоматически
+                // Zona-флоу: «Смотреть» → авто-подбор лучшей раздачи → плеер
                 onWatchSmart = { screen = Screen.Watch(s.item) },
                 onAutoSearch = { screen = Screen.TorrentSearch(s.item, autoStart = true) },
                 onManualSearch = { screen = Screen.TorrentSearch(s.item, autoStart = false) },
                 onOpenDetails = { screen = Screen.Details(it) },
                 onEpisodes = { season -> screen = Screen.Episodes(s.item, season) },
                 onPlayEpisode = { ep -> screen = Screen.Player(s.item, ep) },
-                onOnline = { screen = Screen.Online(s.item) },
             )
 
             is Screen.Watch -> SmartPlayScreen(
                 item = s.item,
                 onBack = { screen = Screen.Details(s.item) },
-                onPlayOnline = { link -> screen = Screen.OnlinePlayer(s.item, link) },
-                onOpenOnline = { screen = Screen.Online(s.item) },
                 onPlayTorrent = { screen = Screen.Player(s.item) },
             )
 
@@ -261,19 +254,6 @@ private fun App() {
                 onPlayNext = { next -> screen = Screen.Player(s.item, next) },
                 // ⚙ «Другое качество» → экран выбора раздач/ссылок
                 onPickTorrent = { screen = Screen.Watch(s.item) },
-            )
-
-            is Screen.Online -> OnlineScreen(
-                item = s.item,
-                onBack = { screen = Screen.Details(s.item) },
-                onPlay = { link -> screen = Screen.OnlinePlayer(s.item, link) },
-            )
-
-            is Screen.OnlinePlayer -> OnlinePlayerScreen(
-                link = s.link,
-                item = s.item,
-                title = s.item.title,
-                onBack = { screen = Screen.Online(s.item) },
             )
 
             else -> Unit

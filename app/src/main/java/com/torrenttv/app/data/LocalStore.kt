@@ -323,15 +323,7 @@ class LocalStore(context: Context) {
         return PrivateTrackers.TrackerAuth(trackerId, title, trackerCookie(trackerId))
     }
 
-    // ---------- Filmix (онлайн-просмотр) ----------
-
-    fun filmixToken(): String = prefs.getString("filmix_token", "") ?: ""
-
-    fun setFilmixToken(v: String) {
-        prefs.edit().putString("filmix_token", v.trim()).apply()
-    }
-
-    // ---------- EPG (телепрограмма IPTV) ----------
+    // ---------- TorrServe (внешний движок стриминга торрентов) ----------
 
     /** Адрес TorrServe (внешний движок стриминга торрентов). */
     fun torrServeHost(): String = prefs.getString("torrserve_host", "http://127.0.0.1:8090") ?: "http://127.0.0.1:8090"

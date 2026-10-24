@@ -137,15 +137,17 @@ fun HomeScreen(
             item { Spacer(Modifier.height(24.dp)) }
         }
 
-        // Версия в углу
-        Text(
-            text = "v$currentVersion",
-            color = Color.White.copy(alpha = 0.35f),
-            fontSize = 13.sp,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(20.dp),
-        )
+        // Версия в углу: скрыта при активной плашке обновления (не пересекаются)
+        if (updateInfo == null) {
+            Text(
+                text = "v$currentVersion",
+                color = Color.White.copy(alpha = 0.35f),
+                fontSize = 13.sp,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(20.dp),
+            )
+        }
 
         // ---------- Оверлей обновления ----------
         updateInfo?.let { info ->

@@ -44,7 +44,6 @@ import androidx.tv.material3.Text
 import com.torrenttv.app.data.Genre
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaApi
-import com.torrenttv.app.data.OnlineService
 import com.torrenttv.app.data.PrivateTrackers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -65,7 +64,6 @@ private val SECTIONS = listOf(
     Triple("search", "🔍 Поиск и фильтры", "Что скрывать из каталогов и поиска"),
     Triple("jackett", "🔗 Jackett", "Дополнительный провайдер автопоиска торрентов"),
     Triple("trackers", "🔑 Частные трекеры", "RuTracker, Kinozal, NNM-Club — без Jackett"),
-    Triple("filmix", "🌐 Онлайн-источники", "Filmix и HDRezka — просмотр без торрентов"),
     Triple("netcheck", "🩺 Проверка сети", "Какие источники доступны с этого устройства"),
     Triple("torrserve", "🚀 TorrServe", "Внешний движок торрентов — надёжнее внутреннего"),
     Triple("player", "📺 Плеер", "Встроенный или внешний плеер (VLC, MX Player)"),
@@ -93,8 +91,6 @@ fun SettingsScreen(onBack: () -> Unit) {
     var extKb by remember { mutableStateOf(store.useExternalKeyboard()) }
     var kzCookie by remember { mutableStateOf(store.trackerCookie(PrivateTrackers.KINOZAL)) }
     var nnmCookie by remember { mutableStateOf(store.trackerCookie(PrivateTrackers.NNMCLUB)) }
-    var fxToken by remember { mutableStateOf(store.filmixToken()) }
-    var fxLogin by remember { mutableStateOf("") }
 
     // Полноэкранный редактор текста: target = "jurl"|"jkey"|"rt"|"kz"|"nnm"|"rtlogin"|"kzlogin"|"nnmlogin"
     var editTarget by remember { mutableStateOf<String?>(null) }
@@ -104,10 +100,6 @@ fun SettingsScreen(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     // Под-экраны выбора (жанры/страны/стоп-слова/проверка сети)
     var subscreen by remember { mutableStateOf<String?>(null) }
-    // Ожидание активации кода Filmix
-    var fxWaiting by remember { mutableStateOf<String?>(null) } // user_code
-    var fxMsg by remember { mutableStateOf("") }
-    var fxPoll by remember { mutableStateOf(0) } // тик запуска поллинга
     var kpKey by remember { mutableStateOf(store.kpApiKey()) }
     var tmdbKey by remember { mutableStateOf(store.tmdbApiKey()) }
     var ghToken by remember { mutableStateOf(store.githubToken()) }
@@ -164,42 +156,11 @@ fun SettingsScreen(onBack: () -> Unit) {
         editTarget = null
     }
 
-    // Filmix: код устройства → активация на filmix.ac/consoles → поллинг токена
-    LaunchedEffect(fxPoll) {
-        if (fxPoll == 0) return@LaunchedEffect
-        fxMsg = "Получаю код устройства…"
-        val dc = withContext(Dispatchers.IO) { OnlineService.requestDeviceCode() }
-        if (dc == null) {
-            fxMsg = "Filmix недоступен — проверьте сеть и попробуйте ещё раз"
-            fxWaiting = null
-            return@LaunchedEffect
-        }
-        fxWaiting = dc.userCode
-        for (i in 0 until 36) { // ждём активацию до 6 минут
-            kotlinx.coroutines.delay(10_000)
-            if (fxWaiting == null) return@LaunchedEffect // пользователь отменил
-            val user = withContext(Dispatchers.IO) { OnlineService.profile(dc.token) }
-            if (user != null) {
-                store.setFilmixToken(dc.token)
-                fxToken = dc.token
-                fxLogin = user.optString("login")
-                fxWaiting = null
-                return@LaunchedEffect
-            }
-        }
-        fxMsg = "Код не введён (истёк) — попробуйте ещё раз"
-        fxWaiting = null
-    }
-
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             movieGenres = MediaApi.movieGenres()
             tvGenres = MediaApi.tvGenres()
             countries = MediaApi.countries()
-            val token = store.filmixToken()
-            if (token.isNotBlank()) {
-                OnlineService.profile(token)?.let { fxLogin = it.optString("login") }
-            }
         }
     }
 
@@ -361,7 +322,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 "Если плеер не установлен, видео откроется как обычно во встроенном. " +
                                 "Кнопка «⤴ Внешний плеер» поверх видео работает и без этой галочки."
                         )
-                        // Размер карточек: как в Filmix — три варианта, циклом
+                        // Размер карточек: три варианта, циклом
                         SettingsRow(
                             title = "Размер карточек",
                             value = when (cardWidthDp) {
@@ -380,7 +341,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                         }
                         SettingsNote(
                             "Размер постеров в каталогах: Мелкие — больше карточек в ряд, " +
-                                "Крупные — как в Filmix HD. Применяется сразу ко всем экранам."
+                                "Крупные — максимум читаемости. Применяется сразу ко всем экранам."
                         )
                     }
 
@@ -432,39 +393,14 @@ fun SettingsScreen(onBack: () -> Unit) {
                         )
                     }
 
-                    "filmix" -> {
-                        SettingsRow(
-                            title = "Подключение аккаунта",
-                            value = when {
-                                fxLogin.isNotBlank() -> "✓ $fxLogin"
-                                fxToken.isNotBlank() -> "✓ Подключено"
-                                else -> "Не подключено"
-                            },
-                            valueOk = fxToken.isNotBlank(),
-                        ) {
-                            fxMsg = ""
-                            fxPoll++
-                        }
-                        if (fxMsg.isNotBlank()) {
-                            SettingsNote(fxMsg)
-                        }
-                        SettingsNote(
-                            "Онлайн-каталоги: Filmix и HDRezka — приложение ищет в обоих. " +
-                                "HDRezka работает без настроек. Filmix (больше переводов) — " +
-                                "по коду устройства: нажмите «Подключение аккаунта», приложение " +
-                                "покажет код — введите его на странице filmix.ac/consoles " +
-                                "(в браузере, в своём аккаунте Filmix)."
-                        )
-                    }
-
                     "netcheck" -> {
                         SettingsRow(
                             title = "🩺 Запустить проверку",
-                            value = "Проверить 7 источников",
+                            value = "Проверить все источники",
                             valueOk = true,
                         ) { subscreen = "netcheck" }
                         SettingsNote(
-                            "Проверка показывает, какие источники (торренты, онлайн, ТВ, " +
+                            "Проверка показывает, какие источники (торренты, база фильмов, " +
                                 "обновления) доступны с этого устройства. Если напротив " +
                                 "источника крестик — его блокирует ваш провайдер: это не " +
                                 "неисправность приложения. Перешлите результат в поддержку."
@@ -581,15 +517,6 @@ fun SettingsScreen(onBack: () -> Unit) {
         )
     }
 
-    // ---------- Ожидание кода Filmix ----------
-    fxWaiting?.let { code ->
-        BackHandler { fxWaiting = null }
-        FilmixCodeScreen(
-            code = code,
-            msg = fxMsg,
-            onCancel = { fxWaiting = null },
-        )
-    }
     } // Box поверх всего: подэкраны рисаются ПОВЕРХ настроек, а не «в строку»
 }
 
@@ -765,49 +692,6 @@ private fun EditScreen(
     }
 }
 
-/** Экран ожидания: код устройства Filmix крупно. */
-@Composable
-private fun FilmixCodeScreen(code: String, msg: String, onCancel: () -> Unit) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(Color(0xF00E1116))
-            .padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Spacer(Modifier.padding(top = 60.dp))
-        Text(
-            "Подключение Filmix",
-            color = Color.White,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-        )
-        Text(
-            "1. Откройте в браузере  filmix.ac/consoles  и войдите в аккаунт\n" +
-                "2. Введите там код:",
-            color = Color.White.copy(alpha = 0.6f),
-            fontSize = 16.sp,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 14.dp),
-        )
-        Text(
-            code,
-            color = Color(0xFFF5B942),
-            fontSize = 56.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(top = 20.dp),
-        )
-        Text(
-            "Ожидаю активацию…",
-            color = Color.White.copy(alpha = 0.6f),
-            fontSize = 16.sp,
-            modifier = Modifier.padding(top = 16.dp),
-        )
-        Spacer(Modifier.padding(top = 24.dp))
-        Button(onClick = onCancel) { Text("Отмена") }
-    }
-}
-
 // ---------- Под-экраны выбора ----------
 
 /** Результат проверки одного источника. */
@@ -831,8 +715,6 @@ private fun NetCheckScreen(onClose: () -> Unit) {
                 "Torrentio (торренты)" to "https://torrentio.strem.fun/stream/movie/tt0133093.json",
                 "bt4g (торренты)" to "https://bt4gprx.com/api/search?q=test",
                 "YTS (торренты)" to "https://yts.mx/api/v2/list_movies.json?query_term=test",
-                "Filmix (онлайн)" to "http://filmixapp.cyou/api/v2/token_request?user_dev_apk=2.0.1&user_dev_id=&user_dev_name=Xiaomi&user_dev_os=11&user_dev_token=&user_dev_vendor=Xiaomi",
-                "HDRezka (онлайн)" to "https://hdrezka.ag/",
                 "GitHub (обновления)" to "https://api.github.com/repos/ValeriyNoskov/TorrentTV/releases/latest",
             ))
             // База фильмов (каталоги, постеры, поиск) — только если настроен ключ

@@ -35,8 +35,6 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.Text
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
-import com.torrenttv.app.data.OnlineService
-import com.torrenttv.app.data.RezkaService
 import com.torrenttv.app.data.TorrServeService
 import com.torrenttv.app.data.TorrentResult
 import com.torrenttv.app.data.TorrentSearch
@@ -50,15 +48,6 @@ import kotlinx.coroutines.withContext
 sealed class SmartChoice {
     abstract val label: String
     abstract val sub: String
-
-    data class Online(val link: OnlineService.OnlineLink, override val label: String) : SmartChoice() {
-        override val sub: String = link.quality
-    }
-
-    data class Serial(val source: String) : SmartChoice() {
-        override val label: String = "🌐 $source — сериал"
-        override val sub: String = "выбор серий и переводов"
-    }
 
     data class Torrent(val r: TorrentResult) : SmartChoice() {
         override val label: String = "🧲 ${r.name}"
@@ -80,17 +69,13 @@ sealed class SmartChoice {
 
 /**
  * Экран выбора источника просмотра: собирает ВСЕ доступные ссылки
- * (онлайн Filmix, HDRezka, торренты со всех трекеров) параллельно и
+ * (торренты со всех трекеров) параллельно и
  * показывает единым списком — пользователь выбирает сам, что смотреть.
  */
 @Composable
 fun SmartPlayScreen(
     item: MediaItem,
     onBack: () -> Unit,
-    /** Нашли онлайн-фильм: открыть плеер с этой ссылкой. */
-    onPlayOnline: (OnlineService.OnlineLink) -> Unit,
-    /** Нашли онлайн-сериал: открыть экран выбора серий. */
-    onOpenOnline: () -> Unit,
     /** Выбран торрент: magnet сохранён — открыть плеер. */
     onPlayTorrent: () -> Unit,
 ) {
@@ -117,7 +102,7 @@ fun SmartPlayScreen(
 
         val online = mutableListOf<SmartChoice>()
 
-        // ---- Торренты (онлайн-источники Filmix/HDRezka убраны: мертвы/платные) ----
+        // ---- Торренты (со всех трекеров) ----
         coroutineScope {
             val torrents = async(Dispatchers.IO) {
                 runCatching {
@@ -264,8 +249,6 @@ fun SmartPlayScreen(
                                 when (c) {
                                     is SmartChoice.Resume -> onPlayTorrent()
                                     is SmartChoice.Instant -> playTorrent(c.r)
-                                    is SmartChoice.Online -> onPlayOnline(c.link)
-                                    is SmartChoice.Serial -> onOpenOnline()
                                     is SmartChoice.Torrent -> playTorrent(c.r)
                                 }
                             },

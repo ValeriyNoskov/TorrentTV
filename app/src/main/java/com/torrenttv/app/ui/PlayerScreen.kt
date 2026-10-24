@@ -226,7 +226,7 @@ fun PlayerScreen(
     val tl = torrLink
     if (tl != null) {
         OnlinePlayerScreen(
-            link = com.torrenttv.app.data.OnlineService.OnlineLink(url = tl, label = "torrserve"),
+            link = OnlineLink(url = tl, label = "torrserve"),
             item = item,
             title = item.title,
             onBack = onBack,
@@ -383,6 +383,18 @@ private fun VideoPlayer(
     // Конец видео: обработчик снаружи (автозакрытие фильма / следующая серия)
     var showSkip by remember { mutableStateOf(false) } // «Пропустить титры» доступна
     var seekInfo by remember { mutableStateOf("") }    // «⏩ +10 сек» при перемотке пультом
+    // Автопереход: «Следующая серия через N…» с кнопками Сейчас/Отмена
+    var nextCountdown by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(nextCountdown) {
+        val n = nextCountdown ?: return@LaunchedEffect
+        if (n <= 0) {
+            nextCountdown = null
+            onEnded()
+        } else {
+            delay(1000)
+            nextCountdown = n - 1
+        }
+    }
     // Ошибка плеера: текст поверх экрана вместо молчаливого чёрного экрана
     var errorMsg by remember { mutableStateOf("") }
     // Авто-перезапуск после ошибки (как в VLC/Just Player): до 3 попыток
@@ -397,7 +409,8 @@ private fun VideoPlayer(
                     // выдать ENDED сразу после prepare — это не конец фильма
                     if (player.duration > 0 && player.currentPosition > player.duration / 20) {
                         player.seekTo(player.duration)
-                        onEnded()
+                        // Сериал — автопереход с отсчётом; фильм — сразу закрыть
+                        if (episode != null) nextCountdown = 8 else onEnded()
                     }
                 }
             }
@@ -608,14 +621,15 @@ private fun VideoPlayer(
             modifier = Modifier.fillMaxSize(),
         )
 
-        // Ошибка воспроизведения: текст вместо молчаливого чёрного экрана
+        // Ошибка воспроизведения: сверху, чтобы не пересекаться с тостами центра
         if (errorMsg.isNotEmpty()) {
             androidx.tv.material3.Text(
                 errorMsg,
                 color = Color.White,
                 fontSize = 16.sp,
                 modifier = Modifier
-                    .align(Alignment.Center)
+                    .align(Alignment.TopCenter)
+                    .padding(top = 70.dp)
                     .background(Color(0xCC1F2430), RoundedCornerShape(12.dp))
                     .padding(horizontal = 20.dp, vertical = 14.dp),
             )
@@ -962,7 +976,7 @@ private fun VideoPlayer(
                 ) { Text("⤴ Внешний плеер", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
             }
         }
-        if (gearMsg.isNotBlank()) {
+        if (gearMsg.isNotBlank() && seekInfo.isBlank() && errorMsg.isBlank()) {
             LaunchedEffect(gearMsg) {
                 kotlinx.coroutines.delay(2500)
                 gearMsg = ""
@@ -978,8 +992,9 @@ private fun VideoPlayer(
             )
         }
 
-        // Индикатор перемотки пультом
-        if (seekInfo.isNotBlank()) {
+        // Индикатор перемотки пультом: один тост в центре — скрыт при открытых
+        // оверлеях и ошибке, чтобы тексты не наезжали друг на друга
+        if (seekInfo.isNotBlank() && errorMsg.isBlank() && !showFiles && !showGear && !showTrackMenu) {
             LaunchedEffect(seekInfo) {
                 kotlinx.coroutines.delay(900)
                 seekInfo = ""

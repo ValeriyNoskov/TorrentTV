@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>ВНосКино — текущие экраны (ревью дизайна)</title>
+<style>
+  :root {
+    --bg: #0E1116; --card: #1F2430; --panel: #151B26; --accent: #F5B942;
+    --text: #FFFFFF; --muted: #B8C0CC; --dim: rgba(255,255,255,.35); --ok: #4CAF7D; --warn: #FFD54F; --bad: #E57373;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #05070B; color: var(--text); font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 32px; }
+  h1 { font-size: 26px; margin-bottom: 6px; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+  h2 { font-size: 18px; margin: 34px 0 12px; color: var(--accent); }
+  .tv { width: 720px; aspect-ratio: 16/9; background: var(--bg); border: 10px solid #1a1f29; border-radius: 14px; position: relative; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.6); margin-bottom: 10px; }
+  .note { color: var(--muted); font-size: 13px; max-width: 720px; margin-bottom: 8px; }
+  .flag { display: inline-block; background: var(--warn); color: #000; font-size: 11px; font-weight: 700; border-radius: 6px; padding: 3px 8px; margin-top: 6px; cursor: default; }
+  /* общие элементы */
+  .hero { position: absolute; inset: 0; background: linear-gradient(90deg, #223 0%, #31405a 55%, #0E1116 100%); }
+  .hero .ttl { position: absolute; left: 32px; bottom: 78px; font-size: 30px; font-weight: 800; text-shadow: 0 2px 12px #000; }
+  .hero .desc { position: absolute; left: 32px; bottom: 44px; width: 55%; color: #dfe6f2; font-size: 12px; }
+  .btn { display: inline-block; background: var(--card); color: #fff; border-radius: 10px; padding: 9px 16px; font-size: 14px; }
+  .btn.acc { background: var(--accent); color: #000; font-weight: 700; }
+  .btn.focused { outline: 3px solid #fff; outline-offset: 2px; background: var(--accent); color: #000; font-weight: 700; }
+  .row { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 32px 16px; }
+  .cards { display: flex; gap: 10px; }
+  .poster { width: 96px; height: 138px; border-radius: 8px; background: linear-gradient(160deg, #2c3a52, #1b2536); flex: none; position: relative; }
+  .poster.tall { height: 150px; }
+  .shelf-title { color: var(--muted); font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+  .tabbar { position: absolute; left: 0; top: 0; bottom: 0; width: 150px; background: rgba(8,11,16,.92); padding: 22px 0; }
+  .tab { padding: 11px 24px; color: var(--muted); font-size: 14px; }
+  .tab.on { color: #000; background: var(--accent); font-weight: 700; border-radius: 0 10px 10px 0; margin-right: 12px; }
+  .chip { display: inline-block; background: var(--card); border-radius: 999px; padding: 5px 12px; font-size: 12px; color: var(--muted); margin-right: 6px; }
+  .chip.on { background: var(--accent); color: #000; font-weight: 700; }
+  .badge { display: inline-block; border-radius: 6px; padding: 3px 8px; font-size: 11px; font-weight: 700; margin-right: 5px; }
+  .b-ok { background: #173527; color: #7ee2a8; } .b-mid { background: #39331a; color: var(--warn); } .b-src { background: #1c2740; color: #9db8ff; } .b-tr { background: #331d33; color: #e3a0e3; }
+  .panel { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(10,14,20,.85); padding: 10px 24px 12px; }
+  .panel .ttl { color: var(--muted); font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+  .seek { height: 12px; position: relative; background: rgba(255,255,255,.08); border-radius: 6px; margin-bottom: 10px; }
+  .seek .buf { position: absolute; left: 0; top: 3px; bottom: 3px; width: 62%; background: #4A5568; border-radius: 4px; }
+  .seek .pos { position: absolute; left: 0; top: 1px; bottom: 1px; width: 34%; background: var(--accent); border-radius: 5px; }
+  .seek .t { position: absolute; right: 6px; top: -3px; font-size: 11px; color: #fff; }
+  .keys { display: flex; gap: 6px; align-items: center; }
+  .k { background: var(--card); border-radius: 8px; padding: 8px 12px; font-size: 13px; white-space: nowrap; }
+  .k.f { background: var(--accent); color: #000; font-weight: 700; outline: 2px solid #fff; outline-offset: 1px; }
+  .toast { position: absolute; left: 50%; transform: translateX(-50%); background: rgba(21,27,38,.95); border-radius: 12px; padding: 10px 22px; font-size: 17px; color: var(--accent); font-weight: 700; }
+  .skip { position: absolute; right: 28px; bottom: 130px; background: rgba(31,36,48,.85); border-radius: 10px; padding: 10px 16px; font-size: 13px; }
+  .gear { position: absolute; right: 24px; bottom: 150px; background: rgba(21,27,38,.95); border-radius: 14px; padding: 10px; display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+  .err { position: absolute; left: 50%; top: 52px; transform: translateX(-50%); background: rgba(31,36,48,.9); border-radius: 12px; padding: 12px 20px; font-size: 14px; max-width: 80%; text-align: center; }
+  .lock { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); background: rgba(31,36,48,.85); border-radius: 10px; padding: 7px 14px; font-size: 12px; }
+  .kbd { display: flex; flex-wrap: wrap; gap: 6px; max-width: 60%; }
+  .kbd .key { background: var(--card); border-radius: 8px; padding: 12px 0; width: 54px; text-align: center; font-size: 14px; }
+  .kbd .key.f { background: var(--accent); color: #000; font-weight: 700; }
+  .list { background: rgba(21,27,38,.94); border-radius: 14px; padding: 14px; width: 460px; height: 300px; overflow: hidden; }
+  .li { background: var(--card); border-radius: 8px; padding: 8px 12px; font-size: 12px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .li.cur { background: #3A5A2E; } .li.f { background: var(--accent); color: #000; font-weight: 700; }
+  .setrow { display: flex; justify-content: space-between; align-items: center; background: var(--card); border-radius: 10px; padding: 12px 16px; margin-bottom: 8px; }
+  .setrow .v { color: var(--muted); font-size: 13px; } .setrow .t { font-size: 14px; }
+  .up { position: absolute; left: 50%; transform: translateX(-50%); bottom: 24px; background: var(--card); border-radius: 12px; padding: 14px 20px; display: flex; gap: 18px; align-items: center; box-shadow: 0 8px 30px rgba(0,0,0,.5); }
+  .legend { margin: 4px 0 0; color: var(--dim); font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>ВНосКино v0.7.51 — текущие экраны</h1>
+<div class="sub">Мокапы по реальному коду · 720×405 (TV 16:9) · <b style="color:var(--warn)">жёлтый флажок</b> — места, где подозреваю проблему (перекрытия/UX). Скажи номера — поправлю.</div>
+
+<h2>1. Главный экран</h2>
+<div class="tv">
+  <div class="hero"><div class="ttl">Дюна: Часть вторая</div><div class="desc">Полиси · 2024 · 2ч 46м · ★7.8 · Пол Дюн Атрейдес объединяется с фрименами…</div></div>
+  <div class="row">
+    <div class="shelf-title">🆕 Новинки</div>
+    <div class="cards"><div class="poster"></div><div class="poster" style="background:linear-gradient(160deg,#4a2c2c,#241318)"></div><div class="poster" style="background:linear-gradient(160deg,#2c4a3a,#13241a)"></div><div class="poster" style="background:linear-gradient(160deg,#3a2c4a,#1a1324)"></div><div class="poster"></div><div class="poster"></div></div>
+  </div>
+  <div class="up">
+    <div><b>Доступно обновление v0.7.51</b><div style="color:var(--muted);font-size:12px">исправления плеера</div></div>
+    <span class="btn acc focused">Обновить</span>
+  </div>
+</div>
+<div class="note">Плашка обновления всплывает снизу по центру, фокус сразу на кнопке «Обновить». <span class="flag">1: На узких экранах плашка наезжает на полку «Новинки» — закрыть кнопкой? Кнопки закрытия нет</span></div>
+
+<h2>2. Карточка фильма</h2>
+<div class="tv">
+  <div style="position:absolute;left:0;top:0;bottom:0;width:260px;background:linear-gradient(160deg,#2c3a52,#10161f)"></div>
+  <div style="position:absolute;left:276px;top:24px;right:24px">
+    <div style="font-size:24px;font-weight:800">Дюна: Часть вторая</div>
+    <div style="color:var(--muted);font-size:12px;margin:6px 0 10px">2024 · США · 166 мин · ★7.8 КП · Фантастика, Приключения</div>
+    <div style="font-size:12px;color:#dfe6f2;width:420px">Пол Атрейдес объединяется с Чани и фрименами, чтобы отомстить заговорщикам…</div>
+    <div style="margin-top:16px">
+      <span class="btn acc focused">▶ Смотреть</span> <span class="btn">🎬 Трейлер</span> <span class="btn">⋯ Ещё</span>
+    </div>
+    <div style="margin-top:14px">
+      <span class="chip on">＋ Смотреть позже</span> <span class="chip">🔖 Буду смотреть</span> <span class="chip">☆ Избранное</span> <span class="chip">✓ Просмотрено</span>
+    </div>
+  </div>
+</div>
+<div class="note">Меню «⋯ Ещё» разворачивается: 🎬 Эпизоды · 🔍 Выбрать раздачу · ✕ Убрать из просмотренных. <span class="flag">2: Статусы (Смотрю/Буду смотреть/Просмотрено) не видны на карточке — только внутри «Ещё»</span></div>
+
+<h2>3. «Играть сразу» (SmartPlay) — выбор источника</h2>
+<div class="tv">
+  <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px">
+    <div style="font-size:22px;font-weight:800">Дюна: Часть вторая</div>
+    <div style="color:var(--accent);font-size:14px">Выберите, где смотреть:</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;max-width:600px">
+      <span class="btn acc focused">⚡ Играть сразу · 🧲 214 сидов</span>
+      <span class="btn">⬇ BDRip 1080p <span class="badge b-ok">178 сидов</span></span>
+      <span class="btn">⬇ WEB-DL 2160p <span class="badge b-mid">43 сида</span></span>
+      <span class="btn">🌐 Filmix (онлайн)</span>
+      <span class="btn">🌐 HDRezka (онлайн)</span>
+      <span class="btn">🚀 TorrServe</span>
+    </div>
+  </div>
+</div>
+<div class="note">Новый (v0.7.50): бейджи источника/качества/сидов уже есть частично в названиях. <span class="flag">3: При «Ничего не нашлось» текст с диагностикой длинный, влезает в 2 строки мелко</span></div>
+
+<h2>4. Плеер — панель MX (видима)</h2>
+<div class="tv">
+  <div class="hero" style="background:#000"></div>
+  <div class="panel">
+    <div class="ttl">Дюна: Часть вторая</div>
+    <div class="seek"><div class="buf"></div><div class="pos"></div><div class="t">34:12 / 2:46:00</div></div>
+    <div class="keys">
+      <span class="k f">⏸ / ▶</span><span class="k">⏪ 10с</span><span class="k">⏩ 10с</span><span class="k">1×</span>
+      <span style="flex:1"></span>
+      <span class="k">♪ Аудио</span><span class="k">💬 Субтитры</span><span class="k">⛶ Заполнить</span><span class="k">🔒</span><span class="k">☰ Серии (12)</span><span class="k">⚙</span>
+    </div>
+  </div>
+  <div class="skip">⏭ Пропустить титры</div>
+</div>
+<div class="note"><span class="flag">4: «Пропустить титры» (bottom 130) висит прямо над правыми кнопками панели — на больших шрифтах ТВ наезжает</span> <span class="flag">5: 11 кнопок в один ряд — на TV 960dp не влезают, крайние обрезаются</span></div>
+
+<h2>5. Плеер — оверлеи (серии + сообщение об ошибке)</h2>
+<div class="tv">
+  <div class="hero" style="background:#000"></div>
+  <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)" class="list">
+    <div class="li cur">▶ Dune.Part.Two.2024.1080p.mkv</div><div class="li">Dune.Part.One.2021.1080p.mkv</div><div class="li f">Extra.mkv</div><div class="li">sample/sample.mkv</div>
+  </div>
+  <div class="err">⚠ Сбой воспроизведения, перезапускаю… (2/3)</div>
+  <div class="lock">🔒 Нажмите OK для разблокировки</div>
+</div>
+<div class="note">Ошибка теперь сверху (v0.7.51), список серий в центре — не пересекаются. <span class="flag">6: Окно серий 560×420dp фиксировано — на старых ТВ с 720p интерфейсом срезается по краям</span></div>
+
+<h2>6. Плеер — конец серии (новое)</h2>
+<div class="tv">
+  <div class="hero" style="background:#000"></div>
+  <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(21,27,38,.95);border-radius:16px;padding:26px 34px;text-align:center">
+    <div style="font-size:18px;font-weight:700;margin-bottom:14px">⏭ Следующая серия через 7…</div>
+    <span class="btn focused">✕ Отмена</span> <span class="btn acc">▶ Сейчас</span>
+  </div>
+</div>
+<div class="note">Автопереход с отсчётом 8 сек (как у стримингов) — фокус на «Отмена», случайное OK не проматывает.</div>
+
+<h2>7. Онлайн-плеер (Filmix/Rezka)</h2>
+<div class="tv">
+  <div class="hero" style="background:#000"></div>
+  <div style="position:absolute;left:16px;top:12px;font-size:12px;color:rgba(255,255,255,.7)">Дюна · 1080p</div>
+  <div class="panel" style="display:flex;justify-content:space-between;align-items:center">
+    <span style="font-size:13px">34:12 / 2:46:00</span>
+    <div class="keys"><span class="k">⏸</span><span class="k">⏪10с</span><span class="k">⏩10с</span><span class="k f">⚙</span></div>
+  </div>
+  <div class="gear"><span class="k">Качество: 1080p</span><span class="k">⤴ Внешний плеер</span></div>
+</div>
+<div class="note">Меню шестерёнки раскрывается вверх от кнопки. <span class="flag">7: Меню вылезает за левый край на панели узких ТВ-боксов при длинном «Качество: 2160p (4K)»</span></div>
+
+<h2>8. Настройки → раздел</h2>
+<div class="tv">
+  <div style="position:absolute;left:16px;top:18px;bottom:18px;width:210px">
+    <div class="tab on" style="position:static;border-radius:10px;margin-bottom:6px">📺 Плеер</div>
+    <div class="tab" style="position:static;padding:9px 16px">🔍 Поиск</div>
+    <div class="tab" style="position:static;padding:9px 16px">🔗 Jackett</div>
+    <div class="tab" style="position:static;padding:9px 16px">🔑 Частные трекеры</div>
+    <div class="tab" style="position:static;padding:9px 16px">🚀 TorrServe</div>
+    <div class="tab" style="position:static;padding:9px 16px">⌨ Ввод</div>
+  </div>
+  <div style="position:absolute;left:250px;top:22px;right:24px">
+    <div class="setrow"><span class="t">Размер карточек</span><span class="v">Обычные</span></div>
+    <div class="setrow"><span class="t">Внешний плеер по умолчанию</span><span class="v">Выкл</span></div>
+    <div class="setrow"><span class="t">Клавиатура</span><span class="v">Встроенная</span></div>
+    <div class="setrow"><span class="t">Кэш раздач</span><span class="v">Умный · 20 ГБ</span></div>
+  </div>
+</div>
+<div class="note">Раздел «Телеканалы» удалён (IPTV мёртвая фича). <span class="flag">8: Длинные значения («Только тематические (без мусора)») не сокращаются — строка раздувается</span></div>
+
+<h2>9. Поиск</h2>
+<div class="tv">
+  <div style="position:absolute;left:24px;top:24px;font-size:18px;font-weight:700">🔍 Поиск</div>
+  <div style="position:absolute;left:24px;top:64px;display:flex;gap:6px;max-width:440px">
+    <span class="key k f" style="width:auto">д</span><span class="key k" style="width:auto">ю</span><span class="key k" style="width:auto">н</span><span class="key k" style="width:auto">а</span><span class="key k" style="width:auto">⌫</span>
+  </div>
+  <div style="position:absolute;left:24px;bottom:24px;width:300px" class="cards">
+    <div class="poster tall"></div><div class="poster tall" style="background:linear-gradient(160deg,#4a2c2c,#241318)"></div>
+  </div>
+  <div style="position:absolute;right:24px;bottom:24px;text-align:center;color:var(--muted);font-size:13px">
+    <div style="font-size:30px">🎤</div>Голосовой поиск — кнопка микрофона на пульте
+  </div>
+</div>
+<div class="note"><span class="flag">9: Голосовой поиск в мокапе — реально НЕ реализован (беру в бэклог с конкурентного разбора)</span></div>
+
+<h2>10. Буферизация / загрузка торрента</h2>
+<div class="tv">
+  <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px">
+    <div style="font-size:22px;font-weight:800">Дюна: Часть вторая</div>
+    <div style="color:var(--accent);font-size:15px">Ищу источники фильма… 14 сек</div>
+    <div style="color:rgba(255,255,255,.6);font-size:13px">Пиры: 12 · Скачано: 84 МБ · 2104 КБ/с</div>
+    <div style="width:430px;height:10px;background:var(--card);border-radius:5px"><div style="width:36%;height:100%;background:var(--accent);border-radius:5px"></div></div>
+    <div style="color:rgba(255,255,255,.7);font-size:13px">Буферизация: 36%</div>
+    <span class="btn">← Назад</span>
+  </div>
+</div>
+<div class="note">Диагностика пиров/скорости видна сразу — если сеть режет трекеры, понятно почему.</div>
+
+<div class="legend" style="margin-top:36px">Экраны: Главный · Карточка · SmartPlay · Плеер×3 · Онлайн · Настройки · Поиск · Буферизация. Чего не хватает — покажу крупнее: скажи номер экрана.</div>
+</body>
+</html>

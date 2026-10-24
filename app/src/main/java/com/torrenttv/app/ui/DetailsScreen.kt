@@ -57,11 +57,9 @@ fun DetailsScreen(
     onEpisodes: (Int) -> Unit = { },
     /** Играем конкретную серию (из блока «Сезоны и серии»). */
     onPlayEpisode: (com.torrenttv.app.data.Episode) -> Unit = {},
-    onOnline: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
-    val onlineAvailable = remember { store.filmixToken().isNotBlank() }
     var fav by remember { mutableStateOf(store.isFavorite(item)) }
     var later by remember { mutableStateOf(store.isWatchLater(item)) }
     // Статус: Смотрю / Буду смотреть / Просмотрено (цикл кнопкой)

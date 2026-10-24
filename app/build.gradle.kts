@@ -59,6 +59,15 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    lint {
+        // media3 UnstableApi: TorrentDataSource/кастомная панель плеера сознательно
+        // используют нестабильные API media3 (DataSource, ProgressiveMediaSource) —
+        // публичного стабильного аналога нет. RestrictedApi: ComponentActivity
+        // .dispatchKeyEvent — публичный метод со строгой аннотацией библиотеки.
+        disable += "UnsafeOptInUsageError"
+        disable += "RestrictedApi"
+    }
 }
 
 dependencies {

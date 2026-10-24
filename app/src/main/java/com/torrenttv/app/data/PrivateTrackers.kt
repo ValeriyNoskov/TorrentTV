@@ -70,7 +70,9 @@ object PrivateTrackers {
     // ---------- RuTracker ----------
 
     private fun rutracker(auth: TrackerAuth, query: String): List<TorrentResult> {
-        val q = URLEncoder.encode(query, CP1251)
+        // encode(String, Charset) только с API 33 (minSdk 29) — строковая
+        // перегрузка доступна с API 1
+        val q = URLEncoder.encode(query, "windows-1251")
         val html = TorrentHttp.get("https://rutracker.org/forum/tracker.php?nm=$q", headers(auth, "https://rutracker.org/forum/")) ?: return emptyList()
         return parseRutracker(html)
     }
@@ -107,7 +109,9 @@ object PrivateTrackers {
     // ---------- Kinozal ----------
 
     private fun kinozal(auth: TrackerAuth, query: String): List<TorrentResult> {
-        val q = URLEncoder.encode(query, CP1251)
+        // encode(String, Charset) только с API 33 (minSdk 29) — строковая
+        // перегрузка доступна с API 1
+        val q = URLEncoder.encode(query, "windows-1251")
         val html = TorrentHttp.get("https://kinozal.tv/browse.php?s=$q&g=0&c=0", headers(auth, "https://kinozal.tv/")) ?: return emptyList()
         return parseKinozal(html)
     }
