@@ -5,13 +5,25 @@
 «Закоммитить» в этом проекте всегда означает полный цикл, без напоминаний пользователя:
 
 1. Поднять `versionCode` (+1) и `versionName` в `app/build.gradle.kts`.
-2. Собрать: `./gradlew assembleRelease` (debug-сборка не публикуется).
-3. Закоммитить: сообщение в формате `vX.Y.Z: краткий список изменений по-русски`.
-4. `git tag vX.Y.Z && git push origin main vX.Y.Z`.
-5. `gh release create vX.Y.Z <apk> --title "Release VNosKino vX.Y.Z"`:
-   - APK переименовать в `VNosKino-X.Y.Z.apk`;
-   - notes: `**Full Changelog**: https://github.com/ValeriyNoskov/TorrentTV/compare/vPREV...vX.Y.Z`.
-6. Убедиться, что релиз помечен **Latest** — ТВ обновляется по воздуху с GitHub Releases.
+2. Закоммитить: сообщение в формате `vX.Y.Z: краткий список изменений по-русски`.
+3. Запушить `main` **и в ветку `release`**: `git push origin main main:release`.
+4. Релиз собирает **только CI** (`.github/workflows/release.yml`): он подписывает APK
+   секретом `KEYSTORE_B64` и сам публикует GitHub Release с ассетом `VNosKino-X.Y.Z.apk`.
+   Проверить: `gh run list --workflow=release.yml` → `gh release view vX.Y.Z`.
+
+### ⛔ ЗАПРЕЩЕНО: ручной релиз с локальной сборкой
+
+- Локальный `assembleRelease` подписывается **debug-ключом** (секреты подписи есть только
+  в CI) — такой APK не устанавливается на ТВ: «пакет конфликтует с существующим пакетом»
+  (подпись не совпадает с установленным приложением).
+- Никогда не делать `gh release create` вручную и не пушить теги релизов вручную —
+  релиз и тег создаёт CI на пуше в `release`. Приложение обновляется по воздуху
+  с GitHub Releases и проверяет подпись.
+- Если такой релиз всё же создан: `gh release delete vX.Y.Z --yes` +
+  `git push origin :refs/tags/vX.Y.Z` + удалить локальный тег, затем пуш в `release`.
+
+Правки только документов (`AGENTS.md`, `README.md`) можно пушить в `main` без релиза —
+без bump версии и без пула в `release`.
 
 ## Проверка логов с ТВ
 
