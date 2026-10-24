@@ -76,6 +76,15 @@ fun DetailsScreen(
     var status by remember { mutableStateOf("") }
     var similar by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var menu by remember { mutableStateOf(false) }
+    // Карточка без меты (заглушка из поиска раздач): дотягиваем постер/описание
+    // с КП прямо на экране деталей — иначе «нет постера» (жалоба по «Спецам»)
+    var itemState by remember(item.storeKey) { mutableStateOf(item) }
+    LaunchedEffect(item.storeKey) {
+        if (itemState.posterUrl.isBlank()) {
+            val en = withContext(Dispatchers.IO) { MediaApi.enrich(itemState) }
+            if (en.posterUrl.isNotBlank()) itemState = en
+        }
+    }
     val watchFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     LaunchedEffect(Unit) {
         runCatching { watchFocus.requestFocus() }
@@ -92,8 +101,8 @@ fun DetailsScreen(
             .padding(32.dp),
     ) {
         Row(Modifier.weight(1f)) {
-            // Постер
-            if (item.posterUrl.isBlank()) {
+            // Постер (обогащённый из КП, если карточка была заглушкой)
+            if (itemState.posterUrl.isBlank()) {
                 Box(
                     Modifier
                         .width(220.dp)
@@ -103,7 +112,7 @@ fun DetailsScreen(
                 ) { Text("нет постера", color = Color.White.copy(alpha = 0.4f)) }
             } else {
                 AsyncImage(
-                    model = item.posterUrl,
+                    model = itemState.posterUrl,
                     contentDescription = item.title,
                     modifier = Modifier
                         .width(220.dp)

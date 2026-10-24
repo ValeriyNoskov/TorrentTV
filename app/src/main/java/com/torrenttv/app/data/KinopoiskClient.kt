@@ -238,9 +238,11 @@ object KinopoiskClient {
             countryIds = countryIds,
             overview = o.optString("description", ""),
             imdbId = o.optString("imdbId", ""),
-            // оригинальное название — ключ к автопоиску раздач (apibay не знает русских имён)
+            // оригинальное название — ключ к автопоиску раздач (apibay не знает русских имён).
+            // Android optString отдаёт literal «null» для JSON-null — отфильтровываем
             originalTitle = sequenceOf("nameOriginal", "nameEn")
-                .map { o.optString(it, "") }.firstOrNull { it.isNotBlank() } ?: "",
+                .map { o.optString(it, "") }
+                .firstOrNull { it.isNotBlank() && !it.equals("null", true) } ?: "",
         )
     }
 

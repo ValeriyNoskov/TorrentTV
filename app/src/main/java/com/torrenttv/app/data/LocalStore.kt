@@ -266,6 +266,17 @@ class LocalStore(context: Context) {
     fun getMagnet(item: MediaItem, suffix: String = ""): String? =
         prefs.getString("magnet:" + item.storeKey + suffix, null)
 
+    // ---------- Последний выбранный сезон (экран эпизодов) ----------
+
+    /** Запомнить выбранный на экране эпизодов сезон («Титаны»: открыл S05 — откроется S05). */
+    fun saveLastSeason(item: MediaItem, season: Int) {
+        prefs.edit().putInt("lastseason:" + item.storeKey, season).apply()
+    }
+
+    /** Последний выбранный сезон (0 — не выбирали). */
+    fun lastSeason(item: MediaItem): Int =
+        prefs.getInt("lastseason:" + item.storeKey, 0)
+
     // ---------- Последняя серия торрента (продолжить с той же серии) ----------
 
     /** Запомнить последнюю проигранную серию (файл) раздачи. */
@@ -293,6 +304,50 @@ class LocalStore(context: Context) {
     /** Серия отмечена просмотренной (кнопкой или досмотрена ≥95%)? */
     fun isWatchedKey(key: String): Boolean =
         prefs.getStringSet("watched", emptySet())?.contains(key) == true
+
+    // ---------- Кеш найденных серий (поиск раздач — не при каждом открытии) ----------
+
+    /** Сохранить собранные из раздач сезоны: повторное открытие — без поиска. */
+    fun saveEpisodeCache(item: MediaItem, seasons: List<Season>) {
+        val arr = JSONArray()
+        for (s in seasons.sortedBy { it.number }) {
+            val eps = JSONArray()
+            for (e in s.episodes.sortedBy { it.episode }) {
+                eps.put(JSONObject().put("s", e.season).put("e", e.episode).put("t", e.title))
+            }
+            arr.put(JSONObject().put("n", s.number).put("e", eps))
+        }
+        prefs.edit()
+            .putString(
+                "eps:" + item.storeKey,
+                JSONObject().put("at", System.currentTimeMillis()).put("s", arr).toString(),
+            )
+            .apply()
+    }
+
+    /** Время последнего сохранения кеша серий (0 — кеша нет). */
+    fun episodeCacheTime(item: MediaItem): Long =
+        runCatching {
+            JSONObject(prefs.getString("eps:" + item.storeKey, "{}") ?: "{}").getLong("at")
+        }.getOrDefault(0L)
+
+    /** Кеш сезонов из раздач (пусто — не собирали). */
+    fun loadEpisodeCache(item: MediaItem): List<Season> =
+        runCatching {
+            val obj = JSONObject(prefs.getString("eps:" + item.storeKey, "{}") ?: "{}")
+            val arr = obj.optJSONArray("s") ?: JSONArray()
+            (0 until arr.length()).mapNotNull { i ->
+                val sObj = arr.getJSONObject(i)
+                val epsArr = sObj.optJSONArray("e") ?: return@mapNotNull null
+                Season(
+                    number = sObj.getInt("n"),
+                    episodes = (0 until epsArr.length()).map { j ->
+                        val e = epsArr.getJSONObject(j)
+                        Episode(season = e.getInt("s"), episode = e.getInt("e"), title = e.optString("t"))
+                    },
+                )
+            }.sortedBy { it.number }
+        }.getOrDefault(emptyList())
 
     // ---------- Настройки фильтрации поиска ----------
 

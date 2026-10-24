@@ -70,7 +70,9 @@ fun TorrentSearchScreen(
     // для эпизода сериала — суффикс S01E05 вместо года
     val epCode = episode?.code ?: ""
     val query = remember(item, episode) {
-        val base = item.originalTitle.ifBlank { item.title }
+        // «null 2024»: КП иногда отдаёт originalTitle = literal «null» — не используем
+        val base = item.originalTitle.takeIf { it.isNotBlank() && !it.equals("null", true) }
+            ?: item.title
         when {
             episode != null -> "$base $epCode"
             item.year.isNotBlank() -> "$base ${item.year}"

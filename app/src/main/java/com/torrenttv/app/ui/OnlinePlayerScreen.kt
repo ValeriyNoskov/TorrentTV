@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.torrenttv.app.data.MediaApi
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.focusable
@@ -96,6 +97,15 @@ fun OnlinePlayerScreen(
         )
     }
     val store = remember { com.torrenttv.app.data.LocalStore(context) }
+    // Карточка без меты (заглушка из поиска раздач): дотягиваем постер/год/IMDb
+    // с КП — иначе в «Продолжить» карточка без постера (жалоба по «Спецам»)
+    var itemState by remember(item.storeKey) { mutableStateOf(item) }
+    LaunchedEffect(item.storeKey) {
+        if (itemState.posterUrl.isBlank() || itemState.imdbId.isBlank()) {
+            val en = withContext(Dispatchers.IO) { MediaApi.enrich(itemState) }
+            if (en.posterUrl.isNotBlank() || en.imdbId.isNotBlank()) itemState = en
+        }
+    }
     // Ключ источника: своя позиция на каждую ссылку (и серию) онлайн-просмотра
     val onlineKey = item.storeKey + ":online" +
         (if (link.season > 0) ":s%02de%02d".format(link.season, link.episode) else "")
@@ -248,9 +258,9 @@ fun OnlinePlayerScreen(
                 // Досмотрено до конца — удаляем из «Продолжить просмотр»
                 // и помечаем серию просмотренной (галочка в списках)
                 if (pos >= dur * 95 / 100) {
-                    store.removeProgress(item)
+                    store.removeProgress(itemState)
                     store.markWatchedKey(onlineKey)
-                } else store.saveProgress(item, pos, dur, onlineKey)
+                } else store.saveProgress(itemState, pos, dur, onlineKey)
             }
         }
     }
@@ -260,7 +270,7 @@ fun OnlinePlayerScreen(
             val dur = (player.duration / 1000).toInt()
             if (saveProgress && pos > 10 && dur > 0) {
                 if (pos >= dur * 95 / 100) store.markWatchedKey(onlineKey)
-                else store.saveProgress(item, pos, dur, onlineKey)
+                else store.saveProgress(itemState, pos, dur, onlineKey)
             }
             player.release()
         }

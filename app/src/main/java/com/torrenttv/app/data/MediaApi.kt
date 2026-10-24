@@ -35,6 +35,44 @@ object MediaApi {
         pick({ RutrackerrCatalog.search(query) }, { KinopoiskClient.search(query) }, { TmdbClient.search(query) })
             ?: emptyList()
 
+    /**
+     * Обогащение «пустой» карточки (заглушки из поиска раздач, без меты):
+     * КП-поиск по названию → постер, год, IMDb, описание, рейтинг.
+     * id/type НЕ меняем — storeKey записи «Продолжить» должен остаться тем же,
+     * иначе история развалится на две карточки.
+     */
+    fun enrich(item: MediaItem): MediaItem {
+        if (item.title.isBlank()) return item
+        val cards = try { KinopoiskClient.search(item.title) } catch (e: Exception) { emptyList() }
+        val card = cards.firstOrNull { c ->
+            val a = c.title.lowercase().replace('ё', 'е')
+            val b = item.title.lowercase().replace('ё', 'е')
+            a.isNotBlank() && (a.contains(b) || b.contains(a))
+        }
+        var poster = card?.posterUrl.orEmpty()
+        var overview = card?.overview.orEmpty()
+        // Фолбэк 1 — Википедия: настоящий художественный постер фильма
+        if (poster.isBlank()) {
+            poster = runCatching { WikipediaClient.poster(item.title) }.getOrNull().orEmpty()
+        }
+        // Фолбэк 2 — Рутуб: кадр и описание (подсказка владельца: «в рутубе
+        // есть постеры и описание некоторых»)
+        if (poster.isBlank() || overview.isBlank()) {
+            val (rtThumb, rtDesc) = runCatching { RutubeService.searchMeta(item.title) }
+                .getOrNull() ?: ("" to "")
+            if (poster.isBlank()) poster = rtThumb
+            if (overview.isBlank()) overview = rtDesc
+        }
+        if (poster.isBlank() && overview.isBlank() && card == null) return item
+        return item.copy(
+            posterUrl = poster.ifBlank { item.posterUrl },
+            year = card?.year?.ifBlank { item.year } ?: item.year,
+            imdbId = card?.imdbId?.ifBlank { item.imdbId } ?: item.imdbId,
+            overview = overview.ifBlank { item.overview },
+            rating = if ((card?.rating ?: 0.0) > 0) card!!.rating else item.rating,
+        )
+    }
+
     fun trending(page: Int = 1): List<MediaItem> =
         pick({ RutrackerrCatalog.trending(page) }, { KinopoiskClient.trending(page) }, { TmdbClient.trending(page) })
             ?: emptyList()

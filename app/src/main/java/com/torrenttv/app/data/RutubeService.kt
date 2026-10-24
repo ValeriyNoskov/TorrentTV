@@ -72,9 +72,41 @@ object RutubeService {
             .take(24)
     }
 
+    /**
+     * Мета для карточки (постер-кадр + описание) по названию — второй источник
+     * после КП: у «трудных» тайтлов, которых нет в КП, Рутуб часто знает кадр
+     * и описание. Возвращаем лучшего кандидата по тому же ранжированию, что и
+     * searchContent (мулор-фильтр не нужен: нам не важно, фильм это или нарезка).
+     */
+    fun searchMeta(query: String): Pair<String, String>? {
+        val q = java.net.URLEncoder.encode(query.trim(), "UTF-8")
+        val json = runCatching {
+            TorrentHttp.get("https://rutube.ru/api/search/video/?query=$q&page=1")
+        }.getOrNull() ?: return null
+        val results = runCatching {
+            JSONObject(json).optJSONArray("results")
+        }.getOrNull() ?: return null
+        var best: Pair<String, String>? = null
+        var bestScore = Int.MAX_VALUE
+        val ql = query.trim().lowercase()
+        for (i in 0 until results.length()) {
+            val r = results.getJSONObject(i)
+            val title = r.safeString("title").trim().lowercase()
+            if (!title.isRealText()) continue
+            val thumb = r.safeString("thumbnail_url")
+            if (thumb.isBlank()) continue
+            // То же ранжирование, что в searchContent: совпадение в начале — лучше
+            val score = (if (title.startsWith(ql)) 0 else if (ql in title) 1 else 2) * 10_000 + title.length
+            if (score < bestScore) {
+                bestScore = score
+                best = thumb to r.safeString("description").trim()
+            }
+        }
+        return best
+    }
+
     /** HLS-ссылка для видео по id (play/options с Referer). */
-    fun videoHls(videoId: String): String? {
-        val opts = runCatching {
+    fun videoHls(videoId: String): String? {        val opts = runCatching {
             TorrentHttp.get(
                 "https://rutube.ru/api/play/options/$videoId/?format=json",
                 mapOf("Referer" to "https://rutube.ru/"),

@@ -75,6 +75,15 @@ fun PlayerScreen(
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
     val scope = rememberCoroutineScope()
+    // Карточка без меты (заглушка из поиска раздач): дотягиваем постер/год/IMDb
+    // с КП — иначе в «Продолжить» карточка без постера (жалоба по «Спецам»)
+    var itemState by remember(item.storeKey) { mutableStateOf(item) }
+    LaunchedEffect(item.storeKey) {
+        if (itemState.posterUrl.isBlank() || itemState.imdbId.isBlank()) {
+            val en = withContext(Dispatchers.IO) { MediaApi.enrich(itemState) }
+            if (en.posterUrl.isNotBlank() || en.imdbId.isNotBlank()) itemState = en
+        }
+    }
     // Источник эпизода хранится с суффиксом (":s01e05") — у каждой серии свой
     val sourceSuffix = episode?.sourceSuffix ?: ""
     val sourceKey = item.storeKey + sourceSuffix
@@ -334,7 +343,7 @@ fun PlayerScreen(
     if (st != null && bufferedPct >= 100) {
         VideoPlayer(
             stream = st,
-            item = item,
+            item = itemState,
             episode = episode,
             store = store,
             onBack = onBack,

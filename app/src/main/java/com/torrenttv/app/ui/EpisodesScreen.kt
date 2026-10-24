@@ -70,6 +70,43 @@ fun EpisodesScreen(
     var failReason by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(item) {
+        // Кеш: найденные однажды серии запоминаются — повторные открытия
+        // показываются мгновенно, без поиска (жалоба: «запоминай ссылки»)
+        val cached = store.loadEpisodeCache(item)
+        if (cached.isNotEmpty()) {
+            seasons = cached
+            loading = false
+            if (selected == null) {
+                // Порядок: явно запрошенный сезон → последний выбранный вручную → первый
+                val last = store.lastSeason(item).takeIf { n -> n != 0 && cached.any { it.number == n } }
+                selected = initialSeason?.takeIf { s -> cached.any { it.number == s } }
+                    ?: last
+                    ?: cached.first().number
+            }
+            AppLog.log("episodes", "«${item.title}»: из кеша ${cached.sumOf { it.episodes.size }} серий")
+            // Дос-досылка: серии выходят периодически — тихо ищем раз в 12 ч,
+            // добавляем ТОЛЬКО недостающие, названия старых не трогаем
+            if (System.currentTimeMillis() - store.episodeCacheTime(item) > 12 * 3_600_000L) {
+                val (found, reason) = withContext(Dispatchers.IO) { seasonsFromTorrents(item, store, context) }
+                if (found.isNotEmpty()) {
+                    val merged = mergeSeasons(cached, found)
+                    val added = merged.sumOf { it.episodes.size } - cached.sumOf { it.episodes.size }
+                    store.saveEpisodeCache(item, merged)
+                    if (added > 0) {
+                        seasons = merged
+                        tick++
+                        AppLog.log("episodes", "«${item.title}»: дос-поиск добавил $added новых серий")
+                    } else {
+                        AppLog.log("episodes", "«${item.title}»: дос-поиск — новых серий нет")
+                    }
+                } else {
+                    AppLog.log("episodes", "«${item.title}»: дос-поиск не удался${reason?.let { ": $it" } ?: ""}")
+                    store.saveEpisodeCache(item, cached) // обновить время кеша — не молотить каждое открытие
+                }
+            }
+            return@LaunchedEffect
+        }
+        // Первый запуск: КП → раздачи → кеш
         seasons = withContext(Dispatchers.IO) { MediaApi.seasons(item) }
         // Главный источник при торрентовом показе — сама раздача: файлы в ней и
         // есть серии. КП/TMDB тут только украшение (названия серий), когда доступны.
@@ -77,14 +114,15 @@ fun EpisodesScreen(
             val (fromTorrents, reason) = withContext(Dispatchers.IO) { seasonsFromTorrents(item, store, context) }
             seasons = fromTorrents
             failReason = reason
-            if (seasons.isNotEmpty()) {
-                AppLog.log("episodes", "«${item.title}»: сезоны из раздачи — ${seasons.sumOf { it.episodes.size }} серий")
-            }
         }
+        // Найденное запоминаем: и собранное из раздач, и КП-мету
+        if (seasons.isNotEmpty()) store.saveEpisodeCache(item, seasons)
         loading = false
         AppLog.log("episodes", "«${item.title}»: загружено сезонов ${seasons.size} (id=${item.id})")
         if (seasons.isNotEmpty() && selected == null) {
+            val last = store.lastSeason(item).takeIf { n -> n != 0 && seasons.any { it.number == n } }
             selected = initialSeason?.takeIf { s -> seasons.any { it.number == s } }
+                ?: last
                 ?: seasons.first().number
         }
     }
@@ -125,6 +163,7 @@ fun EpisodesScreen(
                     itemsIndexed(seasons) { _, s ->
                         SeasonChip("Сезон ${s.number}", s.number == (selected ?: seasons.first().number)) {
                             selected = s.number
+                            store.saveLastSeason(item, s.number) // «Титаны»: открыл S05 — запомнить
                         }
                     }
                 }
@@ -204,6 +243,17 @@ fun EpisodesScreen(
 }
 
 /**
+ * Объединение кеша и дос-поиска: новые серии добавляются, старые (с их
+ * названиями из КП/файлов) не трогаются.
+ */
+private fun mergeSeasons(old: List<Season>, fresh: List<Season>): List<Season> {
+    val map = sortedMapOf<Int, MutableMap<Int, Episode>>()
+    for (s in old) for (e in s.episodes) map.getOrPut(s.number) { mutableMapOf() }[e.episode] = e
+    for (s in fresh) for (e in s.episodes) map.getOrPut(s.number) { mutableMapOf() }.putIfAbsent(e.episode, e)
+    return map.map { (num, eps) -> Season(num, eps.values.sortedBy { it.episode }) }
+}
+
+/**
  * Сезоны из раздачи (главный источник при торрентовом показе): TorrServe
  * подхватывает лучшую раздачу, серии — видео-файлы (S01E05…). Магнит раздачи
  * сохраняется за каждой серией — «Смотреть» работает сразу, без поиска.
@@ -246,9 +296,21 @@ private suspend fun seasonsFromTorrents(
         val video = t.files.filter {
             it.path.substringAfterLast('.', "").lowercase() in TorrentEngine.VIDEO_EXT
         }
+        // Сезон из названия раздачи: «Титаны.S05» / «5 сезон» — для пачек,
+        // где файлы названы просто «05. …» без метки сезона
+        val torrentSeason = Regex("S(\\d{1,2})", RegexOption.IGNORE_CASE).find(r.name)
+            ?.groupValues?.get(1)?.toIntOrNull()
+            ?: Regex("(\\d{1,2})\\s*[сС]езон").find(r.name)?.groupValues?.get(1)?.toIntOrNull()
         val bySeason = sortedMapOf<Int, MutableList<Episode>>()
         for (f in video) {
-            val (s, e) = Episode.fileNumbers(f.path) ?: continue
+            val parsed = Episode.fileNumbers(f.path) ?: run {
+                // Файл без S/E-метки: серия — ведущее число имени («05. …» → 5),
+                // сезон — из названия раздачи. Без обоих — файл пропускаем
+                val num = Regex("^\\D*?(\\d{1,3})").find(f.path.substringAfterLast('/'))
+                    ?.groupValues?.get(1)?.toIntOrNull()
+                if (torrentSeason != null && num != null && num in 1..200) torrentSeason to num else null
+            } ?: continue
+            val (s, e) = parsed
             bySeason.getOrPut(s) { mutableListOf() }.add(
                 Episode(
                     season = s,
