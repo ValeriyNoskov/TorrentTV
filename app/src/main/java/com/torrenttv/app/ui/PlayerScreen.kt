@@ -412,6 +412,9 @@ private fun VideoPlayer(
     }
     // Ошибка плеера: текст поверх экрана вместо молчаливого чёрного экрана
     var errorMsg by remember { mutableStateOf("") }
+    // ⏳ Буферизация посреди просмотра: стоп/подкачка — показываем «живой» статус
+    var playerBuf by remember { mutableStateOf(false) }
+    var bufPct by remember { mutableIntStateOf(0) }
     // Авто-перезапуск после ошибки (как в VLC/Just Player): до 3 попыток
     var retries by remember { mutableStateOf(0) }
     // ---------- Сдвиг субтитров (как в Kodi): кастомный вывод через onCues ----------
@@ -431,11 +434,20 @@ private fun VideoPlayer(
         }
     }
 
+    // Процент буфера во время подкачки (для индикатора «живого» плеера)
+    LaunchedEffect(playerBuf) {
+        while (playerBuf) {
+            bufPct = player.bufferedPercentage
+            delay(400)
+        }
+    }
+
     DisposableEffect(player) {
         var audioApplied = false
         val listener = object : androidx.media3.common.Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == androidx.media3.common.Player.STATE_READY) errorMsg = ""
+                playerBuf = state == androidx.media3.common.Player.STATE_BUFFERING
                 if (state == androidx.media3.common.Player.STATE_ENDED) {                    // «Конец» — только если видео реально проигрывалось:
                     // при нулевой скорости/ошибке источника ExoPlayer может
                     // выдать ENDED сразу после prepare — это не конец фильма
@@ -702,6 +714,21 @@ private fun VideoPlayer(
                     .background(Color(0xCC1F2430), RoundedCornerShape(12.dp))
                     .padding(horizontal = 20.dp, vertical = 14.dp),
             )
+        }
+
+        // ⏳ Буферизация посреди просмотра: чёрный экран ≠ «зависло»
+        if (playerBuf && errorMsg.isBlank() && nextCountdown == null && !showFiles && !showGear && !showTrackMenu) {
+            Column(
+                Modifier
+                    .align(Alignment.Center)
+                    .background(Color(0xE0151B26), RoundedCornerShape(16.dp))
+                    .padding(horizontal = 28.dp, vertical = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text("⏳ Буферизация…", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+                Text("буфер $bufPct%", color = Color(0xFFF5B942), fontSize = 15.sp)
+            }
         }
 
         // Автопереход к следующей серии: отсчёт с кнопками (как у стримингов).

@@ -1,6 +1,7 @@
 package com.torrenttv.app.ui
 
 import androidx.activity.compose.BackHandler
+import android.view.KeyEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,6 +41,7 @@ import androidx.media3.ui.PlayerView
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.torrenttv.app.MainActivity
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
 import kotlinx.coroutines.delay
@@ -74,17 +76,23 @@ fun OnlinePlayerScreen(link: OnlineLink, item: MediaItem, title: String, onBack:
     }
     var showQuality by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var showTrackMenu by remember { mutableStateOf(false) }
     var maxQuality by remember { mutableStateOf<Int?>(null) } // null = авто
     var seekInfo by remember { mutableStateOf("") }           // «⏩ +10 сек» при перемотке пультом
-    // Панель контролов при действии пульта (счётчик действий — триггер показа)
-    var panelTick by remember { mutableStateOf(0) }
-    var showPanel by remember { mutableStateOf(false) }
+    // ---------- Состояние: буферизация и ошибки (чёрный экран ≠ «зависло») ----------
+    var playState by remember { mutableStateOf(Player.STATE_IDLE) }
+    var errorMsg by remember { mutableStateOf("") }
+    var bufPct by remember { mutableIntStateOf(0) }
+    // Панель контролов при действии пульта (счётчик действий — триггер показа).
+    // Видна сразу при входе — пользователь видит, что плеер жив
+    var panelTick by remember { mutableStateOf(1) }
+    var showPanel by remember { mutableStateOf(true) }
     val gearFocus = remember { FocusRequester() }
     LaunchedEffect(panelTick) {
-        if (panelTick > 0 && !showSettings && !showQuality) {
+        if (panelTick > 0 && !showSettings && !showQuality && !showTrackMenu) {
             showPanel = true
             kotlinx.coroutines.delay(4000)
-            if (!showSettings && !showQuality) showPanel = false
+            if (!showSettings && !showQuality && !showTrackMenu) showPanel = false
         }
     }
     // При открытой панели фокус сразу на шестерёнке — пульт её находит
@@ -126,6 +134,13 @@ fun OnlinePlayerScreen(link: OnlineLink, item: MediaItem, title: String, onBack:
                     seekInfo = "▶ Продолжаем с %d:%02d".format(resumeSec / 60, resumeSec % 60)
                 }
                 playWhenReady = true
+                addListener(object : Player.Listener {
+                    override fun onPlaybackStateChanged(state: Int) { playState = state }
+                    override fun onPlayerError(error: PlaybackException) {
+                        // Не вечный чёрный экран: сообщение + кнопки Повторить/Назад
+                        errorMsg = "Ошибка воспроизведения: ${error.errorCodeName}"
+                    }
+                })
             }
     }
 
@@ -159,6 +174,92 @@ fun OnlinePlayerScreen(link: OnlineLink, item: MediaItem, title: String, onBack:
             .buildUpon()
             .setMaxVideoSize(Int.MAX_VALUE, maxQuality ?: Int.MAX_VALUE)
             .build()
+    }
+
+    // Процент буфера во время загрузки (для индикатора на чёрном экране)
+    LaunchedEffect(playState) {
+        if (playState == Player.STATE_BUFFERING) {
+            while (playState == Player.STATE_BUFFERING) {
+                bufPct = player.bufferedPercentage
+                delay(300)
+            }
+            bufPct = 100
+        }
+    }
+
+    // Запомненная аудиодорожка: применяем один раз при появлении дорожек
+    DisposableEffect(player) {
+        var audioApplied = false
+        val listener = object : Player.Listener {
+            override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
+                if (audioApplied) return
+                val want = store.playerAudioLabel()
+                if (want.isBlank()) return
+                for (g in 0 until tracks.groups.size) {
+                    val group = tracks.groups[g]
+                    if (group.type != androidx.media3.common.C.TRACK_TYPE_AUDIO) continue
+                    for (i in 0 until group.length) {
+                        val fmt = group.getTrackFormat(i)
+                        val label = (fmt.label ?: "") + " " + (fmt.language ?: "")
+                        if (label.lowercase().contains(want.lowercase())) {
+                            player.trackSelectionParameters = player.trackSelectionParameters
+                                .buildUpon()
+                                .clearOverridesOfType(androidx.media3.common.C.TRACK_TYPE_AUDIO)
+                                .addOverride(androidx.media3.common.TrackSelectionOverride(group.mediaTrackGroup, i))
+                                .build()
+                            audioApplied = true
+                            return
+                        }
+                    }
+                }
+            }
+        }
+        player.addListener(listener)
+        onDispose { player.removeListener(listener) }
+    }
+
+    // ---------- Единый обработчик пульта: работает при ЛЮБОМ фокусе ----------
+    // Скрытая панель: любая кнопка сначала показывает панель (как в MX),
+    // действие — следующим нажатием. Видимая: стрелки двигают фокус по кнопкам
+    fun handleRemoteKey(keyCode: Int): Boolean {
+        val panelVisible = showPanel || showSettings || showQuality || showTrackMenu
+        return when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                if (panelVisible) { panelTick++; false }
+                else {
+                    val delta = if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) 10_000L else -10_000L
+                    val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
+                    player.seekTo((player.currentPosition + delta).coerceIn(0L, dur))
+                    seekInfo = if (delta > 0) "⏩ +10 сек" else "⏪ −10 сек"
+                    panelTick++
+                    true
+                }
+            }
+            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN ->
+                if (panelVisible) false else { panelTick++; true }
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER ->
+                if (panelVisible) false else { panelTick++; true }
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+                if (player.isPlaying) player.pause() else player.play()
+                seekInfo = if (player.isPlaying) "▶ Продолжаем" else "⏸ Пауза"
+                panelTick++; true
+            }
+            KeyEvent.KEYCODE_MEDIA_PLAY -> { player.play(); panelTick++; true }
+            KeyEvent.KEYCODE_MEDIA_PAUSE -> { player.pause(); panelTick++; true }
+            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { player.seekTo(player.currentPosition + 30_000L); seekInfo = "⏩ +30 сек"; panelTick++; true }
+            KeyEvent.KEYCODE_MEDIA_REWIND -> { player.seekTo((player.currentPosition - 30_000L).coerceAtLeast(0)); seekInfo = "⏪ −30 сек"; panelTick++; true }
+            KeyEvent.KEYCODE_MENU -> { showTrackMenu = !showTrackMenu; true }
+            // BACK: панель видна — прячем; скрыта — выходим из плеера (BackHandler)
+            KeyEvent.KEYCODE_BACK -> {
+                if (showPanel && !showSettings && !showQuality && !showTrackMenu) { showPanel = false; true }
+                else false
+            }
+            else -> false
+        }
+    }
+    DisposableEffect(player) {
+        MainActivity.remoteKeyHandler = { keyCode -> handleRemoteKey(keyCode) }
+        onDispose { MainActivity.remoteKeyHandler = null }
     }
 
     BackHandler(enabled = showQuality) { showQuality = false }
@@ -199,38 +300,10 @@ fun OnlinePlayerScreen(link: OnlineLink, item: MediaItem, title: String, onBack:
                     // Нативные контролы выключены: перехватывают пульт и мешают
                     // дойти до нашей панели (⚙ Качество). Панель — своя, Compose.
                     useController = false
-                    // Пульт: влево/вправо — перемотка ±10 сек (с индикатором),
-                    // ОК — пауза, MENU — шестерёнка
+                    // Пульт: всё через единый handleRemoteKey (панель при любой кнопке)
                     setOnKeyListener { _, keyCode, event ->
-                        // Влево/вправо — перемотка ±10 сек
-                        if (event.action == android.view.KeyEvent.ACTION_UP &&
-                            (keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT ||
-                                keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT)
-                        ) {
-                            val delta = if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT) 10_000L else -10_000L
-                            val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
-                            player.seekTo((player.currentPosition + delta).coerceIn(0L, dur))
-                            seekInfo = if (delta > 0) "⏩ +10 сек" else "⏪ −10 сек"
-                            panelTick++
-                            true
-                        } else if (event.action == android.view.KeyEvent.ACTION_UP &&
-                            (keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER ||
-                                keyCode == android.view.KeyEvent.KEYCODE_ENTER ||
-                                keyCode == android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
-                        ) {
-                            // ОК на пульте — пауза/продолжить
-                            if (player.isPlaying) player.pause() else player.play()
-                            seekInfo = if (player.isPlaying) "▶ Продолжаем" else "⏸ Пауза"
-                            panelTick++
-                            true
-                        } else if (event.action == android.view.KeyEvent.ACTION_UP &&
-                            keyCode == android.view.KeyEvent.KEYCODE_MENU
-                        ) {
-                            showSettings = !showSettings
-                            true
-                        } else {
-                            false
-                        }
+                        if (event.action != android.view.KeyEvent.ACTION_UP) false
+                        else handleRemoteKey(keyCode)
                     }
                 }
             },
@@ -260,6 +333,75 @@ fun OnlinePlayerScreen(link: OnlineLink, item: MediaItem, title: String, onBack:
                     .align(Alignment.Center)
                     .background(Color(0xE0151B26), RoundedCornerShape(12.dp))
                     .padding(horizontal = 22.dp, vertical = 10.dp),
+            )
+        }
+
+        // ⏳ Буферизация: чёрный экран — значит «грузим», а не «зависло»
+        if (playState == Player.STATE_BUFFERING && errorMsg.isBlank()) {
+            Column(
+                Modifier
+                    .align(Alignment.Center)
+                    .background(Color(0xE0151B26), RoundedCornerShape(16.dp))
+                    .padding(horizontal = 28.dp, vertical = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text("⏳ Загружаю видео…", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+                Text("$title · буфер $bufPct%", color = Color(0xFFF5B942), fontSize = 15.sp)
+            }
+        }
+
+        // Ошибка воспроизведения: сообщение + Повторить/Назад (не вечный чёрный экран)
+        if (errorMsg.isNotBlank()) {
+            val retryFocus = remember { FocusRequester() }
+            LaunchedEffect(Unit) { retryFocus.requestFocus() }
+            Column(
+                Modifier
+                    .align(Alignment.Center)
+                    .background(Color(0xF0151B26), RoundedCornerShape(16.dp))
+                    .padding(horizontal = 24.dp, vertical = 18.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    errorMsg,
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+                Spacer(Modifier.height(14.dp))
+                Row {
+                    Surface(
+                        onClick = { errorMsg = ""; player.prepare(); player.play() },
+                        modifier = Modifier.focusRequester(retryFocus),
+                        shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF1F2430),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContentColor = Color(0xFF0E1116),
+                        ),
+                    ) { Text("🔄 Повторить", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) }
+                    Spacer(Modifier.width(10.dp))
+                    Surface(
+                        onClick = onBack,
+                        shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF1F2430),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFFFD07A),
+                            focusedContentColor = Color(0xFF0E1116),
+                        ),
+                    ) { Text("← Назад", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) }
+                }
+            }
+        }
+
+        // Меню дорожек/субтитров (кнопка 🎵 на панели или клавиша MENU)
+        if (showTrackMenu) {
+            TrackMenuOverlay(
+                player = player,
+                onDismiss = { showTrackMenu = false },
+                onAudioPicked = { label -> store.setPlayerAudioLabel(label) },
             )
         }
 
@@ -301,6 +443,8 @@ fun OnlinePlayerScreen(link: OnlineLink, item: MediaItem, title: String, onBack:
                         seekInfo = "⏩ +10 сек"
                         panelTick++
                     }
+                    Spacer(Modifier.width(8.dp))
+                    PlayerChip("🎵") { showTrackMenu = true }
                     Spacer(Modifier.width(8.dp))
                     PlayerChip(if (showSettings) "✕" else "⚙", focusRequester = gearFocus) { showSettings = !showSettings }
                 }
