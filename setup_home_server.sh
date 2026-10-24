@@ -46,16 +46,21 @@ cat > "$PLIST" <<EOF
     <key>Label</key><string>ru.torrserver</string>
     <key>ProgramArguments</key><array>
         <string>$DIR/torrserver</string>
-        <string>-dir</string><string>$DIR</string>
-        <string>-port</string><string>8090</string>
-        <string>-logpath</string><string>$DIR/torrserver.log</string>
+        <!-- ВАЖНО: короткие флаги -d/-p/-l. Длинные в этой сборке --path/--port,
+             а "-dir"/"-port" сервер не понимает и выходит с кодом 2 -->
+        <string>-d</string><string>$DIR</string>
+        <string>-p</string><string>8090</string>
+        <string>-l</string><string>$DIR/torrserver.log</string>
     </array>
     <key>RunAtLoad</key><true/>
     <key>KeepAlive</key><true/>
+    <key>WorkingDirectory</key><string>$DIR</string>
+    <key>StandardErrorPath</key><string>$DIR/launchd.err.log</string>
 </dict></plist>
 EOF
 launchctl bootout "gui/$(id -u)/ru.torrserver" 2>/dev/null || true
-launchctl load "$PLIST"
+sleep 1
+launchctl bootstrap "gui/$(id -u)" "$PLIST"
 echo "OK: автозапуск настроен (launchd)"
 
 # --- 4. Mac не должен засыпать ---
@@ -71,13 +76,13 @@ else
 fi
 
 # --- 5. Проверка и адрес ---
-sleep 2
+sleep 5
 if curl -fsS -m 5 "http://127.0.0.1:8090/echo" > /dev/null 2>&1; then
     echo ""
     echo "✅ TorrServer работает!"
 else
     echo ""
-    echo "⚠ Сервер пока не отвечает — проверьте лог: $DIR/torrserver.log"
+    echo "⚠ Сервер пока не отвечает — проверьте лог: $DIR/torrserver.log и $DIR/launchd.err.log"
 fi
 
 IP=$(ipconfig getifaddr en0 || ipconfig getifaddr en1 || echo "?")
@@ -90,3 +95,7 @@ echo "      http://$IP:8090"
 echo ""
 echo "  (закрепите этот IP в роутере, чтобы не менялся)"
 echo "============================================================"
+echo ""
+echo "Важно: агент launchd запускается после входа пользователя в систему."
+echo "Чтобы сервер поднимался сам после перезагрузки — включите автовход:"
+echo "  Системные настройки → Пользователи и группы → Автоматический вход"

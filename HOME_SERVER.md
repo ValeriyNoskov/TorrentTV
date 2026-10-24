@@ -9,6 +9,40 @@
 
 ---
 
+## ✅ Уже настроено: MacBook Air (192.168.3.78)
+
+TorrServer установлен и работает как сервис launchd (переживает падение и
+перезагрузку), сон отключён.
+
+| Что | Значение |
+|---|---|
+| Адрес для ВНосКино | `http://192.168.3.78:8090` |
+| Где установлен | `~/torrserver/torrserver` (MatriX.147.1, darwin-amd64) |
+| Автозапуск | `~/Library/LaunchAgents/ru.torrserver.plist` (`ru.torrserver`) |
+| Лог сервера | `~/torrserver/torrserver.log` |
+| Сон | отключён (`pmset -a sleep 0`, `womp 1`) |
+| Пользователь | `valeriy` |
+
+Управление (по SSH с рабочего Mac):
+
+```bash
+ssh -i ~/.ssh/id_ed25519_vnoskino Valeriy@192.168.3.78
+launchctl kickstart -k gui/$(id -u)/ru.torrserver   # перезапуск
+launchctl bootout gui/$(id -u)/ru.torrserver        # остановить
+curl -s http://127.0.0.1:8090/echo                  # проверка (ответ: MatriX.147.1)
+```
+
+Два нюанса, проверенные на практике:
+
+- **Флаги запуска — короткие**: `-d` (каталог), `-p` (порт), `-l` (лог).
+  С `-dir/-port` сервер молча выходит с кодом 2, и launchd показывает
+  `state = spawn scheduled`.
+- **Автовход**: агент launchd стартует только после входа пользователя в
+  систему. Чтобы сервер поднимался после перезагрузки без участия человека,
+  включите «Системные настройки → Пользователи и группы → Автоматический вход».
+
+---
+
 ## Выбор сервера
 
 | Устройство | Цена | 4K | Подходит? |
@@ -57,7 +91,7 @@ TorrServer (торренты) + Jellyfin (библиотека с постера
 # TorrServer: бинарь с github.com/YouROK/TorrServer/releases
 # файл TorrServer-darwin-amd64 → переименовать в torrserver
 chmod +x torrserver
-mkdir -p ~/torrserver-data && ./torrserver -dir ~/torrserver-data -port 8090
+mkdir -p ~/torrserver-data && ./torrserver -d ~/torrserver-data -p 8090
 
 # Jellyfin: библиотека с постерами (опционально, но приятно)
 brew install jellyfin        # или .pkg с jellyfin.org/downloads
