@@ -193,7 +193,7 @@ object TorrentSearch {
         val merged = mergedRaw.take(limit)
         com.torrenttv.app.data.AppLog.log(
             "search",
-            "q=\"$query\" alt=\"$altQuery\" tv=$isTvShow imdb=$imdbId -> " +
+            "q=\"$query\" alt=\"${altQuery ?: "-"}\" tv=$isTvShow imdb=$imdbId -> " +
                 stats.joinToString(" ") { s ->
                     "${s.name}:${s.count}" + (s.error?.let { e -> "($e)" } ?: "")
                 } +
