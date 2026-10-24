@@ -13,6 +13,21 @@ data class Episode(
     val sourceSuffix: String get() = ":" + code.lowercase()
 
     companion object {
+        /** Номера (сезон, эпизод) из имени файла: S01E05 / 1x05 / E05 (сезон 1). */
+        fun fileNumbers(name: String): Pair<Int, Int>? {
+            val n = name.substringAfterLast('/').substringBeforeLast('.')
+            Regex("""s(\d{1,2})[._ -]?e(\d{1,3})""", RegexOption.IGNORE_CASE).find(n)?.let {
+                return it.groupValues[1].toInt() to it.groupValues[2].toInt()
+            }
+            Regex("""(\d{1,2})x(\d{1,3})(\D|$)""", RegexOption.IGNORE_CASE).find(n)?.let {
+                return it.groupValues[1].toInt() to it.groupValues[2].toInt()
+            }
+            Regex("""[._ -]e(\d{1,3})(\D|$)""", RegexOption.IGNORE_CASE).find(n)?.let {
+                return 1 to it.groupValues[1].toInt()
+            }
+            return null
+        }
+
         /**
          * Совпадает ли имя файла с эпизодом: S01E05, s1e5, 1x05.
          * Для пачек сезона — чтобы плеер включил нужную серию.

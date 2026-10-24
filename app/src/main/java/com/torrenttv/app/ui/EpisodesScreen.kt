@@ -39,6 +39,10 @@ import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
 import com.torrenttv.app.data.MediaApi
 import com.torrenttv.app.data.Season
+import com.torrenttv.app.data.TorrServeService
+import com.torrenttv.app.data.TorrentSearch
+import com.torrenttv.app.data.TorrentResult
+import com.torrenttv.app.torrent.TorrentEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -65,6 +69,14 @@ fun EpisodesScreen(
 
     LaunchedEffect(item) {
         seasons = withContext(Dispatchers.IO) { MediaApi.seasons(item) }
+        // Главный источник при торрентовом показе — сама раздача: файлы в ней и
+        // есть серии. КП/TMDB тут только украшение (названия серий), когда доступны.
+        if (seasons.isEmpty()) {
+            seasons = withContext(Dispatchers.IO) { seasonsFromTorrents(item, store, context) }
+            if (seasons.isNotEmpty()) {
+                AppLog.log("episodes", "«${item.title}»: сезоны из раздачи — ${seasons.sumOf { it.episodes.size }} серий")
+            }
+        }
         loading = false
         AppLog.log("episodes", "«${item.title}»: загружено сезонов ${seasons.size} (id=${item.id})")
         if (seasons.isNotEmpty() && selected == null) {
@@ -176,6 +188,50 @@ fun EpisodesScreen(
         Spacer(Modifier.padding(top = 10.dp))
         Button(onClick = onBack) { Text("← Назад") }
     }
+}
+
+/**
+ * Сезоны из раздачи (главный источник при торрентовом показе): TorrServe
+ * подхватывает лучшую раздачу, серии — видео-файлы (S01E05…). Магнит раздачи
+ * сохраняется за каждой серией — «Смотреть» работает сразу, без поиска.
+ */
+private suspend fun seasonsFromTorrents(
+    item: MediaItem,
+    store: LocalStore,
+    context: android.content.Context,
+): List<Season> {
+    val host = store.torrServeHost()
+    if (host.isBlank() || !TorrServeService.ensureRunning(context, host)) return emptyList()
+    val found: List<TorrentResult> = try {
+        TorrentSearch.searchDetailed(query = item.title, isTvShow = item.type != "movie").first
+    } catch (e: Exception) {
+        emptyList()
+    }
+    AppLog.log("episodes", "«${item.title}»: раздач для эпизодов найдено ${found.size}")
+    for (r in found.sortedByDescending { it.seeds }.take(3)) {
+        val t = runCatching {
+            TorrServeService.addMagnet(host, TorrentSearch.toMagnet(r), item.title, 45_000)
+        }.getOrNull() ?: continue
+        val video = t.files.filter {
+            it.path.substringAfterLast('.', "").lowercase() in TorrentEngine.VIDEO_EXT
+        }
+        val bySeason = sortedMapOf<Int, MutableList<Episode>>()
+        for (f in video) {
+            val (s, e) = Episode.fileNumbers(f.path) ?: continue
+            bySeason.getOrPut(s) { mutableListOf() }.add(
+                Episode(
+                    season = s,
+                    episode = e,
+                    title = f.path.substringAfterLast('/').substringBeforeLast('.'),
+                ),
+            )
+        }
+        if (bySeason.isEmpty()) continue
+        val magnet = TorrentSearch.toMagnet(r)
+        for (eps in bySeason.values) for (ep in eps) store.saveMagnet(item, magnet, ep.sourceSuffix)
+        return bySeason.map { (num, eps) -> Season(num, eps.sortedBy { it.episode }) }.sortedBy { it.number }
+    }
+    return emptyList()
 }
 
 @Composable
