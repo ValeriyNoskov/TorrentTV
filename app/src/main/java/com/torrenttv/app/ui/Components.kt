@@ -624,6 +624,8 @@ fun SideNav(active: Screen, onTab: (Screen) -> Unit) {
         SideBarButton("⭐", "Избранное", Screen.Favorites, active, onTab)
         SideBarButton("🔍", "Поиск", Screen.Search, active, onTab)
         SideBarButton("⚙", "Настройки", Screen.Settings, active, onTab)
+        Spacer(Modifier.weight(1f))
+        SideBarExitButton()
     }
 }
 
@@ -660,6 +662,40 @@ fun SideBarButton(
                 text = label,
                 fontSize = 11.sp,
                 fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+/** Кнопка «Выход» внизу левого меню — закрывает приложение. */
+@Composable
+fun SideBarExitButton() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    androidx.tv.material3.Surface(
+        onClick = {
+            com.torrenttv.app.data.AppLog.log("app", "выход через боковое меню")
+            (context as? android.app.Activity)?.finishAffinity()
+        },
+        modifier = Modifier.width(92.dp),
+        shape = clickableSurfaceShape(RoundedCornerShape(12.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color.Transparent,
+            contentColor = Color(0xFFE05B4D),
+            focusedContainerColor = Color(0xFFE05B4D),
+            focusedContentColor = Color.White,
+            pressedContainerColor = Color(0xFFC44C3F),
+            pressedContentColor = Color.White,
+        ),
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(vertical = 8.dp),
+        ) {
+            Text(text = "⛔", fontSize = 22.sp)
+            Text(
+                text = "Выход",
+                fontSize = 11.sp,
                 maxLines = 1,
             )
         }
