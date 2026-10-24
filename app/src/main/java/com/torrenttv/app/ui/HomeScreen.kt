@@ -53,6 +53,15 @@ fun HomeScreen(
         updateInfo?.let { UpdateManager.startBackgroundDownload(context, it) }
     }
 
+    // Проверка обновлений при запуске (вернули после рефакторинга v0.7.67 —
+    // тогда автопроверка выпала из главной, плашка перестала появляться)
+    LaunchedEffect(Unit) {
+        UpdateManager.checkForUpdate(
+            currentVersion,
+            UpdateManager.ghToken(context),
+        ) { updateInfo = it }
+    }
+
     Box(
         Modifier
             .fillMaxSize()
