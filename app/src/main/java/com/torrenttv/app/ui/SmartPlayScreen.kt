@@ -223,7 +223,7 @@ fun SmartPlayScreen(
                                 uploading = true
                                 kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
                                     val url = com.torrenttv.app.data.AppLog.sendToPastebin(store.githubToken().ifBlank { com.torrenttv.app.update.UpdateManager.ghToken(context).ifBlank { null } })
-                                    com.torrenttv.app.data.AppLog.log("upload", if (url.isNotBlank()) "sent -> $url" else "send FAILED")
+                                    com.torrenttv.app.data.AppLog.log("upload", if (url.isNotBlank()) "выгрузка ок" else "выгрузка FAIL")
                                     uploadUrl = url
                                     uploading = false
                                 }

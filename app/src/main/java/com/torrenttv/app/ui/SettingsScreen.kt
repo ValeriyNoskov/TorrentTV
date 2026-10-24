@@ -250,12 +250,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 store.setJackettUrl(""); store.setJackettApiKey("")
                             }
                         }
-                        SettingsNote(
-                            "Jackett ищет сразу по всем вашим индексерам (Torznab). " +
-                                "Установите Jackett на компьютер/сервер в домашней сети — " +
-                                "адрес и API-ключ будут на его главной странице. " +
-                                "Без Jackett работают встроенные apibay и Torrentio."
-                        )
+                        SettingsNote("Без Jackett работают встроенные apibay и Torrentio.")
                     }
 
                     "update" -> {
@@ -302,11 +297,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 }
                             }
                         }
-                        SettingsNote(
-                            "Обновления проверяются автоматически при запуске приложения. " +
-                                "Найденное обновление скачивается в фоне — кнопка «Обновить» " +
-                                "устанавливает его без ожидания."
-                        )
+                        SettingsNote("Обновления проверяются при запуске и качаются в фоне.")
                     }
 
                     "player" -> {
@@ -319,12 +310,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             extPlayer = !extPlayer
                             store.setUseExternalPlayer(extPlayer)
                         }
-                        SettingsNote(
-                            "Включите, если предпочитаете смотреть через установленный плеер " +
-                                "(VLC, MX Player и т.п.) — приложение будет передавать видео ему. " +
-                                "Если плеер не установлен, видео откроется как обычно во встроенном. " +
-                                "Кнопка «⤴ Внешний плеер» поверх видео работает и без этой галочки."
-                        )
+                        SettingsNote("Видео будет открываться в VLC/MX Player, если он установлен.")
                         // Размер карточек: три варианта, циклом
                         SettingsRow(
                             title = "Размер карточек",
@@ -342,10 +328,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             }
                             store.setCardWidthDp(cardWidthDp)
                         }
-                        SettingsNote(
-                            "Размер постеров в каталогах: Мелкие — больше карточек в ряд, " +
-                                "Крупные — максимум читаемости. Применяется сразу ко всем экранам."
-                        )
+                        SettingsNote("Размер постеров во всех каталогах.")
                     }
 
                     "logs" -> {
@@ -408,12 +391,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                         if (uploadUrl.isNotBlank()) {
                             SettingsNote("Лог выгружен, адрес:\n${uploadUrl.trim()}")
                         }
-                        SettingsNote(
-                            "Как пользоваться: включите «Запись логов», воспроизведите проблему " +
-                                "(например, завис плеер или пропали кнопки), вернитесь сюда и нажмите " +
-                                "«Отправить логи». В лог попадают: версия, устройство, все события " +
-                                "приложения, последний краш и история из файла."
-                        )
+                        SettingsNote("Включите запись, воспроизведите проблему и нажмите «Отправить логи».")
                         // Превью последних строк — видно, что запись идёт
                         Text(
                             text = logTail.ifBlank { "(лог пуст — включите запись и подёргайте приложение)" },
@@ -434,12 +412,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             extKb = !extKb
                             store.setUseExternalKeyboard(extKb)
                         }
-                        SettingsNote(
-                            "ВКЛ: в поиске и при вводе текста открывается системная клавиатура " +
-                                "вашего ТВ/приставки — печатайте с пульта с микрофоном-клавиатурой, " +
-                                "Air Mouse или подключённой USB/Bluetooth-клавиатуры. " +
-                                "ВЫКЛ: буквы выбираются курсором на встроенной экранной клавиатуре."
-                        )
+                        SettingsNote("ВКЛ — системная клавиатура ТВ, ВЫКЛ — экранная клавиатура приложения.")
                     }
 
                     "mdbase" -> {
@@ -465,13 +438,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 kpKey = ""; tmdbKey = ""
                             }
                         }
-                        SettingsNote(
-                            "Каталоги и поиск фильмов берутся из базы Кинопоиска, при её сбое — из TMDB. " +
-                                "Вшитый ключ общий на всех, и его дневной лимит может кончаться. " +
-                                "Введите личный ключ (бесплатно): Кинопоиск — регистрация на kinopoiskapiunofficial.tech " +
-                                "(200 запросов/сутки на ваш ключ), TMDB — themoviedb.org (лимитов почти нет). " +
-                                "Со своим ключом каталоги перестанут зависеть от чужих лимитов."
-                        )
+                        SettingsNote("Свой ключ бесплатен: КП — kinopoiskapiunofficial.tech, TMDB — themoviedb.org.")
                     }
 
                     "netcheck" -> {
@@ -481,12 +448,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             valueOk = true,
                             modifier = Modifier.focusRequester(contentFocus),
                         ) { subscreen = "netcheck" }
-                        SettingsNote(
-                            "Проверка показывает, какие источники (торренты, база фильмов, " +
-                                "обновления) доступны с этого устройства. Если напротив " +
-                                "источника крестик — его блокирует ваш провайдер: это не " +
-                                "неисправность приложения. Перешлите результат в поддержку."
-                        )
+                        SettingsNote("Крестик у источника — его блокирует провайдер, это не неисправность.")
                     }
 
                     "torrserve" -> {
@@ -496,14 +458,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             valueOk = true,
                             modifier = Modifier.focusRequester(contentFocus),
                         ) { openEdit("ts", store.torrServeHost(), "http://127.0.0.1:8090") }
-                        SettingsNote(
-                            "TorrServe (MatriX) — отдельное бесплатное приложение-движок " +
-                                "торрент-стриминга. Установите его (F-Droid: ru.yourok.torrserve), " +
-                                "запустите — и ВНосКино автоматически станет стримить через него: " +
-                                "быстрее поиск пиров и стабильнее воспроизведение. Если TorrServe " +
-                                "не установлен или не отвечает, приложение пользуется внутренним движком. " +
-                                "На этом же ТВ-боксе оставьте адрес 127.0.0.1:8090."
-                        )
+                        SettingsNote("Необязательно: стрим через TorrServe быстрее. Без него работает встроенный движок.")
                     }
 
                     else -> { // search
@@ -523,11 +478,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 if (keywords.size > 3) " …" else "",
                             valueOk = keywords.isNotEmpty(),
                         ) { subscreen = "keywords" }
-                        SettingsNote(
-                            "Фильтры действуют на каталоги, тренды, hero-баннер и поиск: " +
-                                "контент с выбранными жанрами, странами и словами в названии " +
-                                "скрывается."
-                        )
+                        SettingsNote("Фильтры скрывают контент в каталогах, трендах и поиске.")
                     }
                 }
             }
@@ -962,7 +913,7 @@ private fun NetCheckScreen(onClose: () -> Unit) {
                         uploadUrl = ""
                         kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
                             val url = com.torrenttv.app.data.AppLog.sendToPastebin(store.githubToken().ifBlank { com.torrenttv.app.update.UpdateManager.ghToken(context).ifBlank { null } })
-                            com.torrenttv.app.data.AppLog.log("upload", if (url.isNotBlank()) "sent -> $url" else "send FAILED")
+                            com.torrenttv.app.data.AppLog.log("upload", if (url.isNotBlank()) "выгрузка ок" else "выгрузка FAIL")
                             uploadUrl = url
                             uploadState = if (url.isNotBlank()) "" else
                                 "Не удалось отправить (нет доступа к pastebin-сайтам)"

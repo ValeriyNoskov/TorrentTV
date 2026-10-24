@@ -196,7 +196,7 @@ fun OnlinePlayerScreen(
                                     )
                                 }.getOrNull()
                                 if (!url.isNullOrBlank()) {
-                                    com.torrenttv.app.data.AppLog.log("upload", "auto sent -> $url")
+                                    com.torrenttv.app.data.AppLog.log("upload", if (url.isNotBlank()) "автовыгрузка ок" else "автовыгрузка FAIL")
                                     errorMsg = "Ошибка: ${error.errorCodeName}\nЛог отправлен: $url"
                                 }
                             }
