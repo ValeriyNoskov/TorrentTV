@@ -658,7 +658,7 @@ fun SideBarButton(
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
         ) {
             Text(text = icon, fontSize = 22.sp)
             Text(
@@ -666,6 +666,7 @@ fun SideBarButton(
                 fontSize = 11.sp,
                 fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
                 maxLines = 1,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
         }
     }
@@ -691,13 +692,14 @@ fun SideBarExitButton() {
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
         ) {
             Text(text = "⛔", fontSize = 22.sp)
             Text(
                 text = "Выход",
                 fontSize = 11.sp,
                 maxLines = 1,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
         }
     }
