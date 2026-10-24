@@ -485,6 +485,39 @@ class LocalStore(context: Context) {
         prefs.edit().putString("panel_hide_sec", sec.toString()).apply()
     }
 
+    // ---------- Каталоги (Фильмы/Сериалы/Шоу): последний выбранный жанр ----------
+
+    fun saveCatalogGenre(mode: String, genreId: Int) {
+        prefs.edit().putInt("cataloggenre:$mode", genreId).apply()
+    }
+
+    fun lastCatalogGenre(mode: String): Int = prefs.getInt("cataloggenre:$mode", 0)
+
+    // ---------- Каталог «Торренты»: сохранение фильтров ----------
+
+    /** Фильтры раздела «Торренты» (type/genre/year/country) — переживают выход. */
+    fun saveTorrentsFilter(type: String, genre: String?, year: String?, country: String?) {
+        prefs.edit().putString(
+            "torrents_filter",
+            JSONObject()
+                .put("type", type)
+                .put("genre", genre ?: "")
+                .put("year", year ?: "")
+                .put("country", country ?: "")
+                .toString(),
+        ).apply()
+    }
+
+    fun loadTorrentsFilter(): Array<String?> = runCatching {
+        val o = JSONObject(prefs.getString("torrents_filter", "{}") ?: "{}")
+        arrayOf(
+            o.safeString("type", "all").ifBlank { "all" },
+            o.safeString("genre").ifBlank { null },
+            o.safeString("year").ifBlank { null },
+            o.safeString("country").ifBlank { null },
+        )
+    }.getOrDefault(arrayOf("all", null, null, null))
+
     // ---------- Плеер: запоминание настроек (как в Just/Next Player) ----------
 
     /** Масштаб картинки: 0 = Вписать, 1 = Растянуть, 2 = Заполнить. */

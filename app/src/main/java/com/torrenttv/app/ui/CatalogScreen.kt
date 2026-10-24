@@ -39,6 +39,7 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit) {
     val title = when (mode) { "movies" -> "Фильмы"; "shows" -> "Шоу"; else -> "Сериалы" }
 
     var genres by remember { mutableStateOf<List<Genre>>(emptyList()) }
+    // Жанр запоминается: выход из карточки не сбрасывает выбор (как в «Торрентах»)
     var selected by remember { mutableStateOf<Genre?>(null) }
 
     LaunchedEffect(mode) {
@@ -49,6 +50,9 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit) {
                 else -> MediaApi.tvGenres()
             }
         }
+        // Восстановить последний выбранный жанр этой вкладки
+        val savedId = store.lastCatalogGenre(mode)
+        if (selected == null && savedId != 0) selected = genres.firstOrNull { it.id == savedId }
     }
 
     LazyColumn(
@@ -76,7 +80,10 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit) {
             }
         }
         item {
-            GenreChips(genres, selected) { selected = it }
+            GenreChips(genres, selected) {
+                selected = it
+                store.saveCatalogGenre(mode, it?.id ?: 0)
+            }
         }
         selected?.let { g ->
             item {

@@ -141,9 +141,13 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun App() {
     var screen by remember { mutableStateOf<Screen>(Screen.Home) }
+    // Последняя открытая вкладка: из карточки/плеера BACK возвращает СЮДА,
+    // а не на «Главную» (жалоба: вышел из «Спецов» — выкинуло с «Торрентов»)
+    var lastTab by remember { mutableStateOf<Screen>(Screen.Home) }
 
     // Полный лог навигации: «нажал кнопку → открылось то-то» — видно в выгрузке лога
     LaunchedEffect(screen) {
+        if (screen in Screen.TABS) lastTab = screen
         val name = when (val s = screen) {
             Screen.Home -> "Главная"
             Screen.Movies -> "Фильмы"
@@ -191,13 +195,13 @@ private fun App() {
     }
 
     // Системная «Назад» не должна закрывать приложение, пока мы не на «Главной»:
-    // плеер/magnet/автопоиск → карточка, карточка и вкладки → «Главная».
+    // плеер → серии → карточка → ТА ВКЛАДКА, откуда зашли (не всегда «Главная»)
     BackHandler(screen != Screen.Home) {
         screen = when (val s = screen) {
             is Screen.Player ->
                 if (s.episode != null) Screen.Episodes(s.item) else Screen.Details(s.item)
             is Screen.MagnetEntry -> Screen.Details(s.item)
-            else -> Screen.Home
+            else -> lastTab
         }
     }
 
@@ -259,7 +263,8 @@ private fun App() {
         when (val s = screen) {
             is Screen.Details -> DetailsScreen(
                 item = s.item,
-                onBack = { screen = Screen.Home },
+                // Возврат на ту вкладку, откуда открыли (Торренты/Каталог/Поиск)
+                onBack = { screen = lastTab },
                 onWatch = { screen = Screen.Player(s.item) },
                 onEnterMagnet = { screen = Screen.MagnetEntry(s.item) },
                 // Zona-флоу: «Смотреть» → авто-подбор лучшей раздачи → плеер

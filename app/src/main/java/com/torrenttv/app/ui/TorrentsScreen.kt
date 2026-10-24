@@ -51,11 +51,20 @@ import kotlinx.coroutines.withContext
  */
 @Composable
 fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val store = remember { com.torrenttv.app.data.LocalStore(context) }
     // ---------- Фильтры ----------
-    var type by remember { mutableStateOf("all") }        // all | movies | tv | shows
-    var genre by remember { mutableStateOf<String?>(null) } // slug или null
-    var year by remember { mutableStateOf<String?>(null) }  // «2024» или null
-    var country by remember { mutableStateOf<String?>(null) } // клиентский фильтр
+    // Сохраняются в настройках: выход из раздела (в карточку/на главную) и
+    // даже перезапуск приложения — фильтры остаются (жалоба: «фильтр не
+    // сохраняется, выкидывает на главную»)
+    val saved = remember { store.loadTorrentsFilter() }
+    var type by remember { mutableStateOf(saved[0] ?: "all") }          // all | movies | tv | shows
+    var genre by remember { mutableStateOf(saved[1]) }                  // slug или null
+    var year by remember { mutableStateOf(saved[2]) }                   // «2024» или null
+    var country by remember { mutableStateOf(saved[3]) }                // клиентский фильтр
+    LaunchedEffect(type, genre, year, country) {
+        store.saveTorrentsFilter(type, genre, year, country)
+    }
 
     // ---------- Данные ----------
     var items by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
