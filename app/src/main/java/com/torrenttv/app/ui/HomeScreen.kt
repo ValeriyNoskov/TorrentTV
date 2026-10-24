@@ -51,6 +51,12 @@ fun HomeScreen(
     var updateInfo by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
     var updateStatus by remember { mutableStateOf("") }
 
+    // Обновление качается в фоне сразу после обнаружения —
+    // установка по кнопке «Обновить» будет мгновенной
+    LaunchedEffect(updateInfo) {
+        updateInfo?.let { UpdateManager.startBackgroundDownload(context, it) }
+    }
+
     LaunchedEffect(Unit) {
         UpdateManager.checkForUpdate(currentVersion) { updateInfo = it }
         heroItem = withContext(Dispatchers.IO) {

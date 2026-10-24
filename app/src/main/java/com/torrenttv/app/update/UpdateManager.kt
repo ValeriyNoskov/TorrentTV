@@ -34,6 +34,45 @@ object UpdateManager {
 
     data class UpdateInfo(val version: String, val apkUrl: String, val notes: String)
 
+    // ---------- Фоновая загрузка APK ----------
+    // Пока пользователь смотрит кино, APK тихо качается в кеш;
+    // «Обновить» тогда ставит его мгновенно, без ожидания.
+    @Volatile private var downloaded: Pair<UpdateInfo, File>? = null
+    @Volatile private var downloading: Boolean = false
+
+    /** APK уже скачан и ждёт установки? */
+    fun readyToInstall(info: UpdateInfo): Boolean =
+        downloaded?.first?.version == info.version
+
+    /**
+     * Тихо скачать APK в кеш (если ещё не скачан). Ничего не показывает
+     * и не устанавливает — результат ждёт в readyToInstall().
+     */
+    fun startBackgroundDownload(context: Context, info: UpdateInfo) {
+        if (downloading || readyToInstall(info)) return
+        downloading = true
+        Thread {
+            try {
+                val request = Request.Builder().url(info.apkUrl).build()
+                http.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}")
+                    val apkFile = File(context.cacheDir, "update-${info.version}.apk")
+                    response.body!!.byteStream().use { input ->
+                        apkFile.outputStream().use { output ->
+                            input.copyTo(output, bufferSize = 64 * 1024)
+                        }
+                    }
+                    downloaded = info to apkFile
+                    com.torrenttv.app.data.AppLog.log("update", "background download ok: v${info.version}")
+                }
+            } catch (e: Exception) {
+                com.torrenttv.app.data.AppLog.log("update", "background download FAIL: ${e.message}")
+            } finally {
+                downloading = false
+            }
+        }.start()
+    }
+
     /** Проверить наличие обновления. Результат — в колбеке (главный поток). */
     fun checkForUpdate(currentVersion: String, onResult: (UpdateInfo?) -> Unit) {
         Thread {
@@ -88,6 +127,12 @@ object UpdateManager {
 
     /** Скачать APK в кеш и запустить установку. */
     fun downloadAndInstall(context: Context, info: UpdateInfo, onProgress: (String) -> Unit, onError: (String) -> Unit) {
+        // Уже скачано в фоне — ставим сразу, без скачивания
+        if (readyToInstall(info)) {
+            onProgress("Установка v${info.version}…")
+            installApk(context, downloaded!!.second)
+            return
+        }
         Thread {
             try {
                 mainHandler.post { onProgress("Скачивание v${info.version}…") }

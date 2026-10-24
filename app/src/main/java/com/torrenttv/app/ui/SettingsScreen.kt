@@ -66,7 +66,6 @@ private const val COUNTRIES_PAGE = 12
 private val SECTIONS = listOf(
     Triple("search", "🔍 Поиск и фильтры", "Что скрывать из каталогов и поиска"),
     Triple("jackett", "🔗 Jackett", "Дополнительный провайдер автопоиска торрентов"),
-    Triple("trackers", "🔑 Частные трекеры", "RuTracker, Kinozal, NNM-Club — без Jackett"),
     Triple("netcheck", "🩺 Проверка сети", "Какие источники доступны с этого устройства"),
     Triple("logs", "📝 Логи", "Запись событий и отправка логов разработчику"),
     Triple("torrserve", "🚀 TorrServe", "Внешний движок торрентов — надёжнее внутреннего"),
@@ -90,13 +89,10 @@ fun SettingsScreen(onBack: () -> Unit) {
     var countries by remember { mutableStateOf<List<Genre>>(emptyList()) }
     var jackettUrl by remember { mutableStateOf(store.jackettUrl()) }
     var jackettKey by remember { mutableStateOf(store.jackettApiKey()) }
-    var rtCookie by remember { mutableStateOf(store.trackerCookie(PrivateTrackers.RUTRACKER)) }
     var extPlayer by remember { mutableStateOf(store.useExternalPlayer()) }
     var extKb by remember { mutableStateOf(store.useExternalKeyboard()) }
-    var kzCookie by remember { mutableStateOf(store.trackerCookie(PrivateTrackers.KINOZAL)) }
-    var nnmCookie by remember { mutableStateOf(store.trackerCookie(PrivateTrackers.NNMCLUB)) }
 
-    // Полноэкранный редактор текста: target = "jurl"|"jkey"|"rt"|"kz"|"nnm"|"rtlogin"|"kzlogin"|"nnmlogin"
+    // Полноэкранный редактор текста: target = "jurl"|"jkey"|"ts"|...
     var editTarget by remember { mutableStateOf<String?>(null) }
     var editTmp by remember { mutableStateOf("") }
     // Сообщение о результате входа на частный трекер
@@ -115,42 +111,10 @@ fun SettingsScreen(onBack: () -> Unit) {
 
     fun saveEdit() {
         val t = editTarget ?: return
-        // Вход на частный трекер логином/паролем (формат "логин:пароль")
-        if (t.endsWith("login")) {
-            val id = t.removeSuffix("login")
-            val parts = editTmp.split(':', limit = 2)
-            if (parts.size != 2 || parts[0].isBlank() || parts[1].isBlank()) {
-                loginMsg = "Формат: логин:пароль (через двоеточие)"
-                editTarget = null
-                return
-            }
-            loginMsg = "Вхожу…"
-            editTarget = null
-            scope.launch {
-                val cookie = withContext(Dispatchers.IO) {
-                    PrivateTrackers.login(id, parts[0].trim(), parts[1].trim())
-                }
-                if (cookie != null) {
-                    store.setTrackerCookie(id, cookie)
-                    when (id) {
-                        PrivateTrackers.RUTRACKER -> rtCookie = cookie
-                        PrivateTrackers.KINOZAL -> kzCookie = cookie
-                        else -> nnmCookie = cookie
-                    }
-                    loginMsg = "✓ Вход выполнен"
-                } else {
-                    loginMsg = "✗ Не удалось войти: проверьте логин/пароль (или трекер требует капчу — тогда используйте Cookie)"
-                }
-            }
-            return
-        }
         if (editTmp.isNotBlank()) {
             when (t) {
                 "jurl" -> { store.setJackettUrl(editTmp); jackettUrl = editTmp }
                 "jkey" -> { store.setJackettApiKey(editTmp); jackettKey = editTmp }
-                "rt" -> { store.setTrackerCookie(PrivateTrackers.RUTRACKER, editTmp); rtCookie = editTmp }
-                "kz" -> { store.setTrackerCookie(PrivateTrackers.KINOZAL, editTmp); kzCookie = editTmp }
-                "nnm" -> { store.setTrackerCookie(PrivateTrackers.NNMCLUB, editTmp); nnmCookie = editTmp }
                 "ts" -> store.setTorrServeHost(editTmp)
                 "kpkey" -> { store.setKpApiKey(editTmp); kpKey = editTmp }
                 "tmdbkey" -> { store.setTmdbApiKey(editTmp); tmdbKey = editTmp }
@@ -243,41 +207,6 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 "Установите Jackett на компьютер/сервер в домашней сети — " +
                                 "адрес и API-ключ будут на его главной странице. " +
                                 "Без Jackett работают встроенные apibay и Torrentio."
-                        )
-                    }
-
-                    "trackers" -> {
-                        for ((id, title, hint) in PrivateTrackers.ALL) {
-                            val cookie = when (id) {
-                                PrivateTrackers.RUTRACKER -> rtCookie
-                                PrivateTrackers.KINOZAL -> kzCookie
-                                else -> nnmCookie
-                            }
-                            SettingsRow(
-                                title = title,
-                                value = if (cookie.isNotBlank()) "✓ Подключён" else "Не подключён",
-                                valueOk = cookie.isNotBlank(),
-                            ) { openEdit(id, cookie, "Cookie для $title") }
-                            // Вход без браузера: логин и пароль прямо здесь
-                            SettingsRow(
-                                title = "🔑 Вход в $title (логин:пароль)",
-                                value = "",
-                            ) {
-                                openEdit(
-                                    "${id}login",
-                                    "",
-                                    "Логин и пароль для $title\nформат: логин:пароль",
-                                )
-                            }
-                        }
-                        if (loginMsg.isNotBlank()) {
-                            SettingsNote(loginMsg)
-                        }
-                        SettingsNote(
-                            "Есть аккаунт на трекере? Введите логин и пароль через двоеточие " +
-                                "(например ivan:parol123) — приложение войдёт само, браузер не нужен. " +
-                                "Нет аккаунта — зарегистрируйтесь на сайте трекера, либо оставьте " +
-                                "только открытые трекеры: они работают без регистрации."
                         )
                     }
 
@@ -795,8 +724,6 @@ private fun NetCheckScreen(onClose: () -> Unit) {
             addAll(listOf(
                 "apibay (торренты)" to "https://apibay.org/q.php?q=test&cat=201",
                 "Torrentio (торренты)" to "https://torrentio.strem.fun/stream/movie/tt0133093.json",
-                "bt4g (торренты)" to "https://bt4gprx.com/api/search?q=test",
-                "YTS (торренты)" to "https://yts.mx/api/v2/list_movies.json?query_term=test",
                 "Rutube API (трейлеры)" to "https://rutube.ru/api/search/video/?query=test&page=1",
                 "GitHub (обновления)" to "https://api.github.com/repos/ValeriyNoskov/TorrentTV/releases/latest",
             ))

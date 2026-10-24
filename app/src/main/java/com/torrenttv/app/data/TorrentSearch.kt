@@ -119,17 +119,8 @@ object TorrentSearch {
                         })
                     }
                 }
-                // Резервные публичные источники — когда основные недоступны из сети
-                add(async {
-                    runCatching { Call(Bt4gProvider.NAME, Bt4gProvider.search(query), null) }
-                        .getOrElse { Call(Bt4gProvider.NAME, emptyList(), it.message) }
-                })
-                if (!isTvShow) {
-                    add(async {
-                        runCatching { Call(YtsProvider.NAME, YtsProvider.search(query), null) }
-                            .getOrElse { Call(YtsProvider.NAME, emptyList(), it.message) }
-                    })
-                }
+                // bt4g и YTS убраны: большинство провайдеров их блокирует —
+                // давали только FAIL и тормозили поиск
                 // Открытые трекеры без регистрации: EZTV (сериалы, в т.ч. по IMDb),
                 // SolidTorrents и BTDig (DHT-поиск) — расширяют покрытие
                 if (imdbId.isNotBlank() || isTvShow) {
@@ -175,17 +166,6 @@ object TorrentSearch {
                     add(async {
                         runCatching { Call(JackettProvider.NAME, JackettProvider.search(jackett, query), null) }
                             .getOrElse { Call(JackettProvider.NAME, emptyList(), it.message) }
-                    })
-                }
-                // Частные трекеры: RU-трекеры лучше ищут по русскому названию —
-                // поэтому запрос идёт и основным, и альтернативным
-                for (auth in privateTrackers.filter { it.isConfigured }) {
-                    add(async {
-                        runCatching {
-                            Call(auth.id, PrivateTrackers.search(auth, query) +
-                                (altQuery?.takeIf { it.isNotBlank() && !it.equals(query, true) }
-                                    ?.let { PrivateTrackers.search(auth, it) } ?: emptyList()), null)
-                        }.getOrElse { Call(auth.id, emptyList(), it.message) }
                     })
                 }
             }

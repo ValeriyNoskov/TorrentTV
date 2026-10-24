@@ -118,8 +118,26 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun App() {
     var screen by remember { mutableStateOf<Screen>(Screen.Home) }
+    val context = androidx.compose.ui.platform.LocalContext.current
     val appStore = androidx.compose.ui.platform.LocalContext.current.let {
         remember { com.torrenttv.app.data.LocalStore(it) }
+    }
+
+    // На «Главной» выход двойным «Назад»: первое нажатие — подсказка,
+    // второе в течение 2 сек — закрываем приложение
+    var lastBackAt by remember { mutableStateOf(0L) }
+    BackHandler(screen == Screen.Home) {
+        val now = System.currentTimeMillis()
+        if (now - lastBackAt < 2000) {
+            (context as? android.app.Activity)?.finishAffinity()
+        } else {
+            lastBackAt = now
+            android.widget.Toast.makeText(
+                context,
+                "Нажмите «Назад» ещё раз для выхода",
+                android.widget.Toast.LENGTH_SHORT,
+            ).show()
+        }
     }
 
     // Системная «Назад» не должна закрывать приложение, пока мы не на «Главной»:
