@@ -276,6 +276,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             if (updInfo != null) {
                                 val info = updInfo!!
                                 updBusy = true
+                                com.torrenttv.app.data.AppLog.log("ui", "нажал: «Проверить обновления» → установка v${info.version}")
                                 com.torrenttv.app.update.UpdateManager.downloadAndInstall(
                                     context,
                                     info,
@@ -285,6 +286,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             } else if (!updBusy) {
                                 updBusy = true
                                 updMsg = ""
+                                com.torrenttv.app.data.AppLog.log("ui", "нажал: «Проверить обновления» → проверка")
                                 com.torrenttv.app.update.UpdateManager.checkForUpdate(
                                     com.torrenttv.app.BuildConfig.VERSION_NAME,
                                     com.torrenttv.app.update.UpdateManager.ghToken(context),
@@ -358,6 +360,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 uploading = true
                                 uploadState = "Отправляю лог…"
                                 uploadUrl = ""
+                                com.torrenttv.app.data.AppLog.log("ui", "нажал: «Выгрузить лог в Gist» (Логи)")
                                 kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
                                     val url = com.torrenttv.app.data.AppLog.sendToPastebin(
                                         store.githubToken().ifBlank {
@@ -451,7 +454,10 @@ fun SettingsScreen(onBack: () -> Unit) {
                             value = "Проверить все источники",
                             valueOk = true,
                             modifier = Modifier.focusRequester(contentFocus),
-                        ) { subscreen = "netcheck" }
+                        ) {
+                            com.torrenttv.app.data.AppLog.log("ui", "нажал: «Запустить проверку» (Проверка сети)")
+                            subscreen = "netcheck"
+                        }
                         SettingsNote("Крестик у источника — его блокирует провайдер, это не неисправность.")
                     }
 
@@ -819,6 +825,7 @@ private fun NetCheckScreen(onClose: () -> Unit) {
     if (!running && rows.isNotEmpty()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = {
+                com.torrenttv.app.data.AppLog.log("ui", "нажал: «Проверить снова» (Проверка сети)")
                 kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch { checkAll() }
             }) { Text("🔄 Проверить снова") }
             // TorrServe установлен, но не отвечает — открыть его, чтобы нажать UPDATE/Start
@@ -915,6 +922,7 @@ private fun NetCheckScreen(onClose: () -> Unit) {
                         uploading = true
                         uploadState = "Отправляю лог…"
                         uploadUrl = ""
+                        com.torrenttv.app.data.AppLog.log("ui", "нажал: «Выгрузить лог в Gist» (Проверка сети)")
                         kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
                             val url = com.torrenttv.app.data.AppLog.sendToPastebin(store.githubToken().ifBlank { com.torrenttv.app.update.UpdateManager.ghToken(context).ifBlank { null } })
                             // Состояние Compose пишем только из главного потока

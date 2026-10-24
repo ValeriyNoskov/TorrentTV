@@ -48,6 +48,45 @@ class LocalStore(context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences("torrenttv", Context.MODE_PRIVATE)
 
+    /** Настройки пусты (свежая установка или сброс данных) — повод восстановить бэкап. */
+    fun isEmpty(): Boolean = prefs.all.isEmpty()
+
+    /** Полный снимок настроек для облачного бэкапа (SettingsBackup). */
+    fun snapshot(): JSONObject {
+        val o = JSONObject()
+        for ((k, v) in prefs.all) {
+            when (v) {
+                null -> o.put(k, JSONObject.NULL)
+                is Set<*> -> o.put(k, JSONArray(v))
+                is Int, is Long, is Boolean, is Double, is String -> o.put(k, v)
+                else -> o.put(k, v.toString())
+            }
+        }
+        return o
+    }
+
+    /** Восстановить настройки из облачного бэкапа (перезаписывает текущие). */
+    fun restore(o: JSONObject) {
+        val e = prefs.edit()
+        for (k in o.keys()) {
+            when (val v = o.get(k)) {
+                JSONObject.NULL, null -> {}
+                is Boolean -> e.putBoolean(k, v)
+                is Int -> e.putInt(k, v)
+                is Long -> e.putLong(k, v)
+                is Double -> if (v == Math.floor(v) && !v.isInfinite()) e.putLong(k, v.toLong()) else e.putFloat(k, v.toFloat())
+                is JSONArray -> {
+                    val set = mutableSetOf<String>()
+                    for (i in 0 until v.length()) set.add(v.optString(i))
+                    e.putStringSet(k, set)
+                }
+                is String -> e.putString(k, v)
+                else -> e.putString(k, v.toString())
+            }
+        }
+        e.apply()
+    }
+
     // ---------- Избранное ----------
 
     fun favorites(): List<MediaItem> = readList("favorites")

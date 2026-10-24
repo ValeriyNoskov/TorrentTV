@@ -221,6 +221,7 @@ fun SmartPlayScreen(
                         onClick = {
                             if (!uploading) {
                                 uploading = true
+                                com.torrenttv.app.data.AppLog.log("ui", "нажал: «Отправить лог» (умный подбор)")
                                 kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
                                     val url = com.torrenttv.app.data.AppLog.sendToPastebin(store.githubToken().ifBlank { com.torrenttv.app.update.UpdateManager.ghToken(context).ifBlank { null } })
                                     // Состояние Compose пишем только из главного потока

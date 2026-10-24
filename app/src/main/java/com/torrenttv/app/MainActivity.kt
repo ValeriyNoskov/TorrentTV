@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -85,6 +86,12 @@ class MainActivity : ComponentActivity() {
         @Volatile var remoteKeyHandler: ((Int) -> Boolean)? = null
     }
 
+    /** Уход из приложения — фиксируем настройки в облачном бэкапе (экономно, при изменениях). */
+    override fun onPause() {
+        super.onPause()
+        com.torrenttv.app.data.SettingsBackup.save(this)
+    }
+
     override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
         if (event.action == android.view.KeyEvent.ACTION_UP && event.repeatCount == 0) {
             if (remoteKeyHandler?.invoke(event.keyCode) == true) return true
@@ -97,6 +104,15 @@ class MainActivity : ComponentActivity() {
         com.torrenttv.app.data.AppLog.init(this)
         // Дисковый кэш метаданных: экономит дневной лимит API и работает без сети
         com.torrenttv.app.data.KinopoiskClient.attachCache(cacheDir)
+        // Настройки переживают сброс данных: из пустого хранилища восстановим бэкап из Gist.
+        // Ключи применены ниже в onCreate — после восстановления применяем их повторно.
+        com.torrenttv.app.data.SettingsBackup.restoreIfNeeded(this) {
+            val s = com.torrenttv.app.data.LocalStore(this)
+            com.torrenttv.app.data.AppLog.recording = s.loggingEnabled()
+            com.torrenttv.app.data.KinopoiskClient.overrideApiKey = s.kpApiKey()
+            com.torrenttv.app.data.TmdbClient.overrideApiKey = s.tmdbApiKey()
+            com.torrenttv.app.data.AppLog.log("backup", "ключи применены после восстановления")
+        }
         // Личные ключи баз фильмов (перекрывают вшитые общие)
         val store0 = com.torrenttv.app.data.LocalStore(this)
         // Галочка «Запись логов» (Настройки → Логи): включена по умолчанию
@@ -123,6 +139,32 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun App() {
     var screen by remember { mutableStateOf<Screen>(Screen.Home) }
+
+    // Полный лог навигации: «нажал кнопку → открылось то-то» — видно в выгрузке лога
+    LaunchedEffect(screen) {
+        val name = when (val s = screen) {
+            Screen.Home -> "Главная"
+            Screen.Movies -> "Фильмы"
+            Screen.TvShows -> "Сериалы"
+            Screen.Shows -> "Шоу"
+            Screen.Favorites -> "Избранное"
+            Screen.Continue -> "Продолжить"
+            Screen.WatchLater -> "Смотреть позже"
+            Screen.Search -> "Поиск"
+            Screen.Settings -> "Настройки"
+            is Screen.Details -> "Детали «${s.item.title}»"
+            is Screen.Episodes -> "Серии «${s.item.title}» сезон ${s.season}"
+            is Screen.MagnetEntry -> "Ввод магнита «${s.item.title}»"
+            is Screen.TorrentSearch -> if (s.autoStart) "Автопоиск раздач «${s.item.title}»" else "Поиск раздач «${s.item.title}»"
+            is Screen.Watch -> "Умный подбор «${s.item.title}»"
+            is Screen.Trailer -> "Трейлер «${s.item.title}»"
+            is Screen.RutubeWatch -> "Rutube «${s.title}»"
+            is Screen.Player -> if (s.episode != null) "Плеер «${s.item.title}» ${s.episode.code}" else "Плеер «${s.item.title}»"
+            is Screen.TorrentFiles -> "Состав раздачи «${s.item.title}»"
+            is Screen.TorrentResults -> "Результаты «${s.item.title}»"
+        }
+        com.torrenttv.app.data.AppLog.log("nav", "открыл: $name")
+    }
     val context = androidx.compose.ui.platform.LocalContext.current
     val appStore = androidx.compose.ui.platform.LocalContext.current.let {
         remember { com.torrenttv.app.data.LocalStore(it) }

@@ -37,7 +37,7 @@ import com.torrenttv.app.data.TorrentSearch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.net.URLEncoder
+
 
 /**
  * Автопоиск торрентов по названию карточки («название + год») через все
@@ -285,9 +285,6 @@ private fun QualityChip(label: String, selected: Boolean, onClick: () -> Unit) {
         )
     }
 }
-
-/** Экранирование для запроса (на будущее — URLEncoder используется в провайдерах). */
-private fun encodeQuery(q: String): String = URLEncoder.encode(q, "UTF-8")
 
 /**
  * Лучшая раздача для авто-старта (как в Zona): предпочитаем HD (2160/1080/720),

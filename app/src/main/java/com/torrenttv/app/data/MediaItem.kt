@@ -12,8 +12,6 @@ data class MediaItem(
     val posterUrl: String = "",
     val backdropUrl: String = "",
     val rating: Double = 0.0,
-    /** Рейтинг IMDb (догружается для карточки; 0 — неизвестен). */
-    val ratingImdb: Double = 0.0,
     val genreIds: List<Int> = emptyList(),
     val countryIds: List<Int> = emptyList(),
     val overview: String = "",
@@ -35,7 +33,6 @@ data class MediaItem(
         .put("poster", posterUrl)
         .put("backdrop", backdropUrl)
         .put("rating", rating)
-        .put("ratingImdb", ratingImdb)
         .put("genreIds", JSONArray(genreIds))
         .put("countryIds", JSONArray(countryIds))
         .put("overview", overview)
@@ -52,7 +49,6 @@ data class MediaItem(
             posterUrl = o.safeString("poster", ""),
             backdropUrl = o.safeString("backdrop", ""),
             rating = o.optDouble("rating", 0.0),
-            ratingImdb = o.optDouble("ratingImdb", 0.0),
             genreIds = o.optJSONArray("genreIds")?.let { arr ->
                 (0 until arr.length()).map { arr.optInt(it) }
             } ?: emptyList(),

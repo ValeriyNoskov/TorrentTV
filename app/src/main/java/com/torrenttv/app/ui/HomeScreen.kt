@@ -31,8 +31,6 @@ import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
 import com.torrenttv.app.data.MediaApi
 import com.torrenttv.app.update.UpdateManager
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /** Вкладка «Главная»: тренды первыми, затем новинки фильмов/сериалов/шоу с переходом в каталог. */
 @Composable

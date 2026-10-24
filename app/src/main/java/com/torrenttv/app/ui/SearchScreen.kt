@@ -253,8 +253,12 @@ fun SearchScreen(
             for (r in missing) {
                 val q = cleanTorrentName(r.name)
                 if (q.length < 3 || !queried.add(q.lowercase())) continue
+                // Каскад: КП/TMDB → Википедия (бесплатно, без ключа, из РФ доступна)
                 val p = runCatching { MediaApi.search(q) }.getOrDefault(emptyList())
-                    .firstOrNull { it.posterUrl.isNotBlank() }?.posterUrl ?: continue
+                    .firstOrNull { it.posterUrl.isNotBlank() }?.posterUrl
+                    ?: runCatching { com.torrenttv.app.data.WikipediaClient.poster(q) }.getOrNull()
+                    ?.also { com.torrenttv.app.data.AppLog.log("posters", "Википедия: постер для «$q»") }
+                    ?: continue
                 found[r.name] = p
             }
         }
