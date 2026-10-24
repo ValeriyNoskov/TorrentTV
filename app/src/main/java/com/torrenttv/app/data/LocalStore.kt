@@ -697,6 +697,35 @@ class LocalStore(context: Context) {
         prefs.edit().putInt("player_scale", v).apply()
     }
 
+    // ---------- Пропуск титров и заставки ----------
+
+    /** Автопропуск титров в конце серий (перемотка к следующей). */
+    fun skipCredits(): Boolean = prefs.getBoolean("skip_credits", true)
+
+    fun setSkipCredits(v: Boolean) {
+        prefs.edit().putBoolean("skip_credits", v).apply()
+    }
+
+    /** Автопропуск заставки в начале серий (по запомненной точке). */
+    fun skipIntro(): Boolean = prefs.getBoolean("skip_intro", true)
+
+    fun setSkipIntro(v: Boolean) {
+        prefs.edit().putBoolean("skip_intro", v).apply()
+    }
+
+    /**
+     * Точка «конец заставки» для сериала (сек): запоминается, когда владелец
+     * перематывает первые минуты — в следующих сериях перематываем сами.
+     * Ключ — карточка + сезон (у сезона заставка на одном и том же месте).
+     */
+    fun introSkipSec(key: String, season: Int): Int =
+        prefs.getInt("intro_skip_${key}_s$season", 0)
+
+    fun setIntroSkipSec(key: String, season: Int, sec: Int) {
+        if (sec <= 0) return
+        prefs.edit().putInt("intro_skip_${key}_s$season", sec).apply()
+    }
+
     /** Подпись аудиодорожки, выбранной пользователем (например, «Дубляж»). */
     fun playerAudioLabel(): String = prefs.getString("player_audio_label", "") ?: ""
 

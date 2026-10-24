@@ -542,7 +542,36 @@ private fun VideoPlayer(
 
     // Конец видео: обработчик снаружи (автозакрытие фильма / следующая серия)
     var showSkip by remember { mutableStateOf(false) } // «Пропустить титры» доступна
+    var creditsSkipped by remember(episode) { mutableStateOf(false) } // уже пропустили в этой серии
+    // Сумма ручных перемоток вперёд в первых минутах — так выучиваем точку
+    // конца заставки (владелец перемотал ≥ 2 мин — в следующих сериях пропускаем сами)
+    var introAccum by remember(episode) { mutableStateOf(0L) }
+    fun noteForwardSeek(delta: Long) {
+        val ep = episode ?: return
+        if (!store.skipIntro() || delta <= 0) return
+        val after = player.currentPosition
+        // Прыжки только в первых 15 минутах — это про заставку, не про сюжет
+        if (after < 15 * 60_000L) {
+            introAccum += delta
+            if (introAccum >= 120_000L) {
+                store.setIntroSkipSec(item.storeKey, ep.season, (after / 1000).toInt())
+            }
+        }
+    }
     var seekInfo by remember { mutableStateOf("") }    // «⏩ +10 сек» при перемотке пультом
+    // АВТОПРОПУСК заставки: точка выучена по перемоткам в предыдущих сериях
+    LaunchedEffect(player, episode) {
+        val ep = episode ?: return@LaunchedEffect
+        if (!store.skipIntro()) return@LaunchedEffect
+        val intro = store.introSkipSec(item.storeKey, ep.season)
+        if (intro > 5 && player.currentPosition < intro * 1000L) {
+            kotlinx.coroutines.delay(500) // даём примениться resume-позиции
+            if (player.currentPosition < intro * 1000L) {
+                player.seekTo(intro * 1000L)
+                seekInfo = "⏭ Заставка пропущена"
+            }
+        }
+    }
     // Автопереход: «Следующая серия через N…» с кнопками Сейчас/Отмена
     var nextCountdown by remember { mutableStateOf<Int?>(null) }
     LaunchedEffect(nextCountdown) {
@@ -675,6 +704,24 @@ private fun VideoPlayer(
                     episodeLabel = episode?.code ?: "",
                 )
                 showSkip = player.duration - player.currentPosition < 3 * 60_000L
+                // АВТОПРОПУСК титров: сериал, осталось меньше 90 с — перематываем
+                // к следующей серии сами (владелец: «почему нет автоматического
+                // пропуска титров»). Фильмы не трогаем: после титров бывает сцена.
+                if (episode != null && !creditsSkipped && store.skipCredits() &&
+                    player.duration > 0
+                ) {
+                    val remaining = player.duration - player.currentPosition
+                    if (remaining in 1..90_000L) {
+                        creditsSkipped = true
+                        com.torrenttv.app.data.AppLog.log(
+                            "player",
+                            "титры пропущены автоматически: ${item.title} ${episode?.code ?: ""}",
+                        )
+                        player.seekTo((player.duration - 3000).coerceAtLeast(0))
+                        player.play()
+                        seekInfo = "⏭ Титры пропущены"
+                    }
+                }
                 // Держим скачанными ~2 мин вперёд от позиции плеера (как в
                 // открытых стримерах): перемотка вперёд попадает в готовые куски
                 val st = stream
@@ -776,6 +823,7 @@ private fun VideoPlayer(
                 val delta = if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) 10_000L else -10_000L
                 val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
                 player.seekTo((player.currentPosition + delta).coerceIn(0L, dur))
+                noteForwardSeek(delta)
                 seekInfo = if (delta > 0) "⏩ +10 сек" else "⏪ −10 сек"
                 panelTick++
                 true
@@ -802,7 +850,7 @@ private fun VideoPlayer(
         KeyEvent.KEYCODE_MEDIA_PAUSE -> {
             player.pause(); panelTick++; true
         }
-        KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { player.seekTo(player.currentPosition + 30_000L); seekInfo = "⏩ +30 сек"; panelTick++; true }
+        KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { player.seekTo(player.currentPosition + 30_000L); noteForwardSeek(30_000L); seekInfo = "⏩ +30 сек"; panelTick++; true }
         KeyEvent.KEYCODE_MEDIA_REWIND -> { player.seekTo((player.currentPosition - 30_000L).coerceAtLeast(0)); seekInfo = "⏪ −30 сек"; panelTick++; true }
         KeyEvent.KEYCODE_MENU -> { showTrackMenu = !showTrackMenu; true }
         // BACK при открытой панели прячет панель, при скрытой — выход из плеера

@@ -382,6 +382,25 @@ fun SettingsScreen(onBack: () -> Unit) {
                             store.setCardWidthDp(cardWidthDp)
                         }
                         SettingsNote("Размер постеров во всех каталогах.")
+                        var skipCr by remember { mutableStateOf(store.skipCredits()) }
+                        SettingsRow(
+                            title = if (skipCr) "✅ Пропускать титры автоматически" else "⬜ Пропускать титры автоматически",
+                            value = if (skipCr) "ВКЛ — в конце серии переходит к следующей" else "ВЫКЛ — титры смотрим сами",
+                            valueOk = skipCr,
+                        ) {
+                            skipCr = !skipCr
+                            store.setSkipCredits(skipCr)
+                        }
+                        var skipIn by remember { mutableStateOf(store.skipIntro()) }
+                        SettingsRow(
+                            title = if (skipIn) "✅ Пропускать заставку" else "⬜ Пропускать заставку",
+                            value = if (skipIn) "ВКЛ — точка запоминается по вашей перемотке" else "ВЫКЛ — каждую серию с начала",
+                            valueOk = skipIn,
+                        ) {
+                            skipIn = !skipIn
+                            store.setSkipIntro(skipIn)
+                        }
+                        SettingsNote("Заставка: перемотайте первые минуты в одной серии — в следующих приложение промотает само.")
                     }
 
                     "logs" -> {
