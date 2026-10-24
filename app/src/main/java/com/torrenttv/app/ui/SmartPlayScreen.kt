@@ -223,9 +223,12 @@ fun SmartPlayScreen(
                                 uploading = true
                                 kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
                                     val url = com.torrenttv.app.data.AppLog.sendToPastebin(store.githubToken().ifBlank { com.torrenttv.app.update.UpdateManager.ghToken(context).ifBlank { null } })
-                                    com.torrenttv.app.data.AppLog.log("upload", if (url.isNotBlank()) "выгрузка ок" else "выгрузка FAIL")
-                                    uploadUrl = url
-                                    uploading = false
+                                    // Состояние Compose пишем только из главного потока
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                        com.torrenttv.app.data.AppLog.log("upload", if (url.isNotBlank()) "выгрузка ок" else "выгрузка FAIL")
+                                        uploadUrl = url
+                                        uploading = false
+                                    }
                                 }
                             }
                         },
@@ -234,7 +237,7 @@ fun SmartPlayScreen(
                 }
                 if (uploadUrl.isNotBlank()) {
                     Spacer(Modifier.height(8.dp))
-                    Text("Назовите разработчику этот адрес:  " + uploadUrl.trim(),
+                    Text("Лог отправлен: " + uploadUrl.trim(),
                         color = Color(0xFF8AB4F8), fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 }
             } else if (choices.isEmpty()) {

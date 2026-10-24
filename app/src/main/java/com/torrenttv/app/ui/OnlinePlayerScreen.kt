@@ -195,9 +195,14 @@ fun OnlinePlayerScreen(
                                         com.torrenttv.app.update.UpdateManager.ghToken(ctx).ifBlank { null },
                                     )
                                 }.getOrNull()
-                                if (!url.isNullOrBlank()) {
-                                    com.torrenttv.app.data.AppLog.log("upload", if (url.isNotBlank()) "автовыгрузка ок" else "автовыгрузка FAIL")
-                                    errorMsg = "Ошибка: ${error.errorCodeName}\nЛог отправлен: $url"
+                                // Состояние Compose пишем только из главного потока
+                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                    if (!url.isNullOrBlank()) {
+                                        com.torrenttv.app.data.AppLog.log("upload", "автовыгрузка ок")
+                                        errorMsg = "Ошибка: ${error.errorCodeName}\nЛог отправлен: $url"
+                                    } else {
+                                        com.torrenttv.app.data.AppLog.log("upload", "автовыгрузка FAIL")
+                                    }
                                 }
                             }
                         }

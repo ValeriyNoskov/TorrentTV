@@ -364,14 +364,18 @@ fun SettingsScreen(onBack: () -> Unit) {
                                             com.torrenttv.app.update.UpdateManager.ghToken(context).ifBlank { null }
                                         },
                                     )
-                                    com.torrenttv.app.data.AppLog.log(
-                                        "upload",
-                                        if (url.isNotBlank()) "sent -> $url" else "send FAILED",
-                                    )
-                                    uploadUrl = url
-                                    uploadState = if (url.isNotBlank()) "" else
-                                        "Не удалось отправить (нет доступа к pastebin-сайтам)"
-                                    uploading = false
+                                    // Состояние Compose пишем только из главного потока —
+                                    // запись из IO роняла рекомпозицию и процесс
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                        com.torrenttv.app.data.AppLog.log(
+                                            "upload",
+                                            if (url.isNotBlank()) "выгрузка ок" else "выгрузка FAIL",
+                                        )
+                                        uploadUrl = url
+                                        uploadState = if (url.isNotBlank()) "" else
+                                            "Не удалось отправить (нет доступа к pastebin-сайтам)"
+                                        uploading = false
+                                    }
                                 }
                             }
                         }
@@ -913,11 +917,14 @@ private fun NetCheckScreen(onClose: () -> Unit) {
                         uploadUrl = ""
                         kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
                             val url = com.torrenttv.app.data.AppLog.sendToPastebin(store.githubToken().ifBlank { com.torrenttv.app.update.UpdateManager.ghToken(context).ifBlank { null } })
-                            com.torrenttv.app.data.AppLog.log("upload", if (url.isNotBlank()) "выгрузка ок" else "выгрузка FAIL")
-                            uploadUrl = url
-                            uploadState = if (url.isNotBlank()) "" else
-                                "Не удалось отправить (нет доступа к pastebin-сайтам)"
-                            uploading = false
+                            // Состояние Compose пишем только из главного потока
+                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                com.torrenttv.app.data.AppLog.log("upload", if (url.isNotBlank()) "выгрузка ок" else "выгрузка FAIL")
+                                uploadUrl = url
+                                uploadState = if (url.isNotBlank()) "" else
+                                    "Не удалось отправить (нет доступа к pastebin-сайтам)"
+                                uploading = false
+                            }
                         }
                     }
                 },
