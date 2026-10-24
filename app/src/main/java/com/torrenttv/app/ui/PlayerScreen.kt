@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -115,6 +116,20 @@ fun PlayerScreen(
                 com.torrenttv.app.data.AppLog.log("player", "torrserve: ok hash=${ts.hash} file=\"${file.path}\" buffered=$buffered")
                 if (buffered) {
                     torrLink = com.torrenttv.app.data.TorrServeService.streamUrl(tsHost, ts.hash, file)
+                    // Предзагрузка следующей серии фоном (как у Stremio):
+                    // пока смотрим текущую, TorrServe качает следующую
+                    scope.launch(Dispatchers.IO) {
+                        val order = ts.files.filter {
+                            it.path.substringAfterLast('.', "").lowercase() in TorrentEngine.VIDEO_EXT
+                        }.sortedWith { x, y ->
+                            TorrentEngine.naturalCompare(x.path, y.path)
+                        }
+                        val pos = order.indexOfFirst { it.path == file.path }
+                        val next = if (pos >= 0) order.getOrNull(pos + 1) else null
+                        if (next != null) {
+                            com.torrenttv.app.data.TorrServeService.preloadFile(tsHost, ts.hash, next) { }
+                        }
+                    }
                     return@LaunchedEffect
                 }
                 com.torrenttv.app.data.AppLog.log("player", "torrserve: no buffer, fallback to internal engine")
@@ -399,12 +414,29 @@ private fun VideoPlayer(
     var errorMsg by remember { mutableStateOf("") }
     // Авто-перезапуск после ошибки (как в VLC/Just Player): до 3 попыток
     var retries by remember { mutableStateOf(0) }
+    // ---------- Сдвиг субтитров (как в Kodi): кастомный вывод через onCues ----------
+    var subShiftMs by remember { mutableIntStateOf(store.playerSubShift()) }
+    // Очередь сработавших групп cues: (время активации в мс плеера, cues)
+    val pendingCues = remember { mutableListOf<Pair<Long, List<androidx.media3.common.text.Cue>>>() }
+    var subCues by remember { mutableStateOf<List<androidx.media3.common.text.Cue>>(emptyList()) }
+    LaunchedEffect(player, subShiftMs) {
+        while (true) {
+            delay(200)
+            val effMs = player.currentPosition - subShiftMs
+            val snapshot = synchronized(pendingCues) { pendingCues.toList() }
+            if (snapshot.isNotEmpty()) {
+                subCues = snapshot.lastOrNull { it.first <= effMs }?.second ?: emptyList()
+                synchronized(pendingCues) { pendingCues.removeAll { it.first < effMs - 30_000 } }
+            }
+        }
+    }
+
     DisposableEffect(player) {
+        var audioApplied = false
         val listener = object : androidx.media3.common.Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == androidx.media3.common.Player.STATE_READY) errorMsg = ""
-                if (state == androidx.media3.common.Player.STATE_ENDED) {
-                    // «Конец» — только если видео реально проигрывалось:
+                if (state == androidx.media3.common.Player.STATE_ENDED) {                    // «Конец» — только если видео реально проигрывалось:
                     // при нулевой скорости/ошибке источника ExoPlayer может
                     // выдать ENDED сразу после prepare — это не конец фильма
                     if (player.duration > 0 && player.currentPosition > player.duration / 20) {
@@ -432,6 +464,40 @@ private fun VideoPlayer(
                 } else {
                     errorMsg = "Ошибка воспроизведения: ${error.errorCodeName}. " +
                         "Попробуйте другую раздачу или внешний плеер"
+                }
+            }
+            override fun onCues(cueGroup: androidx.media3.common.text.CueGroup) {
+                // Свои субтитры со сдвигом: встроенный SubtitleView выключен
+                synchronized(pendingCues) {
+                    pendingCues.add(cueGroup.presentationTimeUs / 1000 to cueGroup.cues.toList())
+                    if (pendingCues.size > 60) pendingCues.removeAt(0)
+                }
+            }
+
+            override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {                // Запомненная аудиодорожка: применяем один раз при появлении дорожек
+                if (audioApplied) return
+                val want = store.playerAudioLabel()
+                if (want.isBlank()) return
+                for (g in 0 until tracks.groups.size) {
+                    val group = tracks.groups[g]
+                    if (group.type != androidx.media3.common.C.TRACK_TYPE_AUDIO) continue
+                    for (i in 0 until group.length) {
+                        val fmt = group.getTrackFormat(i)
+                        val label = (fmt.label ?: "") + " " + (fmt.language ?: "")
+                        if (label.lowercase().contains(want.lowercase())) {
+                            player.trackSelectionParameters = player.trackSelectionParameters
+                                .buildUpon()
+                                .clearOverridesOfType(androidx.media3.common.C.TRACK_TYPE_AUDIO)
+                                .addOverride(
+                                    androidx.media3.common.TrackSelectionOverride(
+                                        group.mediaTrackGroup, i,
+                                    )
+                                )
+                                .build()
+                            audioApplied = true
+                            return
+                        }
+                    }
                 }
             }
         }
@@ -503,7 +569,7 @@ private fun VideoPlayer(
         "Растянуть" to androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FILL,
         "Заполнить" to androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM,
     )
-    var scaleIdx by remember { mutableStateOf(0) }
+    var scaleIdx by remember { mutableStateOf(store.playerScale().coerceIn(0, scales.size - 1)) }
 
     // ---------- Панель «как MX»: показывается при действии пульта ----------
     var panelTick by remember { mutableStateOf(1) }   // панель видна сразу при входе
@@ -609,6 +675,10 @@ private fun VideoPlayer(
                     this.player = player
                     // Нативные контролы выключены — своя панель «как MX»
                     useController = false
+                    // Субтитры рисуем сами (Compose-оверлей со сдвигом ±)
+                    subtitleView?.visibility = android.view.View.GONE
+                    // Запомненный масштаб (Вписать/Растянуть/Заполнить)
+                    resizeMode = scales[scaleIdx].second
                     isFocusable = true
                     requestFocus()
                     setOnKeyListener { _, keyCode, event ->
@@ -622,8 +692,7 @@ private fun VideoPlayer(
         )
 
         // Ошибка воспроизведения: сверху, чтобы не пересекаться с тостами центра
-        if (errorMsg.isNotEmpty()) {
-            androidx.tv.material3.Text(
+        if (errorMsg.isNotEmpty()) {            androidx.tv.material3.Text(
                 errorMsg,
                 color = Color.White,
                 fontSize = 16.sp,
@@ -633,6 +702,65 @@ private fun VideoPlayer(
                     .background(Color(0xCC1F2430), RoundedCornerShape(12.dp))
                     .padding(horizontal = 20.dp, vertical = 14.dp),
             )
+        }
+
+        // Автопереход к следующей серии: отсчёт с кнопками (как у стримингов).
+        // Фокус на «Отмена» — случайное OK не проматывает сериал
+        if (nextCountdown != null) {
+            val cancelFocus = remember { FocusRequester() }
+            LaunchedEffect(Unit) { cancelFocus.requestFocus() }
+            Column(
+                Modifier
+                    .align(Alignment.Center)
+                    .background(Color(0xF0151B26), RoundedCornerShape(16.dp))
+                    .padding(horizontal = 30.dp, vertical = 22.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                androidx.tv.material3.Text(
+                    "⏭ Следующая серия через $nextCountdown…",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.height(14.dp))
+                Row {
+                    Button(
+                        onClick = { nextCountdown = null },
+                        modifier = Modifier.focusRequester(cancelFocus),
+                    ) { Text("✕ Отмена") }
+                    Spacer(Modifier.width(12.dp))
+                    Button(onClick = { nextCountdown = 0 }) { Text("▶ Сейчас") }
+                }
+            }
+        }
+
+        // Субтитры (сдвиг ±): рисуются поверх видео, скрыты при открытых оверлеях
+        val visibleSubs = subCues.filter { !it.text.isNullOrBlank() }
+        if (visibleSubs.isNotEmpty() && nextCountdown == null && !showFiles && !showGear && !showTrackMenu) {
+            Column(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth(0.86f)
+                    .padding(bottom = if (showPanel) 160.dp else 56.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                visibleSubs.forEach { cue ->
+                    androidx.tv.material3.Text(
+                        cue.text?.toString() ?: "",
+                        color = Color.White,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        style = androidx.compose.ui.text.TextStyle(
+                            shadow = androidx.compose.ui.graphics.Shadow(
+                                color = Color.Black,
+                                offset = androidx.compose.ui.geometry.Offset(2f, 2f),
+                                blurRadius = 6f,
+                            ),
+                        ),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                }
+            }
         }
 
         // 🔒 Индикатор блокировки (как в MX — замок в углу)
@@ -827,6 +955,7 @@ private fun VideoPlayer(
                         onClick = {
                             scaleIdx = (scaleIdx + 1) % scales.size
                             pv?.resizeMode = scales[scaleIdx].second
+                            store.setPlayerScale(scaleIdx)
                             seekInfo = "Масштаб: ${scales[scaleIdx].first}"
                             panelTick++
                         },
@@ -994,7 +1123,7 @@ private fun VideoPlayer(
 
         // Индикатор перемотки пультом: один тост в центре — скрыт при открытых
         // оверлеях и ошибке, чтобы тексты не наезжали друг на друга
-        if (seekInfo.isNotBlank() && errorMsg.isBlank() && !showFiles && !showGear && !showTrackMenu) {
+        if (seekInfo.isNotBlank() && errorMsg.isBlank() && nextCountdown == null && !showFiles && !showGear && !showTrackMenu) {
             LaunchedEffect(seekInfo) {
                 kotlinx.coroutines.delay(900)
                 seekInfo = ""
@@ -1012,7 +1141,17 @@ private fun VideoPlayer(
         }
 
         if (showTrackMenu) {
-            TrackMenuOverlay(player = player, onDismiss = { showTrackMenu = false })
+            TrackMenuOverlay(
+                player = player,
+                onDismiss = { showTrackMenu = false },
+                onAudioPicked = { label -> store.setPlayerAudioLabel(label) },
+                subShiftMs = subShiftMs,
+                onSubShift = { delta ->
+                    subShiftMs = (subShiftMs + delta).coerceIn(-5000, 5000)
+                    store.setPlayerSubShift(subShiftMs)
+                    seekInfo = "Сдвиг сабов: %+.1fс".format(subShiftMs / 1000f)
+                },
+            )
         }
     }
 }

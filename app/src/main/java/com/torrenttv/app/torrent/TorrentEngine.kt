@@ -379,13 +379,31 @@ object TorrentEngine {
             h.setFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD, TorrentFlags.SEQUENTIAL_DOWNLOAD)
         } catch (_: Exception) {
         }
+        // Предзагрузка следующей серии (как у Stremio): следующий видеофайл
+        // с приоритетом LOW вместо IGNORE — докачивается после текущей серии,
+        // не отнимая скорость. Переключение серий становится мгновенным
+        val st = StreamSession(h, ti, best, fileOffset, bestSize, saveDir)
         try {
-            val priorities = Array(numFiles) { if (it == best) Priority.NORMAL else Priority.IGNORE }
+            val order = st.videoFiles()
+            val pos = order.indexOfFirst { it.first == best }
+            val next = if (pos >= 0) order.getOrNull(pos + 1) else null
+            val priorities = Array(numFiles) { i ->
+                when {
+                    i == best -> Priority.NORMAL
+                    next != null && i == next.first -> Priority.TWO
+                    else -> Priority.IGNORE
+                }
+            }
             h.prioritizeFiles(priorities)
         } catch (_: Exception) {
+            // fallback: только текущий файл
+            try {
+                h.prioritizeFiles(Array(numFiles) { if (it == best) Priority.NORMAL else Priority.IGNORE })
+            } catch (_: Exception) {
+            }
         }
 
-        return StreamSession(h, ti, best, fileOffset, bestSize, saveDir)
+        return st
     }
 
     /**

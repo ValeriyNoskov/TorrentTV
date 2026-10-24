@@ -211,7 +211,7 @@ fun TorrentSearchScreen(
                         Row(Modifier.padding(top = 4.dp)) {
                             Text(
                                 text = "↑ ${r.seeds}",
-                                color = Color(0xFF9CCC65),
+                                color = seedColor(r.seeds),
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                             )
@@ -227,6 +227,16 @@ fun TorrentSearchScreen(
                                     text = r.resolution,
                                     color = Color(0xFF64B5F6),
                                     fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                            // Источник релиза и перевод — бейджи из названия
+                            releaseBadges(r.name).forEach { (label, color) ->
+                                Spacer(Modifier.width(10.dp))
+                                Text(
+                                    text = label,
+                                    color = color,
+                                    fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                 )
                             }

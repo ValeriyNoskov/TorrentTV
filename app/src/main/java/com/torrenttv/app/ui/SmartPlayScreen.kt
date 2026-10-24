@@ -6,6 +6,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -278,6 +279,28 @@ fun SmartPlayScreen(
                                         color = Color.White.copy(alpha = 0.55f),
                                         fontSize = 13.sp,
                                     )
+                                }
+                                // Бейджи качества (Zona-стиль): источник релиза + перевод
+                                if (c is SmartChoice.Torrent || c is SmartChoice.Instant) {
+                                    val r = (c as? SmartChoice.Torrent)?.r ?: (c as SmartChoice.Instant).r
+                                    val badges = releaseBadges(r.name)
+                                    val res = r.resolution
+                                    if (badges.isNotEmpty() || res.isNotBlank()) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            if (res.isNotBlank()) {
+                                                Text(res, color = Color(0xFF7EE2A8), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                            badges.forEach { (label, color) ->
+                                                Text(label, color = color, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                            Text(
+                                                "👤 ${r.seeds}",
+                                                color = seedColor(r.seeds),
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }

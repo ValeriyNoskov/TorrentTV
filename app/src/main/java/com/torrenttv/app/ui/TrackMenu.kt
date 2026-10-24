@@ -35,6 +35,7 @@ import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
+import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import java.util.Locale
@@ -52,7 +53,16 @@ private data class TrackRow(
 )
 
 @Composable
-fun TrackMenuOverlay(player: Player, onDismiss: () -> Unit) {
+fun TrackMenuOverlay(
+    player: Player,
+    onDismiss: () -> Unit,
+    /** Выбрана аудиодорожка — подпись для запоминания между запусками. */
+    onAudioPicked: (String) -> Unit = {},
+    /** Текущий сдвиг субтитров, мс. */
+    subShiftMs: Int = 0,
+    /** Изменить сдвиг субтитров на delta мс. */
+    onSubShift: (Int) -> Unit = {},
+) {
     // rev — счётчик изменений, чтобы пересобрать списки после смены дорожки
     var rev by remember { mutableIntStateOf(0) }
     val focusRequester = remember { FocusRequester() }
@@ -133,6 +143,12 @@ fun TrackMenuOverlay(player: Player, onDismiss: () -> Unit) {
                                     .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
                                     .addOverride(TrackSelectionOverride(row.group.mediaTrackGroup, row.trackIndex))
                                     .build()
+                                // Запомнить дорожку (только осмысленные подписи —
+                                // «Дорожка 2» без меты в другой раз не совпадёт)
+                                val fmt = row.group.getTrackFormat(row.trackIndex)
+                                if (!fmt.label.isNullOrBlank() || !fmt.language.isNullOrBlank()) {
+                                    onAudioPicked(fmt.label ?: fmt.language ?: "")
+                                }
                                 rev++
                             }
                         },
@@ -142,6 +158,24 @@ fun TrackMenuOverlay(player: Player, onDismiss: () -> Unit) {
                 if (subRows.isNotEmpty()) {
                     Spacer(Modifier.height(14.dp))
                     SectionTitle("Субтитры")
+                    Spacer(Modifier.height(6.dp))
+                    // Сдвиг субтитров ±0.5с (как в Kodi): субы отстают/спешат
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Сдвиг: ", color = Color(0xFFB8C0CC), fontSize = 14.sp)
+                        Surface(onClick = { onSubShift(-500) }, shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)), colors = ClickableSurfaceDefaults.colors(containerColor = Color(0xFF1F2430), contentColor = Color.White, focusedContainerColor = Color(0xFFF5B942), focusedContentColor = Color.Black)) {
+                            Text("−0.5с", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp))
+                        }
+                        Text(
+                            "%+.1fс".format(subShiftMs / 1000f),
+                            color = if (subShiftMs == 0) Color(0xFFB8C0CC) else Color(0xFFF5B942),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 10.dp),
+                        )
+                        Surface(onClick = { onSubShift(+500) }, shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)), colors = ClickableSurfaceDefaults.colors(containerColor = Color(0xFF1F2430), contentColor = Color.White, focusedContainerColor = Color(0xFFF5B942), focusedContentColor = Color.Black)) {
+                            Text("+0.5с", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp))
+                        }
+                    }
                     Spacer(Modifier.height(6.dp))
                     // null = «Выключены»
                     TrackItemList(

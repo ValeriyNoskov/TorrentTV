@@ -332,6 +332,29 @@ class LocalStore(context: Context) {
         prefs.edit().putString("torrserve_host", v.trim().removeSuffix("/")).apply()
     }
 
+    // ---------- Плеер: запоминание настроек (как в Just/Next Player) ----------
+
+    /** Масштаб картинки: 0 = Вписать, 1 = Растянуть, 2 = Заполнить. */
+    fun playerScale(): Int = prefs.getInt("player_scale", 0)
+
+    fun setPlayerScale(v: Int) {
+        prefs.edit().putInt("player_scale", v).apply()
+    }
+
+    /** Подпись аудиодорожки, выбранной пользователем (например, «Дубляж»). */
+    fun playerAudioLabel(): String = prefs.getString("player_audio_label", "") ?: ""
+
+    fun setPlayerAudioLabel(v: String) {
+        prefs.edit().putString("player_audio_label", v.trim()).apply()
+    }
+
+    /** Сдвиг субтитров, мс (−5000..5000): положительный — сабы позже. */
+    fun playerSubShift(): Int = prefs.getInt("player_sub_shift", 0)
+
+    fun setPlayerSubShift(v: Int) {
+        prefs.edit().putInt("player_sub_shift", v.coerceIn(-5000, 5000)).apply()
+    }
+
     /** Открывать видео во внешнем плеере (VLC, MX Player и т.п.) вместо встроенного. */
     fun useExternalPlayer(): Boolean = prefs.getBoolean("use_external_player", false)
 

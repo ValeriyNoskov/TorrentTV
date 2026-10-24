@@ -709,3 +709,41 @@ private fun GenreChip(label: String, isSelected: Boolean, onClick: () -> Unit) {
         )
     }
 }
+
+/**
+ * Бейджи качества раздачи из названия (Zona-стиль): источник релиза
+ * (WEB-DL/BluRay/HDTV/DVD/CAM) и перевод (Дубляж/Проф./Многоголосый...).
+ * Разрешение (2160p/1080p...) уже в TorrentResult.resolution.
+ */
+fun releaseBadges(name: String): List<Pair<String, androidx.compose.ui.graphics.Color>> {
+    val n = name.uppercase()
+    val out = mutableListOf<Pair<String, androidx.compose.ui.graphics.Color>>()
+    val src = when {
+        "WEB-DL" in n || "WEBDL" in n || "WEBRIP" in n || "WEB-RIP" in n -> "WEB-DL"
+        "BDRIP" in n || "BLU-RAY" in n || "BLURAY" in n || "BDREMUX" in n || "REMUX" in n -> "BluRay"
+        "HDTVRIP" in n || "HDTV" in n -> "HDTV"
+        "DVDRIP" in n || "DVD" in n -> "DVD"
+        "CAMRIP" in n || "CAM " in n || "TELECINE" in n || "TS " in n || "SCR " in n -> "CAM"
+        else -> ""
+    }
+    if (src.isNotEmpty()) out += src to androidx.compose.ui.graphics.Color(0xFF9DB8FF)
+    val tr = when {
+        "ДУБЛИРОВАН" in n || "ДУБЛЯЖ" in n -> "Дубляж"
+        "ПРОФЕССИОНАЛЬНЫЙ" in n || "ПРОФ." in n || "ПРОФ " in n -> "Проф."
+        "МНОГОГОЛОС" in n -> "Многогол."
+        "ЛЮБИТЕЛЬСКИЙ" in n || "ЛЮБИТ." in n || "ЛЮБИТ " in n -> "Любит."
+        "ЗАКАДР" in n -> "Закадр."
+        "ОДНОГОЛОС" in n -> "Одногол."
+        "ОЗВУЧКА" in n -> "Озвучка"
+        else -> ""
+    }
+    if (tr.isNotEmpty()) out += tr to androidx.compose.ui.graphics.Color(0xFFE3A0E3)
+    return out
+}
+
+/** Цвет по количеству сидов: ≥50 — зелёный, ≥5 — жёлтый, меньше — красный. */
+fun seedColor(seeds: Int): androidx.compose.ui.graphics.Color = when {
+    seeds >= 50 -> androidx.compose.ui.graphics.Color(0xFF7EE2A8)
+    seeds >= 5 -> androidx.compose.ui.graphics.Color(0xFFFFD54F)
+    else -> androidx.compose.ui.graphics.Color(0xFFE57373)
+}
