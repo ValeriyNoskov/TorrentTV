@@ -152,13 +152,24 @@ fun EpisodesScreen(
                             Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(
-                                text = ep.code,
-                                color = Color(0xFFF5B942),
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.width(78.dp),
-                            )
+                             Text(
+                                 text = ep.code,
+                                 color = Color(0xFFF5B942),
+                                 fontSize = 15.sp,
+                                 fontWeight = FontWeight.Bold,
+                                 modifier = Modifier.width(78.dp),
+                             )
+                             // ✓ — серия просмотрена (кнопкой в плеере или досмотрена ≥95%)
+                             @Suppress("UNUSED_EXPRESSION") tick
+                             if (store.isWatchedKey(item.storeKey + ":online" + ep.sourceSuffix)) {
+                                 Text(
+                                     text = "✓",
+                                     color = Color(0xFF9CCC65),
+                                     fontSize = 17.sp,
+                                     fontWeight = FontWeight.Bold,
+                                     modifier = Modifier.width(24.dp),
+                                 )
+                             }
                             Column(Modifier.weight(1f)) {
                                 Text(
                                     text = ep.title.ifBlank { "Эпизод ${ep.episode}" },
@@ -200,8 +211,19 @@ private suspend fun seasonsFromTorrents(
     val host = store.torrServeHost()
     if (host.isBlank() || !TorrServeService.ensureRunning(context, host)) return emptyList()
     val found: List<TorrentResult> = try {
-        TorrentSearch.searchDetailed(query = item.title, isTvShow = item.type != "movie").first
+        // Полный набор параметров, как в SmartPlayScreen: jackett/приватные
+        // трекеры/исключения — иначе поиск сужен и «Спецы» не находятся
+        TorrentSearch.searchDetailed(
+            query = item.title,
+            isTvShow = item.type != "movie",
+            imdbId = item.imdbId,
+            jackett = store.jackettConfig(),
+            privateTrackers = store.privateTrackers(),
+            excludedKeywords = store.excludedKeywords().toSet(),
+        ).first
     } catch (e: Exception) {
+        // Раньше падение глоталось молча — в логе «найдено 0» без причины
+        AppLog.log("episodes", "поиск раздач FAIL: ${e.message}")
         emptyList()
     }
     AppLog.log("episodes", "«${item.title}»: раздач для эпизодов найдено ${found.size}")

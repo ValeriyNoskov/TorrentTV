@@ -26,6 +26,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -104,6 +110,8 @@ fun OnlinePlayerScreen(
     var showJump by remember { mutableStateOf(false) }
     // Список серий (TorrServe): выбор серии прямо в плеере
     var showFiles by remember { mutableStateOf(showFilesOnStart) }
+    // Триггер перерисовки галочек «просмотрено» (меняется кнопкой в списке)
+    var watchedTick by remember { mutableStateOf(0) }
     // Авто-повтор при ошибке старта потока TorrServe (3003: данные ещё не готовы)
     var retryTick by remember { mutableStateOf(0) }
     var retryCount by remember { mutableStateOf(0) }
@@ -112,6 +120,8 @@ fun OnlinePlayerScreen(
     val playBtnFocus = remember { FocusRequester() }
     var maxQuality by remember { mutableStateOf<Int?>(null) } // null = авто
     var seekInfo by remember { mutableStateOf("") }           // «⏩ +10 сек» при перемотке пультом
+    // «Взведён» выход: первый BACK показывает «ещё раз — выход», второй за 3 сек — закрывает
+    var backArmedAt by remember { mutableStateOf(0L) }
     // ---------- Состояние: буферизация и ошибки (чёрный экран ≠ «зависло») ----------
     var playState by remember { mutableStateOf(Player.STATE_IDLE) }
     var errorMsg by remember { mutableStateOf("") }
@@ -229,8 +239,11 @@ fun OnlinePlayerScreen(
             val dur = (player.duration / 1000).toInt()
             if (pos > 10 && dur > 0) {
                 // Досмотрено до конца — удаляем из «Продолжить просмотр»
-                if (pos >= dur * 95 / 100) store.removeProgress(item)
-                else store.saveProgress(item, pos, dur, onlineKey)
+                // и помечаем серию просмотренной (галочка в списках)
+                if (pos >= dur * 95 / 100) {
+                    store.removeProgress(item)
+                    store.markWatchedKey(onlineKey)
+                } else store.saveProgress(item, pos, dur, onlineKey)
             }
         }
     }
@@ -238,8 +251,9 @@ fun OnlinePlayerScreen(
         onDispose {
             val pos = (player.currentPosition / 1000).toInt()
             val dur = (player.duration / 1000).toInt()
-            if (saveProgress && pos > 10 && dur > 0 && pos < dur * 95 / 100) {
-                store.saveProgress(item, pos, dur, onlineKey)
+            if (saveProgress && pos > 10 && dur > 0) {
+                if (pos >= dur * 95 / 100) store.markWatchedKey(onlineKey)
+                else store.saveProgress(item, pos, dur, onlineKey)
             }
             player.release()
         }
@@ -343,6 +357,7 @@ fun OnlinePlayerScreen(
                 if (!showPanel && !showSettings && !showQuality && !showTrackMenu && !showFiles && !showJump) {
                     showPanel = true
                     panelTick++
+                    backArmedAt = System.currentTimeMillis()
                     seekInfo = "⚠ BACK ещё раз — выход из плеера"
                     true
                 } else false
@@ -356,8 +371,20 @@ fun OnlinePlayerScreen(
     }
 
     // BACK-иерархия: в Compose активен ПОСЛЕДНИЙ зарегистрированный enabled —
-    // поэтому базовый выход первым, оверлеи — после (перекрывают его)
-    BackHandler(enabled = showPanel && !showSettings && !showQuality && !showTrackMenu && !showFiles && !showJump) { onBack() }
+    // поэтому базовый выход первым, оверлеи — после (перекрывают его).
+    // Выход из плеера — только двойным BACK (3 сек): первый показ панели /
+    // подсказку, второй — выход (жалоба: «назад сразу закрывает плеер»)
+    BackHandler(enabled = showPanel && !showSettings && !showQuality && !showTrackMenu && !showFiles && !showJump) {
+        val now = System.currentTimeMillis()
+        if (now - backArmedAt < 3000) {
+            com.torrenttv.app.data.AppLog.log("player", "back: выход из плеера (подтверждён)")
+            onBack()
+        } else {
+            backArmedAt = now
+            seekInfo = "⚠ BACK ещё раз — выход"
+            com.torrenttv.app.data.AppLog.log("player", "back: первый — подтверждение")
+        }
+    }
     BackHandler(enabled = showJump) { showJump = false }
     BackHandler(enabled = showFiles) { showFiles = false }
     BackHandler(enabled = showTrackMenu) { showTrackMenu = false }
@@ -539,26 +566,73 @@ fun OnlinePlayerScreen(
                     maxLines = 1,
                 )
                 Spacer(Modifier.height(8.dp))
-                // Сикбар: буфер (тускло) + позиция (жёлтый)
-                Box(
-                    Modifier
+                // Прокрутка по линии времени: фокус на полосе → ←/→ листают
+                // позицию по 1 минуте, OK — прыжок. Раньше таймлайн был
+                // только индикатором без прокрутки
+                var jumpTarget by remember { mutableStateOf<Long?>(null) }
+                val tlFocus = remember { FocusRequester() }
+                androidx.tv.material3.Surface(
+                    onClick = {
+                        jumpTarget?.let { player.seekTo(it) }
+                        jumpTarget = null
+                        seekInfo = "⏱ Перемотка"
+                        panelTick++
+                    },
+                    modifier = Modifier
                         .fillMaxWidth()
-                        .height(5.dp)
-                        .background(Color(0xFF2A3242)),
+                        .height(26.dp)
+                        .focusRequester(tlFocus)
+                        .focusable()
+                        .onKeyEvent { e: androidx.compose.ui.input.key.KeyEvent ->
+                            if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
+                            val base = jumpTarget ?: player.currentPosition
+                            val dur = if (player.duration > 0) player.duration else 0L
+                            when (e.key) {
+                                Key.DirectionLeft -> {
+                                    jumpTarget = (base - 60_000L).coerceIn(0L, dur)
+                                    panelTick++
+                                    true
+                                }
+                                Key.DirectionRight -> {
+                                    jumpTarget = if (dur > 0) (base + 60_000L).coerceIn(0L, dur) else base
+                                    panelTick++
+                                    true
+                                }
+                                else -> false
+                            }
+                        },
+                    shape = clickableSurfaceShape(RoundedCornerShape(6.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color.Transparent,
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0x33F5B942),
+                        focusedContentColor = Color.White,
+                    ),
                 ) {
-                    Box(
-                        Modifier
-                            .fillMaxWidth(bufFrac.coerceAtLeast(if (durMs > 0) (posMs.toFloat() / durMs).coerceIn(0f, 1f) else 0f))
-                            .height(5.dp)
-                            .background(Color(0xFF4A5872)),
-                    )
-                    if (durMs > 0) {
+                    Column(Modifier.padding(horizontal = 6.dp, vertical = 4.dp)) {
+                        val shownMs = jumpTarget ?: posMs
                         Box(
                             Modifier
-                                .fillMaxWidth((posMs.toFloat() / durMs).coerceIn(0f, 1f))
+                                .fillMaxWidth()
                                 .height(5.dp)
-                                .background(Color(0xFFF5B942)),
-                        )
+                                .background(Color(0xFF2A3242)),
+                        ) {
+                            if (durMs > 0) {
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth((shownMs.toFloat() / durMs).coerceIn(0f, 1f))
+                                        .height(5.dp)
+                                        .background(if (jumpTarget != null) Color(0xFFFFD07A) else Color(0xFFF5B942)),
+                                )
+                            }
+                        }
+                        if (jumpTarget != null) {
+                            Text(
+                                "⏱ %d:%02d — OK чтобы перейти".format(shownMs / 60000, (shownMs / 1000) % 60),
+                                color = Color(0xFFFFD07A),
+                                fontSize = 12.sp,
+                            )
+                        }
                     }
                 }
                 Spacer(Modifier.height(6.dp))
@@ -569,7 +643,7 @@ fun OnlinePlayerScreen(
                     )
                     Spacer(Modifier.width(14.dp))
                     Text(
-                        "⏳ $bufPct%" + if (bufPct >= 100) "" else " · ← → перемотка · OK пауза · ↑ меню",
+                        "⏳ $bufPct%" + if (bufPct >= 100) "" else " · полоса: ← → минута · OK переход",
                         color = Color.White.copy(alpha = 0.45f),
                         fontSize = 13.sp,
                     )
@@ -704,9 +778,21 @@ fun OnlinePlayerScreen(
                     .background(Color(0xF0151B26), RoundedCornerShape(14.dp))
                     .padding(14.dp),
             ) {
+                // Ключ просмотренности по файлу: тот же формат, что onlineKey
+                fun watchedKeyOf(fileIdx: Int): String? {
+                    val path = files.getOrNull(fileIdx)?.second ?: return null
+                    val ep = Regex("[Ee](\\d{1,3})").find(path.substringAfterLast('/'))
+                        ?.groupValues?.get(1)?.toIntOrNull() ?: return null
+                    return if (link.season > 0)
+                        item.storeKey + ":online" + ":s%02de%02d".format(link.season, ep)
+                    else item.storeKey + ":online"
+                }
                 items(files.size) { n ->
                     val (idx, name) = files[n]
                     val current = idx == currentFile
+                    // Галочка: серия отмечена просмотренной (кнопкой или досмотрена)
+                    @Suppress("UNUSED_EXPRESSION") watchedTick
+                    val watched = store.isWatchedKey(watchedKeyOf(idx) ?: "")
                     androidx.tv.material3.Surface(
                         onClick = {
                             showFiles = false
@@ -727,10 +813,46 @@ fun OnlinePlayerScreen(
                         ),
                     ) {
                         androidx.tv.material3.Text(
-                            (if (current) "▶ " else "") + name.substringAfterLast('/'),
+                            (if (watched) "✓ " else "") + (if (current) "▶ " else "") + name.substringAfterLast('/'),
                             fontSize = 14.sp,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                         )
+                    }
+                }
+                // Ручная отметка: кнопка — текущая серия просмотрена / снять отметку
+                item {
+                    val curKey = watchedKeyOf(currentFile)
+                    if (curKey != null) {
+                        @Suppress("UNUSED_EXPRESSION") watchedTick
+                        val watched = store.isWatchedKey(curKey)
+                        androidx.tv.material3.Surface(
+                            onClick = {
+                                store.markWatchedKey(curKey, !watched)
+                                com.torrenttv.app.data.AppLog.log(
+                                    "player",
+                                    if (!watched) "серия отмечена просмотренной" else "отметка просмотренной снята",
+                                )
+                                watchedTick++
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp),
+                            shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(
+                                shape = RoundedCornerShape(8.dp),
+                            ),
+                            colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                                containerColor = if (watched) Color(0xFF3A5A2E) else Color(0xFF1F2430),
+                                contentColor = Color.White,
+                                focusedContainerColor = Color(0xFF3A5A2E),
+                                focusedContentColor = Color.White,
+                            ),
+                        ) {
+                            androidx.tv.material3.Text(
+                                if (watched) "✓ Серия просмотрена (нажмите — снять)" else "✓ Отметить серию просмотренной",
+                                fontSize = 14.sp,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            )
+                        }
                     }
                 }
             }

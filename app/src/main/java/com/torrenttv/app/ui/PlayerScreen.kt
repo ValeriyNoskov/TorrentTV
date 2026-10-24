@@ -125,7 +125,15 @@ fun PlayerScreen(
                     if (ep != null) t.files.firstOrNull {
                         com.torrenttv.app.data.Episode.fileMatches(it.path, ep.season, ep.episode)
                     } ?: com.torrenttv.app.data.TorrServeService.bestVideo(t)
-                    else com.torrenttv.app.data.TorrServeService.bestVideo(t)
+                    else {
+                        // Продолжение просмотра: запомненная серия раздачи —
+                        // иначе каждый «Смотреть» стартует E01 и теряет серию/время
+                        val last = store.lastFile(item)
+                        val videoSorted = t.files.filter {
+                            it.path.substringAfterLast('.', "").lowercase() in TorrentEngine.VIDEO_EXT
+                        }.sortedWith { x, y -> TorrentEngine.naturalCompare(x.path, y.path) }
+                        videoSorted.getOrNull(last) ?: com.torrenttv.app.data.TorrServeService.bestVideo(t)
+                    }
                 }
             }
             if (ts != null && file != null) {

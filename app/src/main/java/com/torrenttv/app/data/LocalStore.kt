@@ -281,6 +281,19 @@ class LocalStore(context: Context) {
     fun hasLastFile(item: MediaItem): Boolean =
         prefs.contains("lastfile:" + item.storeKey)
 
+    // ---------- Просмотренные серии (галочка в списке, авто + кнопкой) ----------
+
+    /** Отметить серию просмотренной (ключ = sourceKey плеера). */
+    fun markWatchedKey(key: String, watched: Boolean = true) {
+        val set = prefs.getStringSet("watched", emptySet()) ?: emptySet()
+        val next = if (watched) set + key else set - key
+        prefs.edit().putStringSet("watched", next).apply()
+    }
+
+    /** Серия отмечена просмотренной (кнопкой или досмотрена ≥95%)? */
+    fun isWatchedKey(key: String): Boolean =
+        prefs.getStringSet("watched", emptySet())?.contains(key) == true
+
     // ---------- Настройки фильтрации поиска ----------
 
     /** Исключённые жанры (id TMDB). */
