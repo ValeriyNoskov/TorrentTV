@@ -5,6 +5,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Автопоиск торрентов: агрегатор провайдеров.
@@ -70,10 +71,12 @@ object TorrentSearch {
         val name: String,
         val count: Int,
         val error: String? = null,
+        /** Сколько мс занял запрос к провайдеру (для диагностики «поиск тормозит»). */
+        val ms: Long = 0,
     ) {
-        /** «apibay:20», «apibay:0 (недоступен)» или «apibay:—». */
+        /** «apibay:20 0.4с», «apibay:0 (недоступен)» или «apibay:—». */
         fun label(): String = when {
-            error != null -> "$name:ошибка"
+            error != null -> "$name:ошибка(${ms / 100}с)"
             count == 0 -> "$name:—"
             else -> "$name:$count"
         }
@@ -93,30 +96,37 @@ object TorrentSearch {
         limit: Int = 50,
     ): Pair<List<TorrentResult>, List<ProviderStat>> = withContext(Dispatchers.IO) {
         // Каждый вызов провайдера: имя, результаты, ошибка (если вылетел)
-        data class Call(val name: String, val res: List<TorrentResult>, val err: String?)
+        data class Call(val name: String, val res: List<TorrentResult>, val err: String?, val ms: Long = 0)
 
         val calls: List<Call> = coroutineScope {
+            // Один провайдер — максимум 8 сек: медленный/зависший источник
+            // больше не задерживает весь поиск (awaitAll ждал самого
+            // медленного — поиск «стал дольше работать»).
+            // Каждый вызов — с замером времени: в логе видно виновника.
+            suspend fun timedProvider(name: String, block: suspend () -> List<TorrentResult>): Call {
+                val t0 = System.currentTimeMillis()
+                val res = withTimeoutOrNull(8_000L) {
+                    runCatching { block() }.getOrElse { emptyList() }
+                }
+                val ms = System.currentTimeMillis() - t0
+                return if (res == null) Call(name, emptyList(), "таймаут 8с", ms)
+                else Call(name, res, null, ms)
+            }
             val jobs = buildList {
+                // apibay ищет и по оригинальному, и по русскому названию
                 add(async {
-                    runCatching {
-                        // apibay ищет и по оригинальному, и по русскому названию
-                        Call(ApibayProvider.NAME, ApibayProvider.search(query, isTvShow) +
+                    timedProvider(ApibayProvider.NAME) {
+                        ApibayProvider.search(query, isTvShow) +
                             (altQuery?.takeIf { it.isNotBlank() && !it.equals(query, true) }
-                                ?.let { ApibayProvider.search(it, isTvShow) } ?: emptyList()), null)
-                    }.getOrElse { Call(ApibayProvider.NAME, emptyList(), it.message) }
+                                ?.let { ApibayProvider.search(it, isTvShow) } ?: emptyList())
+                    }
                 })
                 if (imdbId.isNotBlank()) {
                     // Torrentio: фильм целиком или конкретная серия (сериалы)
                     if (season > 0 && episode > 0) {
-                        add(async {
-                            runCatching { Call(TorrentioProvider.NAME, TorrentioProvider.search(imdbId, season, episode), null) }
-                                .getOrElse { Call(TorrentioProvider.NAME, emptyList(), it.message) }
-                        })
+                        add(async { timedProvider(TorrentioProvider.NAME) { TorrentioProvider.search(imdbId, season, episode) } })
                     } else if (!isTvShow) {
-                        add(async {
-                            runCatching { Call(TorrentioProvider.NAME, TorrentioProvider.search(imdbId), null) }
-                                .getOrElse { Call(TorrentioProvider.NAME, emptyList(), it.message) }
-                        })
+                        add(async { timedProvider(TorrentioProvider.NAME) { TorrentioProvider.search(imdbId) } })
                     }
                 }
                 // bt4g и YTS убраны: большинство провайдеров их блокирует —
@@ -124,54 +134,41 @@ object TorrentSearch {
                 // Открытые трекеры без регистрации: EZTV (сериалы, в т.ч. по IMDb),
                 // SolidTorrents и BTDig (DHT-поиск) — расширяют покрытие
                 if (imdbId.isNotBlank() || isTvShow) {
-                    add(async {
-                        runCatching {
-                            Call(EztvProvider.NAME, EztvProvider.search(query, isTvShow, imdbId, season, episode), null)
-                        }.getOrElse { Call(EztvProvider.NAME, emptyList(), it.message) }
-                    })
+                    add(async { timedProvider(EztvProvider.NAME) { EztvProvider.search(query, isTvShow, imdbId, season, episode) } })
                 }
+                add(async { timedProvider(SolidTorrentsProvider.NAME) { SolidTorrentsProvider.search(query) } })
                 add(async {
-                    runCatching { Call(SolidTorrentsProvider.NAME, SolidTorrentsProvider.search(query), null) }
-                        .getOrElse { Call(SolidTorrentsProvider.NAME, emptyList(), it.message) }
-                })
-                add(async {
-                    runCatching {
-                        Call(BtdigProvider.NAME, BtdigProvider.search(query) +
+                    timedProvider(BtdigProvider.NAME) {
+                        BtdigProvider.search(query) +
                             (altQuery?.takeIf { it.isNotBlank() && !it.equals(query, true) }
-                                ?.let { BtdigProvider.search(it) } ?: emptyList()), null)
-                    }.getOrElse { Call(BtdigProvider.NAME, emptyList(), it.message) }
+                                ?.let { BtdigProvider.search(it) } ?: emptyList())
+                    }
                 })
-                add(async {
-                    runCatching { Call(KnabenProvider.NAME, KnabenProvider.search(query), null) }
-                        .getOrElse { Call(KnabenProvider.NAME, emptyList(), it.message) }
-                })
+                add(async { timedProvider(KnabenProvider.NAME) { KnabenProvider.search(query) } })
                 // Рутрекер (rutrackerr.ru) — проверенный открытый русский каталог,
                 // ищет и по основному, и по альтернативному названию
                 add(async {
-                    runCatching {
-                        Call(RutrackerrProvider.NAME, RutrackerrProvider.search(query) +
+                    timedProvider(RutrackerrProvider.NAME) {
+                        RutrackerrProvider.search(query) +
                             (altQuery?.takeIf { it.isNotBlank() && !it.equals(query, true) }
-                                ?.let { RutrackerrProvider.search(it) } ?: emptyList()), null)
-                    }.getOrElse { Call(RutrackerrProvider.NAME, emptyList(), it.message) }
+                                ?.let { RutrackerrProvider.search(it) } ?: emptyList())
+                    }
                 })
                 // RuTor — открытый русский индексатор: русские сериалы/фильмы без регистрации
                 add(async {
-                    runCatching {
-                        Call(RutorProvider.NAME, RutorProvider.search(query) +
+                    timedProvider(RutorProvider.NAME) {
+                        RutorProvider.search(query) +
                             (altQuery?.takeIf { it.isNotBlank() && !it.equals(query, true) }
-                                ?.let { RutorProvider.search(it) } ?: emptyList()), null)
-                    }.getOrElse { Call(RutorProvider.NAME, emptyList(), it.message) }
+                                ?.let { RutorProvider.search(it) } ?: emptyList())
+                    }
                 })
                 if (jackett?.isConfigured == true) {
-                    add(async {
-                        runCatching { Call(JackettProvider.NAME, JackettProvider.search(jackett, query), null) }
-                            .getOrElse { Call(JackettProvider.NAME, emptyList(), it.message) }
-                    })
+                    add(async { timedProvider(JackettProvider.NAME) { JackettProvider.search(jackett, query) } })
                 }
             }
             jobs.awaitAll()
         }
-        val stats = calls.map { ProviderStat(it.name, it.res.size, it.err) }
+        val stats = calls.map { ProviderStat(it.name, it.res.size, it.err, it.ms) }
         // Сохраняем для диагностики на экране («Ничего не нашлось») и логов
         lastStats = stats
         // Релевантность: хотя бы одно значимое слово запроса в названии раздачи.
@@ -191,11 +188,14 @@ object TorrentSearch {
             merge(calls.map { it.res }, excludedKeywords)
         }
         val merged = mergedRaw.take(limit)
+        // Тайминги провайдеров: сразу видно, кто тормозит поиск
         com.torrenttv.app.data.AppLog.log(
             "search",
             "q=\"$query\" alt=\"${altQuery ?: "-"}\" tv=$isTvShow imdb=$imdbId -> " +
                 stats.joinToString(" ") { s ->
-                    "${s.name}:${s.count}" + (s.error?.let { e -> "($e)" } ?: "")
+                    "${s.name}:${s.count}" +
+                        (s.error?.let { e -> "($e)" } ?: "") +
+                        " ${s.ms / 1000.0}с"
                 } +
                 " => ${merged.size}",
         )
