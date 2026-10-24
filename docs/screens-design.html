@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>ВНосКино — все экраны</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #070A0E; color: #fff;
+    font-family: "Inter", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+  }
+  .doc-head {
+    max-width: 1920px; margin: 0 auto; padding: 34px 56px 8px;
+  }
+  .doc-head h1 { font-size: 34px; margin: 0 0 8px; letter-spacing: -.02em; }
+  .doc-head p { color: #7E8B9C; font-size: 17px; margin: 0; }
+
+  .tv {
+    width: 1920px; height: 1080px; position: relative; overflow: hidden;
+    background: #0E1116; margin: 28px auto; border-radius: 18px;
+    box-shadow: 0 30px 90px rgba(0,0,0,.6);
+  }
+  .caption {
+    width: 1920px; margin: 0 auto; padding: 0 8px 4px;
+    color: #F5B942; font-size: 22px; font-weight: 700;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .caption span { color: #68758A; font-size: 15px; font-weight: 400; }
+
+  .side {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 96px;
+    background: #0A0D12; border-right: 1px solid #171C25;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 26px 0; gap: 6px;
+  }
+  .logo { width: 46px; height: 46px; border-radius: 12px; margin-bottom: 20px;
+    background: linear-gradient(150deg,#F5B942,#B57A12); color:#0E1116;
+    display:flex; align-items:center; justify-content:center; font-weight:900; font-size:19px; }
+  .nav { width: 68px; padding: 9px 0; border-radius: 11px; text-align: center; color:#7B8798; font-size: 20px; }
+  .nav small { display:block; font-size: 9px; margin-top: 2px; letter-spacing:.02em; }
+  .nav.on { background:#1C2330; color:#F5B942; }
+
+  .content { position: absolute; left: 96px; right: 0; top: 0; bottom: 0; padding: 30px 44px; overflow: hidden; }
+  .h1 { font-size: 32px; font-weight: 800; letter-spacing: -.02em; }
+  .sub { color:#7E8B9C; font-size:15px; margin-left: 12px; font-weight: 400; }
+
+  .shelf { margin-top: 26px; }
+  .shelf h2 { font-size: 21px; margin: 0 0 12px; font-weight: 700; }
+  .shelf h2 em { color:#F5B942; font-style: normal; }
+  .row { display:flex; gap: 14px; }
+  .poster {
+    width: 172px; height: 250px; border-radius: 12px; flex: 0 0 auto;
+    background: linear-gradient(160deg,#26324A 0%,#151C27 70%,#0C1118 100%);
+    border: 1px solid #202836; position: relative; overflow: hidden;
+  }
+  .poster::after {
+    content: attr(data-t); position: absolute; left: 0; right: 0; bottom: 0;
+    padding: 30px 10px 10px; font-size: 13px; line-height: 1.25;
+    background: linear-gradient(transparent, rgba(0,0,0,.85)); color:#E6EDF6;
+  }
+  .poster.wide { width: 290px; height: 165px; }
+  .poster.focus { outline: 3px solid #F5B942; outline-offset: 2px; }
+
+  .chips { display:flex; gap: 10px; margin: 14px 0 20px; flex-wrap: wrap; }
+  .chip { padding: 10px 18px; border-radius: 999px; background:#1A202B; color:#B9C4D2; font-size: 15px; border:1px solid #232B39; }
+  .chip.on { background:#F5B942; color:#0E1116; font-weight:700; border-color:#F5B942; }
+
+  .grid-ch { display: grid; grid-template-columns: repeat(7, 1fr); gap: 14px; }
+  .tile {
+    background:#151B24; border:1px solid #222A38; border-radius: 12px;
+    padding: 12px; display:flex; gap: 10px; align-items:center; height: 82px;
+  }
+  .tile.focus { border-color:#8FB4DE; box-shadow: 0 0 0 3px rgba(143,180,222,.18); }
+  .logo-ch { width: 46px; height: 46px; border-radius: 8px; background:#1E2633; display:flex; align-items:center; justify-content:center; font-size: 11px; color:#8ea0b6; flex:0 0 auto; }
+  .tile b { font-size: 14px; display:block; }
+  .tile span { font-size: 11px; color:#F5B942; }
+
+  /* поиск */
+  .search-line { display:flex; align-items:center; gap: 14px; }
+  .query { font-size: 34px; color:#F5B942; font-weight: 700; letter-spacing: .01em; }
+  .caret { width: 2px; height: 34px; background:#F5B942; display:inline-block; vertical-align:-4px; }
+  .btn { height: 44px; padding: 0 18px; border-radius: 10px; background:#1F2430; border:1px solid #2A3240;
+    display:inline-flex; align-items:center; font-size:15px; }
+  .btn.primary { background:#F5B942; color:#0E1116; font-weight:700; border-color:#F5B942; }
+  .kb { margin-top: 18px; display:flex; flex-direction:column; gap: 7px; }
+  .kb-row { display:flex; gap: 7px; }
+  .key { width: 62px; height: 54px; border-radius: 8px; background:#1F2430; border:1px solid #2A3240;
+    display:flex; align-items:center; justify-content:center; font-size: 20px; }
+  .key.wide { width: 150px; }
+  .key.space { background:#26303F; }
+  .key.on { border-color:#F5B942; color:#F5B942; }
+
+  /* плеер */
+  .video {
+    position:absolute; inset:0; background:
+      radial-gradient(90% 70% at 50% 45%, #1B2637 0%, #0C1118 70%, #070A0E 100%);
+  }
+  .video::before {
+    content:""; position:absolute; inset:0;
+    background: repeating-linear-gradient(90deg, rgba(255,255,255,.012) 0 2px, transparent 2px 6px);
+  }
+  .player-ui { position:absolute; left: 0; right: 0; bottom: 0; padding: 34px 46px 34px;
+    background: linear-gradient(transparent, rgba(3,5,8,.92) 55%); }
+  .p-title { font-size: 30px; font-weight: 800; }
+  .p-ep { color:#F5B942; font-size:17px; margin-top: 4px; }
+  .progress { height: 8px; border-radius: 4px; background:#2A3240; margin: 22px 0 8px; position:relative; }
+  .progress i { position:absolute; left:0; top:0; bottom:0; width: 34%; background:#F5B942; border-radius:4px; }
+  .progress b { position:absolute; left:34%; top:-5px; width:18px; height:18px; border-radius:50%; background:#fff; }
+  .times { display:flex; justify-content:space-between; color:#9AA7B8; font-size:14px; }
+  .p-btns { display:flex; gap: 12px; margin-top: 18px; align-items:center; }
+  .buffering { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); text-align:center; }
+  .spinner { width: 58px; height:58px; border-radius:50%; border:5px solid #2A3240; border-top-color:#F5B942;
+    margin: 0 auto 16px; }
+
+  /* карточка */
+  .card-wrap { display:flex; flex-direction:column; align-items:center; }
+  .card-poster { width: 230px; height: 340px; border-radius: 14px;
+    background: radial-gradient(120% 80% at 20% 0%, rgba(245,185,66,.35), transparent 60%),
+      linear-gradient(160deg,#2A3550,#131A26 55%,#0B0F15);
+    display:flex; align-items:flex-end; justify-content:center; padding-bottom:20px;
+    font-size: 13px; color:#9DB0C6; letter-spacing:.12em; text-transform:uppercase; }
+  .card-title { font-size: 34px; font-weight: 800; margin-top: 16px; }
+  .card-sub { color:#F5B942; font-size: 17px; margin-top: 4px; }
+  .card-btns { display:flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; justify-content:center; }
+  .card-desc { max-width: 980px; color: rgba(255,255,255,.75); font-size: 16px; line-height: 24px; text-align:center; margin-top: 18px; }
+  .card-sec { width: 100%; max-width: 1180px; margin-top: 26px; }
+  .card-sec h3 { color:#F5B942; font-size: 18px; margin: 0 0 12px; }
+  .sim { display:grid; grid-template-columns: repeat(8, 112px); gap: 12px; }
+  .sim div { width: 112px; height: 160px; border-radius: 9px;
+    background: linear-gradient(160deg,#26324A,#151C27 70%,#0C1118); border:1px solid #202836; }
+
+  /* настройки */
+  .set-row { display:flex; justify-content:space-between; align-items:center;
+    padding: 16px 20px; background:#141A23; border:1px solid #1E2632; border-radius: 12px; margin-bottom: 9px; }
+  .set-row b { font-size: 16px; font-weight: 600; }
+  .set-row span { color:#8B98A8; font-size: 14px; }
+  .set-row.focus { border-color:#8FB4DE; box-shadow: 0 0 0 3px rgba(143,180,222,.18); }
+  .two-col { display:grid; grid-template-columns: 1fr 1fr; gap: 9px 22px; }
+
+  .note { max-width: 1920px; margin: 0 auto 60px; padding: 0 8px; color:#68758A; font-size: 15px; }
+</style>
+</head>
+<body>
+
+<div class="doc-head">
+  <h1>ВНосКино — все экраны</h1>
+  <p>Макеты текущего интерфейса (v0.8.6, до релиза). Разрешение ТВ — 1920×1080.</p>
+</div>
+
+<!-- ============ 1. ГЛАВНАЯ ============ -->
+<div class="caption">1. Главная <span>полки: избранные каналы, продолжить, русские фильмы и сериалы</span></div>
+<div class="tv">
+  <div class="side">
+    <div class="logo">ВК</div>
+    <div class="nav on">🏠<small>Главная</small></div>
+    <div class="nav">▶<small>Продолжить</small></div>
+    <div class="nav">⭐<small>Избранное</small></div>
+    <div class="nav">🎬<small>Фильмы</small></div>
+    <div class="nav">📺<small>Сериалы</small></div>
+    <div class="nav">📡<small>ТВ</small></div>
+    <div class="nav">🔍<small>Поиск</small></div>
+    <div class="nav">⚙<small>Настройки</small></div>
+  </div>
+  <div class="content">
+    <div class="h1">Главная</div>
+
+    <div class="shelf">
+      <h2>📡 Избранные каналы <em>· Все каналы →</em></h2>
+      <div class="row">
+        <div class="tile focus" style="width:210px"><div class="logo-ch">24</div><div><b>Россия 24</b><span>● Новости</span></div></div>
+        <div class="tile" style="width:210px"><div class="logo-ch">РР</div><div><b>Русский роман</b><span>● Кино</span></div></div>
+        <div class="tile" style="width:210px"><div class="logo-ch">СТС</div><div><b>СТС</b><span>● Федеральные</span></div></div>
+      </div>
+    </div>
+
+    <div class="shelf">
+      <h2>▶ Продолжить просмотр</h2>
+      <div class="row">
+        <div class="poster wide" data-t="Полдень · S01E03 · 24 мин"></div>
+        <div class="poster wide" data-t="Ликвидация · S01E05 · 41 мин"></div>
+        <div class="poster wide" data-t="Метод · S02E02 · 12 мин"></div>
+      </div>
+    </div>
+
+    <div class="shelf">
+      <h2>🎬 Русские фильмы</h2>
+      <div class="row">
+        <div class="poster" data-t="Тихий Дон"></div>
+        <div class="poster" data-t="Хрустальный"></div>
+        <div class="poster" data-t="Фишер"></div>
+        <div class="poster" data-t="Химера"></div>
+        <div class="poster" data-t="Шторм"></div>
+        <div class="poster" data-t="Колотушка"></div>
+        <div class="poster" data-t="Нулевой пациент"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 2. ТВ ============ -->
+<div class="caption">2. ТВ — каналы <span>125 каналов, 11 групп, избранное звёздочкой</span></div>
+<div class="tv">
+  <div class="side">
+    <div class="logo">ВК</div>
+    <div class="nav">🏠<small>Главная</small></div>
+    <div class="nav">▶<small>Продолжить</small></div>
+    <div class="nav">⭐<small>Избранное</small></div>
+    <div class="nav">🎬<small>Фильмы</small></div>
+    <div class="nav">📺<small>Сериалы</small></div>
+    <div class="nav on">📡<small>ТВ</small></div>
+    <div class="nav">🔍<small>Поиск</small></div>
+    <div class="nav">⚙<small>Настройки</small></div>
+  </div>
+  <div class="content">
+    <div class="h1">📡 ТВ <span class="sub">125 каналов · 11 групп</span></div>
+    <div class="chips">
+      <div class="chip">Все</div>
+      <div class="chip">★ Избранные · 2</div>
+      <div class="chip">Федеральные · 23</div>
+      <div class="chip on">Новости · 13</div>
+      <div class="chip">Кино · 28</div>
+      <div class="chip">Спорт · 5</div>
+      <div class="chip">Музыка · 16</div>
+      <div class="chip">Детям · 7</div>
+    </div>
+    <div class="grid-ch">
+      <div class="tile focus"><div class="logo-ch">24</div><div><b>Россия 24</b><span>● Новости · 1080p</span></div></div>
+      <div class="tile"><div class="logo-ch">РБК</div><div><b>РБК ТВ</b><span>● Новости</span></div></div>
+      <div class="tile"><div class="logo-ch">EN</div><div><b>Euronews</b><span>● Новости</span></div></div>
+      <div class="tile"><div class="logo-ch">360</div><div><b>360°</b><span>● Новости</span></div></div>
+      <div class="tile"><div class="logo-ch">М24</div><div><b>Москва 24</b><span>● Новости</span></div></div>
+      <div class="tile"><div class="logo-ch">Мир</div><div><b>Мир</b><span>● Новости</span></div></div>
+      <div class="tile"><div class="logo-ch">РК</div><div><b>Россия К</b><span>● Новости</span></div></div>
+      <div class="tile"><div class="logo-ch">Р1</div><div><b>Россия 1</b><span>● Федеральные</span></div></div>
+      <div class="tile"><div class="logo-ch">П1</div><div><b>Первый</b><span>● Федеральные</span></div></div>
+      <div class="tile"><div class="logo-ch">НТВ</div><div><b>НТВ</b><span>● Федеральные</span></div></div>
+      <div class="tile"><div class="logo-ch">ТНТ</div><div><b>ТНТ</b><span>● Развлекательные</span></div></div>
+      <div class="tile"><div class="logo-ch">СТС</div><div><b>СТС</b><span>● Федеральные</span></div></div>
+      <div class="tile"><div class="logo-ch">РР</div><div><b>Русский роман</b><span>● Кино</span></div></div>
+      <div class="tile"><div class="logo-ch">Кино</div><div><b>Кино ТВ</b><span>● Кино</span></div></div>
+    </div>
+    <div class="note" style="margin-top:22px">Под плитками — «сейчас идёт» из телепрограммы. Логотипы грузятся из плейлиста.</div>
+  </div>
+</div>
+
+<!-- ============ 3. ПОИСК ============ -->
+<div class="caption">3. Поиск <span>пробел «␣» теперь в каждой строке — фраза из нескольких слов</span></div>
+<div class="tv">
+  <div class="side">
+    <div class="logo">ВК</div>
+    <div class="nav">🏠<small>Главная</small></div>
+    <div class="nav">▶<small>Продолжить</small></div>
+    <div class="nav">⭐<small>Избранное</small></div>
+    <div class="nav">🎬<small>Фильмы</small></div>
+    <div class="nav">📺<small>Сериалы</small></div>
+    <div class="nav">📡<small>ТВ</small></div>
+    <div class="nav on">🔍<small>Поиск</small></div>
+    <div class="nav">⚙<small>Настройки</small></div>
+  </div>
+  <div class="content">
+    <div class="search-line">
+      <div class="btn">← Назад</div>
+      <div class="query">Спецы титаны полдень<span class="caret"></span></div>
+      <div style="flex:1"></div>
+      <div class="btn">🎤 Голос</div>
+      <div class="btn">⌨ Ввод</div>
+    </div>
+
+    <div class="shelf" style="margin-top:18px">
+      <h2>Результаты <em>· найдено 4</em></h2>
+      <div class="row">
+        <div class="poster" data-t="Спецы"></div>
+        <div class="poster" data-t="Титаны"></div>
+        <div class="poster" data-t="Полдень"></div>
+        <div class="poster" data-t="Полдень · 2 сезон"></div>
+      </div>
+    </div>
+
+    <div class="kb">
+      <div class="kb-row">
+        <div class="key">Й</div><div class="key">Ц</div><div class="key">У</div><div class="key">К</div><div class="key">Е</div><div class="key">Н</div><div class="key">Г</div><div class="key">Ш</div><div class="key">Щ</div><div class="key">З</div><div class="key">Х</div><div class="key">Ъ</div><div class="key wide space">␣</div>
+      </div>
+      <div class="kb-row">
+        <div class="key">Ф</div><div class="key">Ы</div><div class="key">В</div><div class="key">А</div><div class="key">П</div><div class="key">Р</div><div class="key">О</div><div class="key">Л</div><div class="key">Д</div><div class="key">Ж</div><div class="key">Э</div><div class="key wide space">␣</div>
+      </div>
+      <div class="kb-row">
+        <div class="key">Я</div><div class="key">Ч</div><div class="key">С</div><div class="key">М</div><div class="key">И</div><div class="key">Т</div><div class="key">Ь</div><div class="key">Б</div><div class="key">Ю</div><div class="key wide">⌫</div><div class="key wide space">␣</div>
+      </div>
+      <div class="kb-row">
+        <div class="key">1</div><div class="key">2</div><div class="key">3</div><div class="key">4</div><div class="key">5</div><div class="key">6</div><div class="key">7</div><div class="key">8</div><div class="key">9</div><div class="key">0</div><div class="key wide space">␣</div>
+      </div>
+      <div class="kb-row">
+        <div class="key">-</div><div class="key">.</div><div class="key">,</div><div class="key wide">Очистить</div><div class="key wide space">␣</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 4. ИЗБРАННОЕ ============ -->
+<div class="caption">4. Избранное <span>фильтр «Все / Фильмы / Сериалы» — вместо «Позже» и «Буду смотреть»</span></div>
+<div class="tv">
+  <div class="side">
+    <div class="logo">ВК</div>
+    <div class="nav">🏠<small>Главная</small></div>
+    <div class="nav">▶<small>Продолжить</small></div>
+    <div class="nav on">⭐<small>Избранное</small></div>
+    <div class="nav">🎬<small>Фильмы</small></div>
+    <div class="nav">📺<small>Сериалы</small></div>
+    <div class="nav">📡<small>ТВ</small></div>
+    <div class="nav">🔍<small>Поиск</small></div>
+    <div class="nav">⚙<small>Настройки</small></div>
+  </div>
+  <div class="content">
+    <div style="display:flex; align-items:center; gap:14px">
+      <div class="h1">⭐ Избранное</div>
+      <div class="chip on">Все (12)</div>
+      <div class="chip">🎬 Фильмы (8)</div>
+      <div class="chip">📺 Сериалы (4)</div>
+    </div>
+    <div class="shelf" style="margin-top:22px">
+      <div class="row" style="margin-bottom:14px">
+        <div class="poster focus" data-t="Полдень"></div>
+        <div class="poster" data-t="Тихий Дон"></div>
+        <div class="poster" data-t="Метод"></div>
+        <div class="poster" data-t="Хрустальный"></div>
+        <div class="poster" data-t="Фишер"></div>
+        <div class="poster" data-t="Шторм"></div>
+        <div class="poster" data-t="Химера"></div>
+        <div class="poster" data-t="Колотушка"></div>
+      </div>
+      <div class="row">
+        <div class="poster" data-t="Нулевой пациент"></div>
+        <div class="poster" data-t="Ликвидация"></div>
+        <div class="poster" data-t="Спецы"></div>
+        <div class="poster" data-t="Титаны"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 5. ФИЛЬМЫ ============ -->
+<div class="caption">5. Фильмы <span>каталог сеткой, фильтры по жанрам и странам</span></div>
+<div class="tv">
+  <div class="side">
+    <div class="logo">ВК</div>
+    <div class="nav">🏠<small>Главная</small></div>
+    <div class="nav">▶<small>Продолжить</small></div>
+    <div class="nav">⭐<small>Избранное</small></div>
+    <div class="nav on">🎬<small>Фильмы</small></div>
+    <div class="nav">📺<small>Сериалы</small></div>
+    <div class="nav">📡<small>ТВ</small></div>
+    <div class="nav">🔍<small>Поиск</small></div>
+    <div class="nav">⚙<small>Настройки</small></div>
+  </div>
+  <div class="content">
+    <div class="h1">🎬 Фильмы</div>
+    <div class="chips">
+      <div class="chip on">Популярные</div>
+      <div class="chip">Русские</div>
+      <div class="chip">Новинки</div>
+      <div class="chip">Боевик</div>
+      <div class="chip">Комедия</div>
+      <div class="chip">Драма</div>
+      <div class="chip">Триллер</div>
+    </div>
+    <div class="row" style="flex-wrap:wrap; gap:16px">
+      <div class="poster focus" data-t="Тихий Дон"></div><div class="poster" data-t="Хрустальный"></div>
+      <div class="poster" data-t="Фишер"></div><div class="poster" data-t="Химера"></div>
+      <div class="poster" data-t="Шторм"></div><div class="poster" data-t="Колотушка"></div>
+      <div class="poster" data-t="Нулевой пациент"></div><div class="poster" data-t="Спецы"></div>
+      <div class="poster" data-t="Титаны"></div><div class="poster" data-t="Полдень"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 6. КАРТОЧКА ============ -->
+<div class="caption">6. Карточка фильма <span>постер → кнопки → описание → сезоны → «Похожее»; вниз, не вправо</span></div>
+<div class="tv">
+  <div class="side">
+    <div class="logo">ВК</div>
+    <div class="nav">🏠<small>Главная</small></div>
+    <div class="nav">▶<small>Продолжить</small></div>
+    <div class="nav">⭐<small>Избранное</small></div>
+    <div class="nav on">🎬<small>Фильмы</small></div>
+    <div class="nav">📺<small>Сериалы</small></div>
+    <div class="nav">📡<small>ТВ</small></div>
+    <div class="nav">🔍<small>Поиск</small></div>
+    <div class="nav">⚙<small>Настройки</small></div>
+  </div>
+  <div class="content" style="padding-top:18px">
+    <div class="card-wrap">
+      <div class="card-poster">Постер 210 × 310</div>
+      <div class="card-title">Полдень</div>
+      <div class="card-sub">Сериал · 2026 · ★ 7.8 КП · IMDb 7.2</div>
+      <div class="card-btns">
+        <div class="btn primary">▶ Смотреть</div>
+        <div class="btn">🎬 Эпизоды</div>
+        <div class="btn">☆ В избранное</div>
+        <div class="btn">🔍 Раздача</div>
+        <div class="btn">✕ Из просмотра</div>
+      </div>
+      <div class="card-desc">
+        Жизнь маленького северного городка меняется, когда в него приезжает новая учительница.
+        Один день, одна ошибка и цепочка событий, которые уже нельзя остановить.
+      </div>
+      <div class="card-sec">
+        <h3>🎬 Сезоны и серии</h3>
+        <div class="chips" style="margin:0 0 8px"><div class="chip on">Сезон 1</div><div class="chip">Сезон 2</div></div>
+        <div class="row" style="gap:10px">
+          <div class="tile" style="width:150px;height:66px;background:#2E4A26;border-color:#3C6330"><div><b>▶ S01E01</b><span>есть раздача</span></div></div>
+          <div class="tile" style="width:150px;height:66px;background:#2E4A26;border-color:#3C6330"><div><b>▶ S01E02</b><span>есть раздача</span></div></div>
+          <div class="tile" style="width:150px;height:66px"><div><b>S01E03</b><span>найти раздачу</span></div></div>
+          <div class="tile" style="width:150px;height:66px"><div><b>S01E04</b><span>найти раздачу</span></div></div>
+        </div>
+      </div>
+      <div class="card-sec">
+        <h3>🎬 Похожее</h3>
+        <div class="sim">
+          <div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 7. ПЛЕЕР ============ -->
+<div class="caption">7. Плеер <span>поток с сервера; пока качает — «Буферизация N%», без таймаута на 14 секунд</span></div>
+<div class="tv">
+  <div class="video"></div>
+  <div class="buffering">
+    <div class="spinner"></div>
+    <div style="font-size:20px;font-weight:700">⏳ Загружаю видео…</div>
+    <div style="color:#F5B942;font-size:16px;margin-top:6px">Полдень · S01E03 · буфер 38%</div>
+  </div>
+  <div class="player-ui">
+    <div class="p-title">Полдень</div>
+    <div class="p-ep">S01E03 · 1080p · поток с сервера (TorrServe)</div>
+    <div class="progress"><i></i><b></b></div>
+    <div class="times"><span>00:41:03</span><span>−00:39:41</span></div>
+    <div class="p-btns">
+      <div class="btn">⏪ −10 с</div>
+      <div class="btn">▶ Пауза</div>
+      <div class="btn">⏩ +10 с</div>
+      <div class="btn">🎬 Серии</div>
+      <div class="btn">🔊 Звук</div>
+      <div class="btn">💬 Субтитры</div>
+      <div class="btn">⛶ Во весь экран</div>
+      <div style="flex:1"></div>
+      <div class="btn">← Назад</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 8. НАСТРОЙКИ ============ -->
+<div class="caption">8. Настройки <span>сервер, ключи, размер карточек, логи, бэкап</span></div>
+<div class="tv">
+  <div class="side">
+    <div class="logo">ВК</div>
+    <div class="nav">🏠<small>Главная</small></div>
+    <div class="nav">▶<small>Продолжить</small></div>
+    <div class="nav">⭐<small>Избранное</small></div>
+    <div class="nav">🎬<small>Фильмы</small></div>
+    <div class="nav">📺<small>Сериалы</small></div>
+    <div class="nav">📡<small>ТВ</small></div>
+    <div class="nav">🔍<small>Поиск</small></div>
+    <div class="nav on">⚙<small>Настройки</small></div>
+  </div>
+  <div class="content">
+    <div class="h1">⚙ Настройки</div>
+    <div class="shelf" style="margin-top:18px">
+      <h2>Сервер и источники</h2>
+      <div class="set-row focus"><b>🖥 Адрес сервера TorrServe</b><span>192.168.3.78:8090</span></div>
+      <div class="set-row"><b>📡 Свой плейлист (m3u)</b><span>не задан</span></div>
+      <div class="set-row"><b>🧲 Jackett</b><span>адрес и API-ключ</span></div>
+      <div class="set-row"><b>⬆ Проверить обновления</b><span>v0.8.6</span></div>
+    </div>
+    <div class="two-col" style="margin-top:16px">
+      <div>
+        <div class="set-row"><b>Размер карточек</b><span>средний</span></div>
+        <div class="set-row"><b>📤 Выгрузить лог в Gist</b><span></span></div>
+        <div class="set-row"><b>💾 Сервер бэкапа</b><span>настроен</span></div>
+      </div>
+      <div>
+        <div class="set-row"><b>Ключ Кинопоиск API</b><span>••••••</span></div>
+        <div class="set-row"><b>Ключ TMDB</b><span>••••••</span></div>
+        <div class="set-row"><b>🩺 Запустить проверку</b><span></span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  Все экраны — макеты по текущему коду приложения (Compose, tv-material, тёмная тема #0E1116, акцент #F5B942).
+  Живые данные (постеры, каналы, телепрограмма) на ТВ подставляются из сети.
+</div>
+
+</body>
+</html>

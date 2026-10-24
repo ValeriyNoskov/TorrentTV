@@ -689,7 +689,8 @@ fun SideNav(active: Screen, onTab: (Screen) -> Unit) {
         SideBarButton("🏠", "Главная", Screen.Home, active, onTab, expanded) { expanded = it }
         SideBarButton("▶", "Продолжить", Screen.Continue, active, onTab, expanded) { expanded = it }
         SideBarButton("⭐", "Избранное", Screen.Favorites, active, onTab, expanded) { expanded = it }
-        SideBarButton("🕐", "Смотреть позже", Screen.WatchLater, active, onTab, expanded) { expanded = it }
+        // «Смотреть позже» убрано: дублировало избранное — есть фильтр
+        // «Фильмы / Сериалы» (решение владельца).
         SideBarButton("🎬", "Фильмы", Screen.Movies, active, onTab, expanded) { expanded = it }
         SideBarButton("📺", "Сериалы", Screen.TvShows, active, onTab, expanded) { expanded = it }
         SideBarButton("🎪", "Шоу", Screen.Shows, active, onTab, expanded) { expanded = it }
@@ -923,29 +924,57 @@ fun ContinueScreen(onOpenDetails: (MediaItem) -> Unit) {
     }
 }
 
-/** Экран «Смотреть позже»: отложенные карточки. */
+/** Экран избранного: сетка карточек + фильтр «Все / Фильмы / Сериалы». */
 @Composable
-fun WatchLaterScreen(onOpenDetails: (MediaItem) -> Unit) {
+fun FavoritesScreen(onOpenDetails: (MediaItem) -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val store = remember { LocalStore(context) }
-    var list by remember { mutableStateOf(store.watchLater()) }
-    androidx.compose.runtime.LaunchedEffect(Unit) { list = store.watchLater() }
+    var favs by remember { mutableStateOf(store.favorites()) }
+    // Фильтр вместо отдельных полок «Позже» и «Буду смотреть»: одного
+    // избранного достаточно, делим его на фильмы и сериалы (просьба владельца).
+    var filter by remember { mutableStateOf("all") }
+    androidx.compose.runtime.LaunchedEffect(Unit) { favs = store.favorites() }
+
+    val shown = favs.filter {
+        when (filter) {
+            "movie" -> it.type == "movie"
+            "tv" -> it.type == "tv"
+            else -> true
+        }
+    }
 
     Column(
         Modifier
             .fillMaxSize()
             .background(Color(0xFF0E1116)),
     ) {
-        Text(
-            text = "🕐 Смотреть позже",
-            color = Color.White,
-            fontSize = 26.sp,
-            fontWeight = FontWeight.Bold,
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.padding(horizontal = 32.dp, vertical = 14.dp),
-        )
-        if (list.isEmpty()) {
+        ) {
             Text(
-                "Пока пусто — отмечайте фильмы кнопкой «＋ Смотреть позже» в карточке",
+                text = "⭐ Избранное",
+                color = Color.White,
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            if (favs.isNotEmpty()) {
+                FilterChipTv("Все (${favs.size})", filter == "all") { filter = "all" }
+                FilterChipTv("🎬 Фильмы (${favs.count { it.type == "movie" }})", filter == "movie") { filter = "movie" }
+                FilterChipTv("📺 Сериалы (${favs.count { it.type == "tv" }})", filter == "tv") { filter = "tv" }
+            }
+        }
+        if (favs.isEmpty()) {
+            Text(
+                "Пока пусто — добавляйте кнопкой «☆ В избранное» в карточке фильма",
+                color = Color.White.copy(alpha = 0.55f),
+                fontSize = 15.sp,
+                modifier = Modifier.padding(horizontal = 32.dp),
+            )
+        } else if (shown.isEmpty()) {
+            Text(
+                if (filter == "movie") "Фильмов в избранном нет" else "Сериалов в избранном нет",
                 color = Color.White.copy(alpha = 0.55f),
                 fontSize = 15.sp,
                 modifier = Modifier.padding(horizontal = 32.dp),
@@ -957,53 +986,33 @@ fun WatchLaterScreen(onOpenDetails: (MediaItem) -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                items(list.size) { i ->
-                    PosterCard(list[i]) { onOpenDetails(list[i]) }
+                items(shown.size) { i ->
+                    PosterCard(shown[i]) { onOpenDetails(shown[i]) }
                 }
             }
         }
     }
 }
 
-/** Экран избранного: сетка карточек. */
+/** Кнопка-фильтр на ТВ: золотая заливка у выбранного варианта. */
 @Composable
-fun FavoritesScreen(onOpenDetails: (MediaItem) -> Unit) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val store = remember { LocalStore(context) }
-    var favs by remember { mutableStateOf(store.favorites()) }
-    androidx.compose.runtime.LaunchedEffect(Unit) { favs = store.favorites() }
-
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(Color(0xFF0E1116)),
+private fun FilterChipTv(label: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = clickableSurfaceShape(RoundedCornerShape(20.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = if (selected) Color(0xFFF5B942) else Color(0xFF1F2430),
+            contentColor = if (selected) Color(0xFF0E1116) else Color.White.copy(alpha = 0.8f),
+            focusedContainerColor = if (selected) Color(0xFFFFD07A) else Color(0xFF31435A),
+            focusedContentColor = if (selected) Color(0xFF0E1116) else Color.White,
+        ),
     ) {
         Text(
-            text = "⭐ Избранное",
-            color = Color.White,
-            fontSize = 26.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 32.dp, vertical = 14.dp),
+            text = label,
+            fontSize = 14.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
         )
-        if (favs.isEmpty()) {
-            Text(
-                "Пока пусто — добавляйте карточки кнопкой «☆ В избранное» в меню «⋯ Ещё»",
-                color = Color.White.copy(alpha = 0.55f),
-                fontSize = 15.sp,
-                modifier = Modifier.padding(horizontal = 32.dp),
-            )
-        } else {
-            androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-                columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(6),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 28.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                items(favs.size) { i ->
-                    PosterCard(favs[i]) { onOpenDetails(favs[i]) }
-                }
-            }
-        }
     }
 }
 

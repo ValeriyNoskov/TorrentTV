@@ -33,7 +33,6 @@ import com.torrenttv.app.ui.TrailerScreen
 import com.torrenttv.app.ui.TorrentsScreen
 import com.torrenttv.app.ui.FavoritesScreen
 import com.torrenttv.app.ui.ContinueScreen
-import com.torrenttv.app.ui.WatchLaterScreen
 import com.torrenttv.app.ui.HomeScreen
 import com.torrenttv.app.ui.MagnetEntryScreen
 import com.torrenttv.app.ui.PlayerScreen
@@ -57,7 +56,6 @@ sealed interface Screen {
     data object Torrents : Screen
     data object Favorites : Screen
     data object Continue : Screen
-    data object WatchLater : Screen
     data object Search : Screen
     data object Settings : Screen
 
@@ -89,7 +87,7 @@ sealed interface Screen {
 
     companion object {
         val TABS: List<Screen> = listOf(
-            Home, Movies, TvShows, Shows, Tv, Torrents, Favorites, Continue, WatchLater, Search, Settings,
+            Home, Movies, TvShows, Shows, Tv, Torrents, Favorites, Continue, Search, Settings,
         )
     }
 }
@@ -135,9 +133,23 @@ class MainActivity : ComponentActivity() {
         com.torrenttv.app.data.AppLog.recording = store0.loggingEnabled()
         com.torrenttv.app.data.KinopoiskClient.overrideApiKey = store0.kpApiKey()
         com.torrenttv.app.data.TmdbClient.overrideApiKey = store0.tmdbApiKey()
-        // Прогрев torrent-сессии: DHT/трекеры готовы заранее —
-        // метаданные раздач и стрим стартуют быстрее
-        Thread { com.torrenttv.app.torrent.TorrentEngine.start() }.apply {
+        // Встроенный торрент-движок на ТВ отключён: торренты качает сервер
+        // (TorrServe), телевизор только принимает HTTP-поток. Чистим то, что
+        // движок успел скачать на диск ТВ (до 200 МБ на фильм), кроме
+        // метаданных раздач (meta_*.torrent — маленькие и нужны для серий).
+        Thread {
+            runCatching {
+                val dir = java.io.File(filesDir, "downloads")
+                if (dir.exists()) {
+                    dir.walkTopDown()
+                        .filter {
+                            it.isFile && it.length() > 2L * 1024 * 1024 &&
+                                !it.name.startsWith("meta_")
+                        }
+                        .forEach { it.delete() }
+                }
+            }
+        }.apply {
             isDaemon = true
             start()
         }
@@ -197,7 +209,6 @@ private fun App() {
             Screen.Torrents -> "Торренты"
             Screen.Favorites -> "Избранное"
             Screen.Continue -> "Продолжить"
-            Screen.WatchLater -> "Смотреть позже"
             Screen.Search -> "Поиск"
             Screen.Settings -> "Настройки"
             is Screen.Details -> "Детали «${s.item.title}»"
@@ -280,7 +291,6 @@ private fun App() {
                 Screen.Torrents -> TorrentsScreen(onOpenDetails = { screen = Screen.Details(it) })
                 Screen.Favorites -> FavoritesScreen(onOpenDetails = { screen = Screen.Details(it) })
                 Screen.Continue -> ContinueScreen(onOpenDetails = { screen = Screen.Details(it) })
-                Screen.WatchLater -> WatchLaterScreen(onOpenDetails = { screen = Screen.Details(it) })
                 Screen.Search -> SearchScreen(
                     onBack = { screen = Screen.Home },
                     onOpenDetails = { screen = Screen.Details(it) },

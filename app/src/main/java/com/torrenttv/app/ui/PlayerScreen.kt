@@ -153,8 +153,9 @@ fun PlayerScreen(
                 if (buffered) {
                     // Прогрев потока: TorrServe начинает отдавать файл не сразу
                     // (пиры + 1080p), и ExoPlayer успевал получить TIMEOUT на старте
-                    // («Полдень» не запускался, хотя файл живой). Дёргаем первые
-                    // 128 КБ заранее — плеер стартует уже по горячему соединению.
+                    // («Полдень» не запускался, хотя файл живой). Читаем ЦИКЛОМ до
+                    // 512 КБ: один read() отдавал только 823 байта заголовка MKV,
+                    // из-за чего живой поток ошибочно считался мёртвым.
                     val warm = withContext(Dispatchers.IO) {
                         runCatching {
                             val u = com.torrenttv.app.data.TorrServeService.streamUrl(tsHost, ts.hash, file)
@@ -162,12 +163,19 @@ fun PlayerScreen(
                             val c = java.net.URL(u).openConnection() as java.net.HttpURLConnection
                             c.connectTimeout = 20_000
                             c.readTimeout = 60_000
-                            c.setRequestProperty("Range", "bytes=0-131071")
+                            c.setRequestProperty("Range", "bytes=0-524287")
                             c.connect()
+                            var got = 0
                             val buf = ByteArray(65_536)
-                            val n = c.inputStream.read(buf)
+                            c.inputStream.use { ins ->
+                                while (got < 512 * 1024 && System.currentTimeMillis() - at < 60_000) {
+                                    val n = ins.read(buf)
+                                    if (n <= 0) break
+                                    got += n
+                                }
+                            }
                             c.disconnect()
-                            (System.currentTimeMillis() - at) to n
+                            (System.currentTimeMillis() - at) to got
                         }.getOrNull()
                     }
                     // Хвост файла: у MKV оглавление (cues) лежит в конце —
@@ -209,18 +217,18 @@ fun PlayerScreen(
                         "torrserve: прогрев ${warm?.first ?: -1} мс, байт ${warm?.second ?: -1}; " +
                             "хвост: размер=${tail?.first ?: -1} прочитано=${tail?.second ?: -1} за ${tail?.third ?: -1} мс",
                     )
-                    // ДИАГНОСТИКА «Полдня»: TorrServe отдавал только 823 байта
-                    // (заголовок MKV) и замолкал — ExoPlayer падал ERROR_CODE_TIMEOUT,
-                    // хотя сервер с ПК отдавал 1.5 МБ хвоста. Если прогрев прочитал
-                    // меньше 100 КБ, поток фактически мёртв: сразу играем встроенным
-                    // движком, не тратя 10 секунд зрителя на таймаут.
-                    val warmBytes = warm?.second ?: -1
-                    if (warmBytes in 0..99_999) {
+                    // TorrServe отдаёт поток — играем ЕГО (всё качает сервер).
+                    // Раньше при первом read() < 100 КБ приложение ошибочно
+                    // переключалось на встроенный движок и качало фильм на ТВ;
+                    // теперь просто ждём на стороне плеера (буферизация/повторы).
+                    val warmKb = (warm?.second ?: 0) / 1024
+                    if (warmKb < 128) {
                         com.torrenttv.app.data.AppLog.log(
                             "player",
-                            "torrserve: поток молчит ($warmBytes байт) → встроенный движок",
+                            "torrserve: медленный старт ($warmKb КБ за ${warm?.first ?: -1} мс) — ждём буферизацию",
                         )
-                    } else {
+                    }
+                    run {
                         torrLink = com.torrenttv.app.data.TorrServeService.streamUrl(tsHost, ts.hash, file)
                         // Серии для переключения в плеере: видео-файлы в естественном
                         // порядке (E01, E02…), индекс текущего — по запущенному файлу
@@ -696,7 +704,7 @@ private fun VideoPlayer(
                 // Держим скачанными ~2 мин вперёд от позиции плеера (как в
                 // открытых стримерах): перемотка вперёд попадает в готовые куски
                 val st = stream
-                if (st != null && player.duration > 0) {
+                if (player.duration > 0) {
                     val bps = st.fileSize * 1000.0 / player.duration
                     st.boostPiecesAround(st.fileOffset + player.currentPosition + (bps * 120).toLong())
                 }

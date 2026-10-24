@@ -140,86 +140,9 @@ class LocalStore(context: Context) {
         return added
     }
 
-    // ---------- Смотреть позже ----------
-
-    fun watchLater(): List<MediaItem> = readList("watch_later")
-
-    fun isWatchLater(item: MediaItem): Boolean =
-        watchLater().any { it.storeKey == item.storeKey }
-
-    /** Переключить; вернуть новое состояние (true = добавлено). */
-    fun toggleWatchLater(item: MediaItem): Boolean {
-        val list = watchLater().toMutableList()
-        val existed = list.removeAll { it.storeKey == item.storeKey }
-        if (!existed) list.add(0, item)
-        prefs.edit()
-            .putString("watch_later", JSONArray(list.map { it.toJson() }).toString())
-            .apply()
-        return !existed
-    }
-
-    // ---------- Статусы: Смотрю / Буду смотреть / Просмотрено ----------
-
-    /** Статус фильма: "" — не отмечен, "watching", "want", "done". */
-    fun itemStatus(item: MediaItem): String =
-        prefs.getString("status:" + item.storeKey, "") ?: ""
-
-    fun setItemStatus(item: MediaItem, status: String) {
-        val key = "status:" + item.storeKey
-        if (status.isBlank()) {
-            prefs.edit().remove(key).remove("statusitem:" + item.storeKey).apply()
-        } else {
-            prefs.edit()
-                .putString(key, status)
-                .putString("statusitem:" + item.storeKey, item.toJson().toString())
-                .apply()
-        }
-    }
-
-    /** Следующий статус по циклу: нет → Смотрю → Буду смотреть → Просмотрено → нет. */
-    fun cycleItemStatus(item: MediaItem): String {
-        val next = when (itemStatus(item)) {
-            "" -> "watching"; "watching" -> "want"; "want" -> "done"; else -> ""
-        }
-        setItemStatus(item, next)
-        return next
-    }
-
-    /** Все фильмы с данным статусом (в порядке недавнего обновления). */
-    fun itemsWithStatus(status: String): List<MediaItem> =
-        prefs.all.entries
-            .filter { it.key.startsWith("status:") && it.value == status }
-            .mapNotNull { entry ->
-                // storeKey вида "movie-706094223": ищем item в прогрессе/избранном,
-                // иначе восстанавливаем по id из ключа нельзя — храним сериализованный item
-                runCatching {
-                    val json = prefs.getString("statusitem:" + entry.key.removePrefix("status:"), null)
-                    json?.let { MediaItem.fromJson(org.json.JSONObject(it)) }
-                }.getOrNull()
-            }
-            .reversed()
-
-    /** Полное «убрать из просмотренных»: статус, лента «Продолжить», отметка серии. */
-    fun clearWatched(item: MediaItem) {
-        setItemStatus(item, "")
-        prefs.edit()
-            .remove("statusitem:" + item.storeKey)
-            .remove("lastfile:" + item.storeKey)
-            .apply()
-        // Запасные позиции серий этого сериала (epos:<storeKey>:…)
-        val eposKeys = prefs.all.keys.filter { it.startsWith("epos:" + item.storeKey) }
-        if (eposKeys.isNotEmpty()) {
-            prefs.edit().apply { eposKeys.forEach { remove(it) } }.apply()
-        }
-        val arr = runCatching { JSONArray(prefs.getString("progress", "[]")) }.getOrDefault(JSONArray())
-        val out = JSONArray()
-        for (i in 0 until arr.length()) {
-            val o = arr.getJSONObject(i)
-            val e = WatchEntry.fromJson(o)
-            if (e.item.storeKey != item.storeKey) out.put(o)
-        }
-        prefs.edit().putString("progress", out.toString()).apply()
-    }
+    // Разделы «Смотреть позже» и статусы (Смотрю / Буду смотреть / Просмотрено)
+    // удалены: их заменило избранное с фильтром «Фильмы / Сериалы»
+    // (решение владельца), полка «Буду смотреть» на Главной не заполнялась.
 
     /** Есть ли запись о просмотре (для ленты «Продолжить»). */
     fun hasProgress(item: MediaItem): Boolean =

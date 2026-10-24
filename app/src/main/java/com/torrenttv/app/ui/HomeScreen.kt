@@ -202,16 +202,6 @@ fun HomeScreen(
                     onTitleClick = { onOpenCatalog("shows") },
                 )
             }
-            // Лента из статусов «Буду смотреть» (кнопка 🔖 в карточке)
-            if (store.itemsWithStatus("want").isNotEmpty()) {
-                item {
-                    MediaRow(
-                        title = "📋 Буду смотреть",
-                        items = store.itemsWithStatus("want"),
-                        onClick = onOpenDetails,
-                    )
-                }
-            }
             item { Spacer(Modifier.height(24.dp)) }
         }
 

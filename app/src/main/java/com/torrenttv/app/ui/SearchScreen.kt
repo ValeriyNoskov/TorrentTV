@@ -57,7 +57,7 @@ private val KEY_ROWS = listOf(
     listOf('Ф', 'Ы', 'В', 'А', 'П', 'Р', 'О', 'Л', 'Д', 'Ж', 'Э'),
     listOf('Я', 'Ч', 'С', 'М', 'И', 'Т', 'Ь', 'Б', 'Ю'),
     listOf('1', '2', '3', '4', '5', '6', '7', '8', '9', '0'),
-    listOf('-', ' '),
+    listOf('-', '.', ','),
 )
 
 /**
@@ -573,16 +573,17 @@ fun TvKeyboard(
     ) {
         KEY_ROWS.forEachIndexed { rowIndex, row ->
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (rowIndex == 3) {
-                    KeyboardKey('␣', wide = true, onClick = { onChar(' ') })
-                }
                 row.forEachIndexed { colIndex, ch ->
                     KeyboardKey(
                         ch,
                         focusRequester = if (rowIndex == 0 && colIndex == 0) firstKeyFocus else null,
                     ) { onChar(ch) }
                 }
-                if (rowIndex == 3) {
+                // Пробел — в КАЖДОЙ строке. Раньше он был только в ряду цифр,
+                // и набранная фраза склеивалась в одно слово
+                // («СпецыТиТаныПолдень»).
+                KeyboardKey('␣', wide = true, onClick = { onChar(' ') })
+                if (rowIndex == KEY_ROWS.lastIndex) {
                     KeyboardKey('⌫', wide = true, onClick = onBackspace)
                 }
             }
