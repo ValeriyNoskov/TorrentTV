@@ -14,6 +14,24 @@ object TorrentHttp {
         .readTimeout(20, TimeUnit.SECONDS)
         .build()
 
+    /** Быстрый клиент для каталога: медленный ответ = сразу ошибка на экране,
+     *  а не «чёрный экран» на 30+ секунд (затыки DNS/IPv6 на ТВ). */
+    val fast: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(6, TimeUnit.SECONDS)
+        .readTimeout(8, TimeUnit.SECONDS)
+        .build()
+
+    /** GET с короткими таймаутами (каталог трекера) или null при ошибке. */
+    fun getFast(url: String, headers: Map<String, String> = emptyMap()): String? = try {
+        val b = Request.Builder().url(url)
+        headers.forEach { (k, v) -> b.header(k, v) }
+        fast.newCall(b.build()).execute().use { resp ->
+            if (!resp.isSuccessful) null else resp.body?.string()
+        }
+    } catch (_: Exception) {
+        null
+    }
+
     /** GET, вернуть тело строки или null при любой ошибке. */
     fun get(url: String, headers: Map<String, String> = emptyMap()): String? = try {
         val b = Request.Builder().url(url)

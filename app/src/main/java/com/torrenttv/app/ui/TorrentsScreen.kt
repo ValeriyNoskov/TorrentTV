@@ -145,6 +145,9 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
         loadError = ""
         page = 1
         endReached = false
+        // Лог ДО запроса: если строка есть, а «каталог: …» не пришла —
+        // запрос висит (сеть ТВ), а не падает
+        AppLog.log("torrents", "загрузка каталога: тип=$type жанр=$genre год=$year")
         try {
             items = loadPage(1).distinctBy { it.storeKey }
         } catch (e: Exception) {

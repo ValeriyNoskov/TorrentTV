@@ -772,6 +772,7 @@ private fun NetCheckScreen(onClose: () -> Unit) {
             addAll(listOf(
                 "apibay (торренты)" to "https://apibay.org/q.php?q=test&cat=201",
                 "Torrentio (торренты)" to "https://torrentio.strem.fun/stream/movie/tt0133093.json",
+                "Рутрекер (каталог «Торренты»)" to "https://rutrackerr.ru/popular/",
                 "Rutube API (трейлеры)" to "https://rutube.ru/api/search/video/?query=test&page=1",
                 "GitHub (обновления)" to "https://api.github.com/repos/ValeriyNoskov/TorrentTV/releases/latest",
             ))
