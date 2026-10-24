@@ -97,6 +97,8 @@ fun PlayerScreen(
     var tsCurrent by remember { mutableStateOf(-1) }
     var tsHostStr by remember { mutableStateOf<String?>(null) }
     var tsHashStr by remember { mutableStateOf<String?>(null) }
+    var tsEpNum by remember { mutableStateOf(0) }
+    var tsShowFiles by remember { mutableStateOf(false) }
 
     // Приоритет движков: 1) TorrServe (внешний), 2) внутренний jlibtorrent
     LaunchedEffect(magnet) {
@@ -112,11 +114,19 @@ fun PlayerScreen(
                 com.torrenttv.app.data.TorrServeService.addMagnet(tsHost, magnet, item.title) { s -> status = s }
             }
             val file = ts?.let { t ->
-                val ep = episode
-                if (ep != null) t.files.firstOrNull {
-                    com.torrenttv.app.data.Episode.fileMatches(it.path, ep.season, ep.episode)
-                } ?: com.torrenttv.app.data.TorrServeService.bestVideo(t)
-                else com.torrenttv.app.data.TorrServeService.bestVideo(t)
+                // Если пользователь выбрал конкретный файл (экран раздачи) —
+                // играем ИМЕННО его, а не «лучший» (иначе E08 запускает E01)
+                val byIndex = if (startIndex >= 0)
+                    t.files.firstOrNull { it.id == startIndex }
+                        ?: t.files.getOrNull(startIndex)
+                else null
+                byIndex ?: run {
+                    val ep = episode
+                    if (ep != null) t.files.firstOrNull {
+                        com.torrenttv.app.data.Episode.fileMatches(it.path, ep.season, ep.episode)
+                    } ?: com.torrenttv.app.data.TorrServeService.bestVideo(t)
+                    else com.torrenttv.app.data.TorrServeService.bestVideo(t)
+                }
             }
             if (ts != null && file != null) {
                 val buffered = withContext(Dispatchers.IO) {
@@ -135,6 +145,16 @@ fun PlayerScreen(
                     tsCurrent = video.indexOfFirst { it.path == file.path }
                     tsHostStr = tsHost
                     tsHashStr = ts.hash
+                    // Номер серии для раздельного прогресса («Продолжить»)
+                    fun epNumOf(path: String): Int =
+                        Regex("[Ee](\\d{1,3})").find(path.substringAfterLast('/'))?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                    tsEpNum = epNumOf(file.path)
+                    // Zona-стиль для TorrServe: сериал впервые — сразу список серий
+                    val firstRun = episode == null && startIndex < 0 && !store.hasLastFile(item)
+                    tsShowFiles = firstRun && tsFiles.size > 1
+                    if (!tsShowFiles && episode == null && startIndex < 0) {
+                        store.saveLastFile(item, tsCurrent)
+                    }
                     // Предзагрузка следующей серии фоном (как у Stremio):
                     // пока смотрим текущую, TorrServe качает следующую
                     scope.launch(Dispatchers.IO) {
@@ -269,10 +289,11 @@ fun PlayerScreen(
     val tl = torrLink
     if (tl != null) {
         OnlinePlayerScreen(
-            link = OnlineLink(url = tl, label = "torrserve"),
+            link = OnlineLink(url = tl, label = "torrserve", season = if (tsEpNum > 0) 1 else 0, episode = tsEpNum),
             item = item,
             title = item.title,
             onBack = onBack,
+            showFilesOnStart = tsShowFiles,
             files = tsFiles,
             currentFile = tsCurrent,
             onSelectFile = { n ->
@@ -288,6 +309,8 @@ fun PlayerScreen(
                     }
                     if (ok) {
                         tsCurrent = n
+                        tsEpNum = Regex("[Ee](\\d{1,3})").find(f.path.substringAfterLast('/'))
+                            ?.groupValues?.get(1)?.toIntOrNull() ?: 0
                         torrLink = com.torrenttv.app.data.TorrServeService.streamUrl(host, hash, f)
                         com.torrenttv.app.data.AppLog.log("player", "torrserve: switched to \"${f.path}\"")
                     } else {

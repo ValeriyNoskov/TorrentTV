@@ -72,6 +72,8 @@ fun OnlinePlayerScreen(
     onBack: () -> Unit,
     /** Сохранять позицию в «Продолжить смотреть» (трейлерам не нужно). */
     saveProgress: Boolean = true,
+    /** Сразу открыть список серий (первый запуск сериала — Zona-стиль). */
+    showFilesOnStart: Boolean = false,
     /** Серии (для TorrServe): (индекс файла, имя). Пусто — кнопки «Серии» нет. */
     files: List<Pair<Int, String>> = emptyList(),
     /** Текущая серия (индекс в files). */
@@ -93,7 +95,7 @@ fun OnlinePlayerScreen(
     var showTrackMenu by remember { mutableStateOf(false) }
     var showJump by remember { mutableStateOf(false) }
     // Список серий (TorrServe): выбор серии прямо в плеере
-    var showFiles by remember { mutableStateOf(false) }
+    var showFiles by remember { mutableStateOf(showFilesOnStart) }
     // Кнопки на панели: игра/пауза (иконка меняется) + фокус на кнопке Play
     var playing by remember { mutableStateOf(true) }
     val playBtnFocus = remember { FocusRequester() }
@@ -156,6 +158,10 @@ fun OnlinePlayerScreen(
                     override fun onPlaybackStateChanged(state: Int) { playState = state }
                     override fun onPlayerError(error: PlaybackException) {
                         // Не вечный чёрный экран: сообщение + кнопки Повторить/Назад
+                        com.torrenttv.app.data.AppLog.log(
+                            "player",
+                            "playback error: ${error.errorCodeName} code=${error.errorCode} link=${link.url.take(80)}",
+                        )
                         errorMsg = "Ошибка воспроизведения: ${error.errorCodeName}"
                     }
                 })
