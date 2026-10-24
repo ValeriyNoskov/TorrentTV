@@ -87,6 +87,8 @@ fun SearchScreen(
     var status by remember { mutableStateOf("") }
     var searchTick by remember { mutableStateOf(0) } // форс-повтор
     val firstKeyFocus = remember { FocusRequester() }
+    // Последние поиски: чипы над клавиатурой, клик — сразу поиск
+    var recents by remember { mutableStateOf(store.recentQueries()) }
 
     // Голосовой ввод: системный распознаватель речи
     val voiceLauncher = rememberLauncherForActivityResult(
@@ -125,6 +127,9 @@ fun SearchScreen(
             loading = true
             failed = false
             delay(500)
+            // Запрос реально ушёл в поиск — сохраняем в историю
+            store.addRecentQuery(query)
+            recents = store.recentQueries()
             // Прямо в scope LaunchedEffect: фоновые корутины не задерживают выход
             val films = async(Dispatchers.IO) {
                 MediaApi.search(query).filter { store.isAllowed(it) }
@@ -239,6 +244,43 @@ fun SearchScreen(
         }
         if (status.isNotBlank()) {
             Text(status, color = Color(0xFFFFD54F), fontSize = 14.sp, modifier = Modifier.padding(top = 6.dp))
+        }
+
+        // ---------- Последние поиски: чипы, клик — сразу искать ----------
+        if (query.isBlank() && recents.isNotEmpty()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(top = 10.dp),
+            ) {
+                Text(
+                    "🕘 Последние поиски",
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 15.sp,
+                    modifier = Modifier.weight(1f),
+                )
+                Button(onClick = {
+                    store.clearRecentQueries()
+                    recents = emptyList()
+                }) { Text("✕ Очистить") }
+            }
+            androidx.compose.foundation.lazy.LazyRow(
+                contentPadding = PaddingValues(vertical = 6.dp),
+            ) {
+                items(recents.size) { i ->
+                    val q = recents[i]
+                    Button(
+                        onClick = { query = q },
+                        modifier = Modifier.padding(end = 8.dp),
+                        shape = androidx.tv.material3.ButtonDefaults.shape(RoundedCornerShape(20.dp)),
+                        colors = androidx.tv.material3.ButtonDefaults.colors(
+                            containerColor = Color(0xFF1F2430),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContentColor = Color(0xFF0E1116),
+                        ),
+                    ) { Text("🔍 $q", fontSize = 15.sp) }
+                }
+            }
         }
 
         // ---------- Результаты ----------

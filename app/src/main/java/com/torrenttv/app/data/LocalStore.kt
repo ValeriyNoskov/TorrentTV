@@ -369,9 +369,27 @@ class LocalStore(context: Context) {
         prefs.edit().putBoolean("external_keyboard", v).apply()
     }
 
+    // ---------- Поиск: последние запросы (история) ----------
+
+    /** Последние поисковые запросы, свежие сверху (макс. 8). */
+    fun recentQueries(): List<String> =
+        (prefs.getString("recent_queries", "") ?: "")
+            .split('\u0001')
+            .filter { it.isNotBlank() }
+
+    fun addRecentQuery(q: String) {
+        val v = q.trim()
+        if (v.length < 2) return
+        val next = (listOf(v) + recentQueries().filterNot { it.equals(v, ignoreCase = true) }).take(8)
+        prefs.edit().putString("recent_queries", next.joinToString("\u0001")).apply()
+    }
+
+    fun clearRecentQueries() {
+        prefs.edit().remove("recent_queries").apply()
+    }
+
     /** Последняя открытая секция настроек — открываем её при входе. */
     fun lastSettingsSection(): String = prefs.getString("settings_section", "search") ?: "search"
-
     fun setLastSettingsSection(id: String) {
         prefs.edit().putString("settings_section", id).apply()
     }
