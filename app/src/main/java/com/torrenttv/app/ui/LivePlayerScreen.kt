@@ -1,6 +1,7 @@
 package com.torrenttv.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -129,6 +136,7 @@ fun LivePlayerScreen(
         if (showPanel) {
             delay(8_000)
             showPanel = false
+            AppLog.log("tv", "панель: скрыта автоматически (8 с)")
         }
     }
 
@@ -145,7 +153,68 @@ fun LivePlayerScreen(
         if (showPanel) showPanel = false else onBack()
     }
 
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    // Фокус на контейнере плеера: без него пульт «не видит» экран и ОК
+    // после автоскрытия панели ничего не возвращал — меню пропадало навсегда.
+    val keysFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { keysFocus.requestFocus() } }
+    // Панель скрылась — сразу возвращаем фокус на плеер (кнопок на экране нет)
+    LaunchedEffect(showPanel) {
+        if (!showPanel) runCatching { keysFocus.requestFocus() }
+    }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .focusRequester(keysFocus)
+            .focusable()
+            .onKeyEvent { e ->
+                if (e.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@onKeyEvent false
+                when (e.key) {
+                    // ОК / Enter: скрытую панель показываем, открытую — ставим на паузу
+                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.MediaPlayPause -> {
+                        if (!showPanel) {
+                            showPanel = true
+                            panelTick++
+                            AppLog.log("tv", "панель: показана кнопкой ОК")
+                        } else {
+                            if (player.isPlaying) player.pause() else player.play()
+                            panelTick++
+                        }
+                        true
+                    }
+
+                    // Канал листаем стрелками, когда панель скрыта: экран «чистый»
+                    Key.DirectionLeft -> {
+                        if (showPanel) false else {
+                            step(-1)
+                            true
+                        }
+                    }
+
+                    Key.DirectionRight -> {
+                        if (showPanel) false else {
+                            step(1)
+                            true
+                        }
+                    }
+
+                    // Вверх/вниз без панели — тоже показываем её (как в обычных плеерах)
+                    Key.DirectionUp, Key.DirectionDown -> {
+                        if (!showPanel) {
+                            showPanel = true
+                            panelTick++
+                            true
+                        } else {
+                            panelTick++
+                            false
+                        }
+                    }
+
+                    else -> false
+                }
+            },
+    ) {
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {

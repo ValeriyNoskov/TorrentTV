@@ -295,23 +295,6 @@ fun DetailsScreen(
                             )
                         }) { Text(if (fav) "★ В избранном" else "☆ В избранное") }
                     }
-                    if (statusTag.isNotBlank() || store.hasProgress(item)) {
-                        item {
-                            Button(onClick = {
-                                store.clearWatched(item)
-                                statusTag = ""
-                                magnet = store.getMagnet(item) != null
-                                // Кэш скачанного тоже под нож — фильм больше «не в просмотре»
-                                runCatching {
-                                    java.io.File(context.filesDir, "downloads/" + item.storeKey).deleteRecursively()
-                                }
-                                com.torrenttv.app.data.AppLog.log("ui", "нажал: «Убрать из просмотра» «${item.title}»")
-                            }) { Text("✕ Убрать из просмотра") }
-                        }
-                    }
-                    item {
-                        Button(onClick = onTrailer) { Text("🎬 Трейлер") }
-                    }
                     item {
                         Button(onClick = { menu = !menu }) { Text("⋯ Ещё") }
                     }

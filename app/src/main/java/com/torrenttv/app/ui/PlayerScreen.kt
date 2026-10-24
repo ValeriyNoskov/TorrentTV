@@ -790,7 +790,9 @@ private fun VideoPlayer(
                     // Запомненный масштаб (Вписать/Растянуть/Заполнить)
                     resizeMode = scales[scaleIdx].second
                     isFocusable = true
-                    requestFocus()
+                    // requestFocus на свежем PlayerView иногда падает
+                    // («FocusRequester is not initialized») — крашило плеер при входе
+                    runCatching { requestFocus() }
                     setOnKeyListener { _, keyCode, event ->
                         if (event.action != KeyEvent.ACTION_UP) return@setOnKeyListener false
                         handleRemoteKey(keyCode)

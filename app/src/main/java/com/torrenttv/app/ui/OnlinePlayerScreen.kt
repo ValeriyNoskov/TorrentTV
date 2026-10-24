@@ -141,6 +141,9 @@ fun OnlinePlayerScreen(
     // Авто-повтор при ошибке старта потока TorrServe (3003: данные ещё не готовы)
     var retryTick by remember { mutableStateOf(0) }
     var retryCount by remember { mutableStateOf(0) }
+    // Когда была последняя ошибка: счётчик повторов сбрасываем только после
+    // 20 секунд стабильного показа, иначе каждый READY обнулял попытки
+    var lastErrorAt by remember { mutableStateOf(0L) }
     // Кнопки на панели: игра/пауза (иконка меняется) + фокус на кнопке Play
     var playing by remember { mutableStateOf(true) }
     val playBtnFocus = remember { FocusRequester() }
@@ -224,7 +227,7 @@ fun OnlinePlayerScreen(
             .setConnectTimeoutMs(15_000)
             // TorrServe отдаёт первые байты, пока качает куски с пиров:
             // 60 сек на чтение, иначе media3 рвёт живой поток по таймауту
-            .setReadTimeoutMs(if (isTorrserve) 90_000 else 15_000)
+            .setReadTimeoutMs(if (isTorrserve) 120_000 else 15_000)
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(httpFactory))
             .build()
@@ -257,8 +260,11 @@ fun OnlinePlayerScreen(
                 addListener(object : Player.Listener {
                     override fun onPlaybackStateChanged(state: Int) {
                         playState = state
-                        // Стрим реально запустился — сбрасываем счётчик повторов
-                        if (state == Player.STATE_READY) retryCount = 0
+                        // Стрим реально запустился — сбрасываем счётчик повторов,
+                        // но только если ошибка была давно (поток успел пожить)
+                        if (state == Player.STATE_READY &&
+                            System.currentTimeMillis() - lastErrorAt > 20_000
+                        ) retryCount = 0
                     }
                     override fun onPlayerError(error: PlaybackException) {
                         com.torrenttv.app.data.AppLog.log(
@@ -270,13 +276,15 @@ fun OnlinePlayerScreen(
                         // Пауза растёт: медленная раздача (4 сида, ~0.7 МБ/с) за 1.5 с
                         // не успевает отдать даже начало файла — раньше 3 попытки
                         // заканчивались ошибкой, хотя файл был жив
-                        if (isTorrserve && retryCount < 4) {
+                        lastErrorAt = System.currentTimeMillis()
+                        // 6 попыток: у медленных раздач TorrServe стартует дольше
+                        if (isTorrserve && retryCount < 6) {
                             retryCount++
                             seekInfo = "🔄 Запускаю поток (попытка ${retryCount + 1})…"
                             panelTick++
                             // TorrServe после IO-ошибки (2000) ещё докачивает серию —
                             // мгновенный рестарт попадает в то же состояние
-                            val waitMs = 3000L * retryCount   // 3с, 6с, 9с, 12с
+                            val waitMs = (4000L * retryCount).coerceAtMost(20_000L) // 4…20 с
                             kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
                                 kotlinx.coroutines.delay(waitMs)
                                 retryTick++
@@ -1014,7 +1022,8 @@ fun OnlinePlayerScreen(
                         ),
                     ) {
                         androidx.tv.material3.Text(
-                            (if (watched) "✓ " else "") + (if (current) "▶ " else "") + name.substringAfterLast('/'),
+                            (if (watched) "✓ " else "") + (if (current) "▶ " else "") +
+                                episodeBadgeOf(name) + name.substringAfterLast('/'),
                             fontSize = 14.sp,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                         )
@@ -1317,4 +1326,24 @@ fun RutubeWatchScreen(videoId: String, title: String, onBack: () -> Unit) {
             }
         }
     }
+}
+
+
+/**
+ * Номер серии из имени файла: «Specy.S01.E05.2026…» → «S01E05 · ».
+ * Без него в списке серий были только длинные имена файлов — не понять,
+ * какая серия сейчас играет.
+ */
+private fun episodeBadgeOf(name: String): String {
+    val file = name.substringAfterLast('/')
+    Regex("""[Ss](\d{1,2})[.\s_-]?[Ee](\d{1,3})""").find(file)?.let {
+        return "S%02dE%02d · ".format(it.groupValues[1].toInt(), it.groupValues[2].toInt())
+    }
+    Regex("""(?:^|[.\s_-])[Ee](\d{1,3})(?:[.\s_-]|$)""").find(file)?.let {
+        return "E%02d · ".format(it.groupValues[1].toInt())
+    }
+    Regex("""(\d{1,2})(?:-?[Ss]eason)?[.\s_-]+(\d{1,3})[.\s_-]""").find(file)?.let {
+        return "S%02dE%02d · ".format(it.groupValues[1].toInt(), it.groupValues[2].toInt())
+    }
+    return ""
 }

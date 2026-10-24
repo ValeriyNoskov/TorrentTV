@@ -232,17 +232,31 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
     LaunchedEffect(types, genres, countries, years, reloadTick, searchMode) {
         loading = true
         loadError = ""
-        page = 1
+        page = 0
         endReached = false
         // Небольшая пауза: при переборе галочек в фильтрах не долбим сайт на каждый клик
         delay(300)
         AppLog.log("torrents", "эффект загрузки запущен (reloadTick=$reloadTick поиск=$searchMode)")
+        val acc = mutableListOf<MediaItem>()
         try {
-            items = loadPage(1).distinctBy { it.storeKey }
+            // Сразу несколько страниц: одна страница трекера — всего 10 карточек,
+            // после фильтров оставалось 7, и раздел выглядел «пустым».
+            // В поиске страниц нет — там один запрос.
+            val pages = if (searchMode) 1 else PAGES_AT_START
+            for (p in 1..pages) {
+                val part = loadPage(p)
+                if (part.isEmpty()) {
+                    endReached = true
+                    break
+                }
+                acc += part
+                page = p
+            }
+            items = acc.distinctBy { it.storeKey }.sortedWith(catalogOrder())
             if (items.isNotEmpty() && !searchMode) store.saveTorrentsCache(items)
             if (items.isNotEmpty()) updatedAt = System.currentTimeMillis()
         } catch (e: Exception) {
-            items = emptyList()
+            items = sortedOf(acc)
             loadError = "${e.javaClass.simpleName}: ${e.message ?: "ошибка загрузки"}"
             AppLog.log("torrents", "ОШИБКА загрузки каталога: $loadError")
         }
@@ -257,31 +271,37 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
             }
         }
         loading = false
-        AppLog.log("torrents", "каталог → ${items.size} карточек (поиск=$searchMode)")
+        AppLog.log("torrents", "каталог → ${items.size} карточек (страниц ${page}, поиск=$searchMode)")
     }
 
-    // Бесконечная подгрузка
-    val shouldLoadMore by derivedStateOf {
-        val info = gridState.layoutInfo
-        val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
-        !loading && !endReached && !searchMode && info.totalItemsCount > 0 &&
-            last >= info.totalItemsCount - 6
-    }
-    LaunchedEffect(shouldLoadMore, reloadTick) {
-        if (!shouldLoadMore || items.isEmpty()) return@LaunchedEffect
-        loading = true
-        val next = page + 1
-        val more = try {
-            loadPage(next)
-        } catch (e: Exception) {
-            AppLog.log("torrents", "ОШИБКА догрузки стр.$next: ${e.javaClass.simpleName}: ${e.message}")
-            emptyList()
+    // Бесконечная подгрузка: следим за позицией сетки через snapshotFlow.
+    // Раньше LaunchedEffect перезапускался на каждый флаг и отменял сам себя
+    // (LeftCompositionCancellationException) — догрузка молча умирала.
+    LaunchedEffect(gridState, reloadTick, searchMode) {
+        androidx.compose.runtime.snapshotFlow {
+            val info = gridState.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+            last to info.totalItemsCount
+        }.collect { (last, total) ->
+            if (total == 0 || last < total - 6) return@collect
+            if (loading || endReached || searchMode || items.isEmpty()) return@collect
+            loading = true
+            val next = page + 1
+            val more = try {
+                loadPage(next)
+            } catch (e: Exception) {
+                AppLog.log("torrents", "ОШИБКА догрузки стр.$next: ${e.javaClass.simpleName}: ${e.message}")
+                emptyList()
+            }
+            if (more.isEmpty()) {
+                endReached = true
+            } else {
+                page = next
+                items = (items + more).distinctBy { it.storeKey }
+            }
+            loading = false
+            android.util.Log.d("VNosKino", "torrents: подгрузка стр.$next → ${items.size} карточек")
         }
-        if (more.isEmpty()) endReached = true else {
-            page = next
-            items = (items + more).distinctBy { it.storeKey }
-        }
-        loading = false
     }
 
     // Страны: основные — первыми, остальные по алфавиту (как в макете)
@@ -719,3 +739,18 @@ private fun MultiChip(label: String, selected: Boolean, onClick: () -> Unit) {
         )
     }
 }
+
+/** Сколько страниц каталога грузим сразу: 1 страница трекера = 10 карточек. */
+private const val PAGES_AT_START = 3
+
+/**
+ * Порядок каталога: сначала свежие годы, внутри года — карточки с постером.
+ * Раньше шло «как отдал сайт»: впереди висели старые раздачи без обложек.
+ */
+private fun catalogOrder(): Comparator<MediaItem> =
+    compareByDescending<MediaItem> { m -> m.year.filter { it.isDigit() }.take(4).toIntOrNull() ?: 0 }
+        .thenByDescending { m -> m.posterUrl.isNotBlank() }
+
+/** Единый вид списка после загрузки/ошибки: без дублей и в порядке каталога. */
+private fun sortedOf(list: List<MediaItem>): List<MediaItem> =
+    list.distinctBy { it.storeKey }.sortedWith(catalogOrder())
