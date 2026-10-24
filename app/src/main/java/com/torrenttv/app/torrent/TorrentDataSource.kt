@@ -11,9 +11,10 @@ import java.io.RandomAccessFile
 /**
  * DataSource для ExoPlayer: читает видео напрямую из недокачанного файла торрента.
  *
- * Чтение блокируется, пока последовательная загрузка не доберётся до нужного
- * диапазона байт. Благодаря sequential download скачанная часть файла —
- * непрерывная «голова», поэтому условие готовности простое: fileProgress >= конец запроса.
+ * Готовность данных проверяется НА УРОВНЕ КУСКОВ (havePiece) — как в открытых
+ * стримерах (stremio/torrent-stream): fileProgress() возвращает сумму скачанных
+ * кусков без гарантии непрерывности, после перемотки в середину он даёт ложную
+ * готовность, и плеер получал «конец файла» в середине фильма.
  * Перемотка в середину работает через boostPiecesAround (приоритеты кусков).
  */
 class TorrentDataSource(private val st: TorrentEngine.StreamSession) : DataSource {
@@ -38,11 +39,12 @@ class TorrentDataSource(private val st: TorrentEngine.StreamSession) : DataSourc
         if (length == 0) return 0
         val f = raf ?: throw IOException("DataSource closed")
 
-        // Ждём, пока загрузка доберётся до нужного диапазона. Таймаут 90 с:
-        // без него заблокированный поток ExoPlayer зависает молча (чёрный экран)
-        val end = absPos + length
+        // Ждём, пока будут скачаны ВСЕ куски запрошенного диапазона.
+        // Таймаут 90 с: без него заблокированный поток ExoPlayer зависает
+        // молча (чёрный экран)
+        val end = (absPos + length).coerceAtMost(st.fileSize)
         val deadline = System.currentTimeMillis() + 90_000
-        while (st.headBytes() < end) {
+        while (!st.isRangeReady(absPos, end - absPos)) {
             if (!TorrentEngine.session.isRunning) throw IOException("Торрент-сессия остановлена")
             if (System.currentTimeMillis() > deadline) {
                 throw IOException("Куски не загружаются — пиры недоступны")
@@ -56,7 +58,13 @@ class TorrentDataSource(private val st: TorrentEngine.StreamSession) : DataSourc
             Thread.sleep(250)
             n = readOnce(f, target, offset, length)
         }
-        if (n <= 0) return C.RESULT_END_OF_INPUT
+        if (n <= 0) {
+            // Конец файла — только если действительно конец. Иначе это ошибка
+            // чтения (кусок есть в памяти, но не сброшен): END_OF_INPUT здесь
+            // означал бы «фильм кончился» в середине — ложный STATE_ENDED
+            if (absPos < st.fileSize) throw IOException("Кусок скачан, но не читается с диска")
+            return C.RESULT_END_OF_INPUT
+        }
         absPos += n
         return n
     }

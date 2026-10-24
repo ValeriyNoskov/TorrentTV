@@ -18,15 +18,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.tv.material3.MaterialTheme
 import com.torrenttv.app.ui.AppTypography
-import com.torrenttv.app.data.IptvChannel
 import com.torrenttv.app.data.MediaItem
 import com.torrenttv.app.ui.CatalogScreen
 import com.torrenttv.app.ui.DetailsScreen
 import com.torrenttv.app.ui.EpisodesScreen
 import com.torrenttv.app.ui.FavoritesScreen
 import com.torrenttv.app.ui.HomeScreen
-import com.torrenttv.app.ui.IptvPlayerScreen
-import com.torrenttv.app.ui.IptvScreen
 import com.torrenttv.app.ui.MagnetEntryScreen
 import com.torrenttv.app.ui.OnlinePlayerScreen
 import com.torrenttv.app.ui.OnlineScreen
@@ -45,7 +42,6 @@ sealed interface Screen {
     data object Movies : Screen
     data object TvShows : Screen
     data object Shows : Screen
-    data object Iptv : Screen
     data object Favorites : Screen
     data object Search : Screen
     data object Settings : Screen
@@ -72,7 +68,6 @@ sealed interface Screen {
         val poster: String = "",
         val posterMap: Map<String, String> = emptyMap(),
     ) : Screen
-    data class IptvPlayer(val channel: IptvChannel) : Screen
 
     companion object {
         val TABS: List<Screen> = listOf(Home, Movies, TvShows, Shows, Favorites, Search, Settings)
@@ -134,7 +129,6 @@ private fun App() {
             is Screen.Player ->
                 if (s.episode != null) Screen.Episodes(s.item) else Screen.Details(s.item)
             is Screen.MagnetEntry -> Screen.Details(s.item)
-            is Screen.IptvPlayer -> Screen.Iptv
             else -> Screen.Home
         }
     }
@@ -158,9 +152,6 @@ private fun App() {
                 Screen.TvShows -> CatalogScreen(mode = "tv", onOpenDetails = { screen = Screen.Details(it) })
                 Screen.Shows -> CatalogScreen(mode = "shows", onOpenDetails = { screen = Screen.Details(it) })
                 Screen.Favorites -> FavoritesScreen(onOpenDetails = { screen = Screen.Details(it) })
-                Screen.Iptv -> IptvScreen(
-                    onPlay = { screen = Screen.IptvPlayer(it) },
-                )
                 Screen.Search -> SearchScreen(
                     onBack = { screen = Screen.Home },
                     onOpenDetails = { screen = Screen.Details(it) },
@@ -283,11 +274,6 @@ private fun App() {
                 item = s.item,
                 title = s.item.title,
                 onBack = { screen = Screen.Online(s.item) },
-            )
-
-            is Screen.IptvPlayer -> IptvPlayerScreen(
-                channel = s.channel,
-                onBack = { screen = Screen.Iptv },
             )
 
             else -> Unit

@@ -66,7 +66,6 @@ private val SECTIONS = listOf(
     Triple("jackett", "🔗 Jackett", "Дополнительный провайдер автопоиска торрентов"),
     Triple("trackers", "🔑 Частные трекеры", "RuTracker, Kinozal, NNM-Club — без Jackett"),
     Triple("filmix", "🌐 Онлайн-источники", "Filmix и HDRezka — просмотр без торрентов"),
-    Triple("epg", "📆 Телеканалы", "Каналы IPTV и телепрограмма"),
     Triple("netcheck", "🩺 Проверка сети", "Какие источники доступны с этого устройства"),
     Triple("torrserve", "🚀 TorrServe", "Внешний движок торрентов — надёжнее внутреннего"),
     Triple("player", "📺 Плеер", "Встроенный или внешний плеер (VLC, MX Player)"),
@@ -96,10 +95,8 @@ fun SettingsScreen(onBack: () -> Unit) {
     var nnmCookie by remember { mutableStateOf(store.trackerCookie(PrivateTrackers.NNMCLUB)) }
     var fxToken by remember { mutableStateOf(store.filmixToken()) }
     var fxLogin by remember { mutableStateOf("") }
-    var epgUrl by remember { mutableStateOf(store.epgUrl()) }
-    var iptvAll by remember { mutableStateOf(store.iptvAllGroups()) }
 
-    // Полноэкранный редактор текста: target = "jurl"|"jkey"|"rt"|"kz"|"nnm"|"epg"|"rtlogin"|"kzlogin"|"nnmlogin"
+    // Полноэкранный редактор текста: target = "jurl"|"jkey"|"rt"|"kz"|"nnm"|"rtlogin"|"kzlogin"|"nnmlogin"
     var editTarget by remember { mutableStateOf<String?>(null) }
     var editTmp by remember { mutableStateOf("") }
     // Сообщение о результате входа на частный трекер
@@ -158,7 +155,6 @@ fun SettingsScreen(onBack: () -> Unit) {
                 "rt" -> { store.setTrackerCookie(PrivateTrackers.RUTRACKER, editTmp); rtCookie = editTmp }
                 "kz" -> { store.setTrackerCookie(PrivateTrackers.KINOZAL, editTmp); kzCookie = editTmp }
                 "nnm" -> { store.setTrackerCookie(PrivateTrackers.NNMCLUB, editTmp); nnmCookie = editTmp }
-                "epg" -> { store.setEpgUrl(editTmp); epgUrl = editTmp }
                 "ts" -> store.setTorrServeHost(editTmp)
                 "kpkey" -> { store.setKpApiKey(editTmp); kpKey = editTmp }
                 "tmdbkey" -> { store.setTmdbApiKey(editTmp); tmdbKey = editTmp }
@@ -458,29 +454,6 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 "по коду устройства: нажмите «Подключение аккаунта», приложение " +
                                 "покажет код — введите его на странице filmix.ac/consoles " +
                                 "(в браузере, в своём аккаунте Filmix)."
-                        )
-                    }
-
-                    "epg" -> {
-                        SettingsRow(
-                            title = "Источник программы",
-                            value = epgUrl.ifBlank { "teleguide.info (Россия) — по умолчанию" },
-                            valueOk = true,
-                        ) { openEdit("epg", epgUrl, "URL XMLTV-источника") }
-                        SettingsRow(
-                            title = "Показывать все группы каналов",
-                            value = if (iptvAll) "Все" else "Только тематические (без мусора)",
-                            valueOk = !iptvAll,
-                        ) {
-                            iptvAll = !iptvAll
-                            store.setIptvAllGroups(iptvAll)
-                        }
-                        SettingsNote(
-                            "По умолчанию показываются федеральные и тематические каналы " +
-                                "(кино, сериалы, детские, спорт, музыка, познавательные) — " +
-                                "без регионального мусора. Включите «Все группы», если " +
-                                "нужны каналы, которых нет в списке. Программа («Сейчас/Далее») " +
-                                "обновляется раз в 6 часов; источник можно поменять выше."
                         )
                     }
 
@@ -860,7 +833,6 @@ private fun NetCheckScreen(onClose: () -> Unit) {
                 "YTS (торренты)" to "https://yts.mx/api/v2/list_movies.json?query_term=test",
                 "Filmix (онлайн)" to "http://filmixapp.cyou/api/v2/token_request?user_dev_apk=2.0.1&user_dev_id=&user_dev_name=Xiaomi&user_dev_os=11&user_dev_token=&user_dev_vendor=Xiaomi",
                 "HDRezka (онлайн)" to "https://hdrezka.ag/",
-                "IPTV-плейлист (ТВ)" to "https://iptv-org.github.io/iptv/countries/ru.m3u",
                 "GitHub (обновления)" to "https://api.github.com/repos/ValeriyNoskov/TorrentTV/releases/latest",
             ))
             // База фильмов (каталоги, постеры, поиск) — только если настроен ключ

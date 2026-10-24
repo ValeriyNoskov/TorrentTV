@@ -281,31 +281,6 @@ class LocalStore(context: Context) {
         return true
     }
 
-    // ---------- Избранные телеканалы ----------
-
-    fun favChannels(): List<IptvChannel> {
-        val arr = runCatching { org.json.JSONArray(prefs.getString("fav_channels", "[]")) }
-            .getOrDefault(org.json.JSONArray())
-        return (0 until arr.length()).mapNotNull { i ->
-            val o = arr.optJSONObject(i) ?: return@mapNotNull null
-            IptvChannel.fromJson(o).takeIf { it.url.isNotBlank() && it.name.isNotBlank() }
-        }
-    }
-
-    fun isFavChannel(ch: IptvChannel): Boolean =
-        favChannels().any { it.key == ch.key }
-
-    /** Переключить; вернуть новое состояние (true = добавлен). */
-    fun toggleFavChannel(ch: IptvChannel): Boolean {
-        val list = favChannels().toMutableList()
-        val existed = list.removeAll { it.key == ch.key }
-        if (!existed) list.add(0, ch)
-        prefs.edit()
-            .putString("fav_channels", org.json.JSONArray(list.map { it.toJson() }).toString())
-            .apply()
-        return !existed
-    }
-
     // ---------- Jackett (опциональный провайдер поиска) ----------
 
     fun jackettUrl(): String = prefs.getString("jackett_url", "") ?: ""
@@ -357,20 +332,6 @@ class LocalStore(context: Context) {
     }
 
     // ---------- EPG (телепрограмма IPTV) ----------
-
-    /** URL XMLTV-источника; пусто — встроенный teleguide.info. */
-    fun epgUrl(): String = prefs.getString("epg_url", "") ?: ""
-
-    fun setEpgUrl(v: String) {
-        prefs.edit().putString("epg_url", v.trim()).apply()
-    }
-
-    /** Показывать в IPTV вообще все группы (по умолчанию — только тематический белый список). */
-    fun iptvAllGroups(): Boolean = prefs.getBoolean("iptv_all_groups", false)
-
-    fun setIptvAllGroups(v: Boolean) {
-        prefs.edit().putBoolean("iptv_all_groups", v).apply()
-    }
 
     /** Адрес TorrServe (внешний движок стриминга торрентов). */
     fun torrServeHost(): String = prefs.getString("torrserve_host", "http://127.0.0.1:8090") ?: "http://127.0.0.1:8090"

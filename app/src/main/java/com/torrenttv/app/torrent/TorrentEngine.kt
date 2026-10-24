@@ -52,7 +52,18 @@ object TorrentEngine {
     }
 
     fun start() {
-        if (!session.isRunning) session.start()
+        if (session.isRunning) return
+        // Настройки как в открытых стримерах (LibreTorrent/TorrServe): больше
+        // соединений и активных загрузок — быстрее находят пиры и качают
+        try {
+            val sp = com.frostwire.jlibtorrent.SettingsPack()
+                .connectionsLimit(300)
+                .activeDownloads(-1)
+                .activeSeeds(-1)
+            session.applySettings(sp)
+        } catch (_: Exception) {
+        }
+        session.start()
     }
 
     /**
@@ -119,6 +130,27 @@ object TorrentEngine {
             handle.status().progress()
         } catch (_: Exception) {
             0f
+        }
+
+        /**
+         * Готов ли диапазон [from, from+length) файла: все куски диапазона
+         * скачаны (havePiece) — как в открытых стримерах. fileProgress() тут
+         * не годится: он суммирует скачанные куски без непрерывности, после
+         * перемотки даёт ложную готовность.
+         */
+        fun isRangeReady(filePos: Long, length: Long): Boolean {
+            try {
+                val pieceLen = ti.pieceLength()
+                if (pieceLen <= 0) return true
+                val abs = fileOffset + filePos
+                val end = abs + length
+                val first = (abs / pieceLen).toInt().coerceIn(0, ti.numPieces() - 1)
+                val last = ((end - 1).coerceAtLeast(abs) / pieceLen).toInt().coerceIn(0, ti.numPieces() - 1)
+                for (i in first..last) if (!handle.havePiece(i)) return false
+                return true
+            } catch (_: Exception) {
+                return false
+            }
         }
 
         /**

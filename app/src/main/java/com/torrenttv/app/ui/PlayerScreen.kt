@@ -380,9 +380,14 @@ private fun VideoPlayer(
     // Конец видео: обработчик снаружи (автозакрытие фильма / следующая серия)
     var showSkip by remember { mutableStateOf(false) } // «Пропустить титры» доступна
     var seekInfo by remember { mutableStateOf("") }    // «⏩ +10 сек» при перемотке пультом
+    // Ошибка плеера: текст поверх экрана вместо молчаливого чёрного экрана
+    var errorMsg by remember { mutableStateOf("") }
+    // Авто-перезапуск после ошибки (как в VLC/Just Player): до 3 попыток
+    var retries by remember { mutableStateOf(0) }
     DisposableEffect(player) {
         val listener = object : androidx.media3.common.Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
+                if (state == androidx.media3.common.Player.STATE_READY) errorMsg = ""
                 if (state == androidx.media3.common.Player.STATE_ENDED) {
                     // «Конец» — только если видео реально проигрывалось:
                     // при нулевой скорости/ошибке источника ExoPlayer может
@@ -391,6 +396,26 @@ private fun VideoPlayer(
                         player.seekTo(player.duration)
                         onEnded()
                     }
+                }
+            }
+
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                val pos = player.currentPosition
+                com.torrenttv.app.data.AppLog.log(
+                    "player",
+                    "playback error: ${error.errorCodeName} pos=${pos / 1000}s retries=$retries",
+                )
+                if (retries < 3) {
+                    // Транзитные ошибки источника/декодера: перемотка на место
+                    // и пере-подготовка — в большинстве случаев лечит
+                    retries++
+                    errorMsg = "Сбой воспроизведения, перезапускаю… ($retries/3)"
+                    player.seekTo(pos)
+                    player.prepare()
+                    player.play()
+                } else {
+                    errorMsg = "Ошибка воспроизведения: ${error.errorCodeName}. " +
+                        "Попробуйте другую раздачу или внешний плеер"
                 }
             }
         }
@@ -411,12 +436,12 @@ private fun VideoPlayer(
                     episodeLabel = episode?.code ?: "",
                 )
                 showSkip = player.duration - player.currentPosition < 3 * 60_000L
-                // Держим скачанными ~60 сек вперёд от позиции плеера:
-                // перемотка вперёд попадает в готовые куски
+                // Держим скачанными ~2 мин вперёд от позиции плеера (как в
+                // открытых стримерах): перемотка вперёд попадает в готовые куски
                 val st = stream
                 if (st != null && player.duration > 0) {
                     val bps = st.fileSize * 1000.0 / player.duration
-                    st.boostPiecesAround(st.fileOffset + player.currentPosition + (bps * 60).toLong())
+                    st.boostPiecesAround(st.fileOffset + player.currentPosition + (bps * 120).toLong())
                 }
             }
         }
@@ -579,6 +604,19 @@ private fun VideoPlayer(
             },
             modifier = Modifier.fillMaxSize(),
         )
+
+        // Ошибка воспроизведения: текст вместо молчаливого чёрного экрана
+        if (errorMsg.isNotEmpty()) {
+            androidx.tv.material3.Text(
+                errorMsg,
+                color = Color.White,
+                fontSize = 16.sp,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .background(Color(0xCC1F2430), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+            )
+        }
 
         // 🔒 Индикатор блокировки (как в MX — замок в углу)
         if (locked) {
