@@ -200,6 +200,10 @@ fun DetailsScreen(
                 Row {
                     Button(
                         onClick = {
+                            com.torrenttv.app.data.AppLog.log(
+                                "ui",
+                                "нажал: «▶ Смотреть» «${item.title}» (${if (magnet) "торрент-карточка" else "умный подбор"})",
+                            )
                             if (magnet) {
                                 // Фиксируем начало просмотра и открываем плеер
                                 store.saveProgress(item, positionSec = 0, durationSec = 0)
