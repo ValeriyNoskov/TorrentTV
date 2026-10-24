@@ -72,6 +72,11 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
     var page by remember { mutableStateOf(1) }
     var endReached by remember { mutableStateOf(false) }
     var reloadTick by remember { mutableStateOf(0) }
+    // Поиск по трекеру прямо в разделе: заменяет источник (страницу категории)
+    var searchMode by remember { mutableStateOf(false) }
+    var searchQ by remember { mutableStateOf("") }
+    var showKb by remember { mutableStateOf(false) }
+    val searchFocus = remember { androidx.compose.ui.focus.FocusRequester() }
 
     val gridState = rememberLazyGridState()
 
@@ -80,8 +85,9 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
         (2026 downTo 2020).map { it.toString() } + listOf("2015", "2010-е", "2000-е")
     }
 
-    // Серверный источник: жанр > год > страница по типу
+    // Серверный источник: поиск > жанр > год > страница по типу
     fun sourceUrl(p: Int): String? {
+        if (searchMode) return null // поиск идёт отдельной веткой
         val base = RutrackerrCatalog.baseUrl
         return when {
             genre != null -> "$base/$genre/" + if (p > 1) "page/$p/" else ""
@@ -92,6 +98,21 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
     }
 
     suspend fun loadPage(p: Int): List<MediaItem> = withContext(Dispatchers.IO) {
+        if (searchMode) {
+            // Поиск по трекеру: групповые карточки из AJAX-выдачи, без догрузки
+            val found = if (p > 1) emptyList() else RutrackerrCatalog.search(searchQ)
+            return@withContext found.filter { it ->
+                val typeOk = when (type) {
+                    "movies" -> it.type == "movie"
+                    "tv" -> it.type == "tv"
+                    "shows" -> SHOW_WORDS.containsMatchIn(it.title)
+                    else -> true
+                }
+                val countryOk = country == null ||
+                    it.country.split(',').any { c -> c.trim().equals(country!!, ignoreCase = true) }
+                typeOk && countryOk
+            }
+        }
         val url = sourceUrl(p) ?: return@withContext emptyList()
         val fetched = RutrackerrCatalog.categoryByUrl(url)
         // Клиентские фильтры поверх серверных: тип, год-диапазон, страна
@@ -170,6 +191,67 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 32.dp, vertical = 8.dp),
         )
+
+        // ---------- Поиск по трекеру ----------
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 32.dp, vertical = 2.dp),
+        ) {
+            androidx.tv.material3.Surface(
+                onClick = { showKb = !showKb },
+                shape = clickableSurfaceShape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
+                colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                    containerColor = if (showKb) Color(0xFF3A2E14) else Color(0xFF1F2430),
+                    contentColor = if (showKb) Color(0xFFF5B942) else Color.White,
+                    focusedContainerColor = Color(0xFFF5B942),
+                    focusedContentColor = Color(0xFF0E1116),
+                ),
+            ) { Text("🔍 Найти в трекере", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)) }
+            if (searchMode) {
+                Spacer(Modifier.width(8.dp))
+                androidx.tv.material3.Surface(
+                    onClick = { searchMode = false; searchQ = ""; reloadTick++ },
+                    shape = clickableSurfaceShape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
+                    colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                        containerColor = Color(0xFF1F2430),
+                        contentColor = Color(0xFFF5B942),
+                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContentColor = Color(0xFF0E1116),
+                    ),
+                ) { Text("✕ «$searchQ» — сбросить поиск", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)) }
+            }
+        }
+        if (showKb) {
+            Row(
+                verticalAlignment = Alignment.Top,
+                modifier = Modifier.padding(horizontal = 32.dp, vertical = 4.dp),
+            ) {
+                TvKeyboard(
+                    onChar = { searchQ += it },
+                    onBackspace = { if (searchQ.isNotEmpty()) searchQ = searchQ.dropLast(1) },
+                    onClear = { searchQ = "" },
+                    firstKeyFocus = searchFocus,
+                )
+                Spacer(Modifier.width(12.dp))
+                androidx.tv.material3.Surface(
+                    onClick = {
+                        if (searchQ.isNotBlank()) {
+                            showKb = false
+                            searchMode = true
+                            reloadTick++
+                        }
+                    },
+                    modifier = Modifier.height(52.dp),
+                    shape = clickableSurfaceShape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
+                    colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                        containerColor = Color(0xFF2E4A22),
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFF7FB84F),
+                        focusedContentColor = Color(0xFF0E1116),
+                    ),
+                ) { Text("Найти ▶", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) }
+            }
+        }
 
         LazyVerticalGrid(
             columns = GridCells.Fixed(6),

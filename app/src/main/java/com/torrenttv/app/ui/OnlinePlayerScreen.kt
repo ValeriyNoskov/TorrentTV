@@ -134,6 +134,30 @@ fun OnlinePlayerScreen(
     var backArmedAt by remember { mutableStateOf(0L) }
     // ---------- Состояние: буферизация и ошибки (чёрный экран ≠ «зависло») ----------
     var playState by remember { mutableStateOf(Player.STATE_IDLE) }
+    // Авто-следующая серия: серия закончилась — отсчёт и переход (как в движковом)
+    var nextCountdown by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(playState) {
+        if (playState == Player.STATE_ENDED && files.size > 1 &&
+            currentFile >= 0 && currentFile + 1 < files.size
+        ) {
+            nextCountdown = 8
+            com.torrenttv.app.data.AppLog.log("player", "серия закончилась — предлагаю следующую (${files[currentFile + 1].second.takeLast(40)})")
+        }
+    }
+    LaunchedEffect(nextCountdown) {
+        var n = nextCountdown ?: return@LaunchedEffect
+        while (n > 0) {
+            kotlinx.coroutines.delay(1000)
+            n--
+            nextCountdown = n
+        }
+        // Время вышло — переходим на следующую серию
+        if (nextCountdown == 0 && currentFile + 1 < files.size) {
+            com.torrenttv.app.data.AppLog.log("player", "автопереход на следующую серию")
+            nextCountdown = null
+            onSelectFile(currentFile + 1)
+        }
+    }
     var errorMsg by remember { mutableStateOf("") }
     var bufPct by remember { mutableIntStateOf(0) }
     // Панель контролов при действии пульта (счётчик действий — триггер показа).
@@ -727,6 +751,56 @@ fun OnlinePlayerScreen(
                     Btn("⤴") { openExternal() }
                     Spacer(Modifier.width(10.dp))
                     Btn("⚙") { showQuality = true; panelTick++ }
+                }
+            }
+        }
+
+        // «Следующая серия через N…» — оверлей с выбором (пункт ROADMAP №4)
+        if (nextCountdown != null) {
+            Box(
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 32.dp, bottom = 60.dp)
+                    .background(Color(0xF0151B26), RoundedCornerShape(14.dp))
+                    .padding(16.dp),
+            ) {
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        "Серия закончилась",
+                        color = Color.White,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Следующая через $nextCountdown сек",
+                        color = Color(0xFFF5B942),
+                        fontSize = 15.sp,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Row {
+                        androidx.tv.material3.Surface(
+                            onClick = { nextCountdown = null; if (currentFile + 1 < files.size) onSelectFile(currentFile + 1) },
+                            shape = clickableSurfaceShape(RoundedCornerShape(8.dp)),
+                            colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                                containerColor = Color(0xFF2E4A22),
+                                contentColor = Color.White,
+                                focusedContainerColor = Color(0xFF7FB84F),
+                                focusedContentColor = Color(0xFF0E1116),
+                            ),
+                        ) { Text("▶ Следующая", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)) }
+                        Spacer(Modifier.width(8.dp))
+                        androidx.tv.material3.Surface(
+                            onClick = { nextCountdown = null },
+                            shape = clickableSurfaceShape(RoundedCornerShape(8.dp)),
+                            colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                                containerColor = Color(0xFF1F2430),
+                                contentColor = Color.White,
+                                focusedContainerColor = Color(0xFFF5B942),
+                                focusedContentColor = Color(0xFF0E1116),
+                            ),
+                        ) { Text("✕ Отмена", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)) }
+                    }
                 }
             }
         }
