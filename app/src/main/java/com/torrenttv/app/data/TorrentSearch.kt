@@ -20,6 +20,9 @@ import kotlinx.coroutines.withContext
  */
 object TorrentSearch {
 
+    /** Статистика последнего поиска (какие источники ответили) — для экрана и логов. */
+    @Volatile var lastStats: List<ProviderStat> = emptyList()
+
     val TRACKERS = listOf(
         "udp://tracker.opentrackr.org:1337/announce",
         "udp://open.demonii.com:1337/announce",
@@ -189,7 +192,24 @@ object TorrentSearch {
             jobs.awaitAll()
         }
         val stats = calls.map { ProviderStat(it.name, it.res.size, it.err) }
-        val merged = merge(calls.map { it.res }, excludedKeywords).take(limit)
+        // Сохраняем для диагностики на экране («Ничего не нашлось») и логов
+        lastStats = stats
+        // Релевантность: хотя бы одно значимое слово запроса в названии раздачи.
+        // Иначе apibay/btdig подсовывают нерелевант с сотней сидов и «Играть сразу»
+        // запускает не тот фильм. Если ни один источник не дал релевантного —
+        // оставляем как есть (лучше честное «ничего не нашлось», чем мусор).
+        val tokens = (listOfNotNull(query.takeIf { it.isNotBlank() }, altQuery))
+            .flatMap { it.lowercase().split(Regex("[^a-zа-яё0-9]+")) }
+            .filter { it.length >= 4 }
+            .distinct()
+        val mergedRaw = if (tokens.isNotEmpty()) {
+            val rel = calls.map { c -> c.res.filter { r -> tokens.any { r.name.lowercase().contains(it) } } }
+            val useRelevant = rel.any { it.isNotEmpty() }
+            merge(if (useRelevant) rel else calls.map { it.res }, excludedKeywords)
+        } else {
+            merge(calls.map { it.res }, excludedKeywords)
+        }
+        val merged = mergedRaw.take(limit)
         com.torrenttv.app.data.AppLog.log(
             "search",
             "q=\"$query\" alt=\"$altQuery\" tv=$isTvShow imdb=$imdbId -> " +

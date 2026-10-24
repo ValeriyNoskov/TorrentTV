@@ -9,3 +9,4 @@ release-keystore.jks
 keystore-password.txt
 *.jks
 *.jks.old
+ses_*.json

@@ -137,8 +137,26 @@ fun SmartPlayScreen(
             torrentsFound = torrents.await()
         }
         status = "Ищу торренты…"
-        val found = torrentsFound
-        com.torrenttv.app.data.AppLog.log("smart", "sources: online=0 torrents=${found.size}")
+        var found = torrentsFound
+        // Домашние сети часто режут трекеры: если пусто — один повтор через 8 сек
+        if (found.isEmpty()) {
+            status = "Источник не ответил, повторяю поиск…"
+            kotlinx.coroutines.delay(8000)
+            found = runCatching {
+                TorrentSearch.searchDetailed(
+                    query = query,
+                    altQuery = altQuery,
+                    isTvShow = isTv,
+                    imdbId = item.imdbId,
+                    jackett = store.jackettConfig(),
+                    privateTrackers = store.privateTrackers(),
+                    excludedKeywords = store.excludedKeywords().toSet(),
+                ).first
+            }.getOrDefault(emptyList())
+            torrentsFound = found
+        }
+        val statsText = TorrentSearch.lastStats.joinToString(" ") { it.label() }
+        com.torrenttv.app.data.AppLog.log("smart", "sources: online=0 torrents=${found.size} [$statsText]")
 
         // Лучшая раздача для «Играть сразу»: сиды × бонус качества.
         // Для сериалов — бонус раздачам с сезоном/сериями в названии
@@ -171,7 +189,8 @@ fun SmartPlayScreen(
         done = choices.isNotEmpty()
         failed = choices.isEmpty()
         status = if (failed) {
-            "Ничего не нашлось: онлайн и торренты недоступны. Нажмите «Отправить лог» — я увижу причину"
+            "Ничего не нашлось. Источники: " + TorrentSearch.lastStats.joinToString(" ") { it.label() } +
+                " — нажмите «Отправить лог», я увижу причину"
         } else {
             "Выберите, где смотреть:"
         }

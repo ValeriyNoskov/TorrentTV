@@ -493,14 +493,17 @@ private fun VideoPlayer(
             return true
         }
         val panelVisible = showPanel || showFiles || showGear || showTrackMenu
+        // Любая кнопка пульта при скрытой панели СНАЧАЛА показывает панель
+        // (как в MX Player), действие выполняется следующим нажатием
         return when (keyCode) {
         // Панель видна: стрелки двигают фокус по кнопкам (как в MX),
-        // скрыта: стрелки = перемотка ±10 сек.
+        // скрыта: первый показ панели, дальше — фокус по кнопкам.
         // При видимой панели обновляем panelTick — таймер авто-скрытия
         // продлевается, пока пользователь идёт по кнопкам
         KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
             if (panelVisible) { panelTick++; false }
             else {
+                // перемотка + сразу показать панель, чтобы были видны кнопки
                 val delta = if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) 10_000L else -10_000L
                 val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
                 player.seekTo((player.currentPosition + delta).coerceIn(0L, dur))
@@ -508,6 +511,10 @@ private fun VideoPlayer(
                 panelTick++
                 true
             }
+        }
+        KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
+            // скрытая панель: UP/DOWN показывают панель (иначе кнопки «не существуют»)
+            if (panelVisible) false else { panelTick++; true }
         }
         // Панель видна: OK нажимает кнопку в фокусе; скрыта: OK показывает панель
         KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
