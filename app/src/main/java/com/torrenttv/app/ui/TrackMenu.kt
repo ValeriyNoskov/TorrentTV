@@ -58,6 +58,8 @@ fun TrackMenuOverlay(
     onDismiss: () -> Unit,
     /** Выбрана аудиодорожка — подпись для запоминания между запусками. */
     onAudioPicked: (String) -> Unit = {},
+    /** Выбраны субтитры («off» — выключены) — запоминание между сериями. */
+    onSubPicked: (String) -> Unit = {},
     /** Текущий сдвиг субтитров, мс. */
     subShiftMs: Int = 0,
     /** Изменить сдвиг субтитров на delta мс. */
@@ -195,6 +197,14 @@ fun TrackMenuOverlay(
                                     }
                                 }
                                 .build()
+                            // Запомнить выбор субтитров между сериями (ROADMAP №5):
+                            // «off» — выключены, иначе подпись/язык трека
+                            if (row == null) onSubPicked("off") else {
+                                val fmt = row.group.getTrackFormat(row.trackIndex)
+                                if (!fmt.label.isNullOrBlank() || !fmt.language.isNullOrBlank()) {
+                                    onSubPicked(fmt.label ?: fmt.language ?: "")
+                                }
+                            }
                             rev++
                         },
                     )

@@ -323,30 +323,66 @@ fun OnlinePlayerScreen(
         }
     }
 
-    // Запомненная аудиодорожка: применяем один раз при появлении дорожек
+    // Запомненные аудио и субтитры: применяем один раз при появлении дорожек
     DisposableEffect(player) {
         var audioApplied = false
+        var subsApplied = false
         val listener = object : Player.Listener {
             override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
-                if (audioApplied) return
-                val want = store.playerAudioLabel()
-                if (want.isBlank()) return
-                for (g in 0 until tracks.groups.size) {
-                    val group = tracks.groups[g]
-                    if (group.type != androidx.media3.common.C.TRACK_TYPE_AUDIO) continue
-                    for (i in 0 until group.length) {
-                        val fmt = group.getTrackFormat(i)
-                        val label = (fmt.label ?: "") + " " + (fmt.language ?: "")
-                        if (label.lowercase().contains(want.lowercase())) {
-                            player.trackSelectionParameters = player.trackSelectionParameters
-                                .buildUpon()
-                                .clearOverridesOfType(androidx.media3.common.C.TRACK_TYPE_AUDIO)
-                                .addOverride(androidx.media3.common.TrackSelectionOverride(group.mediaTrackGroup, i))
-                                .build()
-                            audioApplied = true
-                            return
+                // --- Аудио: подбор по запомненной подписи ---
+                if (!audioApplied) {
+                    val want = store.playerAudioLabel()
+                    if (want.isNotBlank()) {
+                        for (g in 0 until tracks.groups.size) {
+                            val group = tracks.groups[g]
+                            if (group.type != androidx.media3.common.C.TRACK_TYPE_AUDIO) continue
+                            for (i in 0 until group.length) {
+                                val fmt = group.getTrackFormat(i)
+                                val label = (fmt.label ?: "") + " " + (fmt.language ?: "")
+                                if (label.lowercase().contains(want.lowercase())) {
+                                    player.trackSelectionParameters = player.trackSelectionParameters
+                                        .buildUpon()
+                                        .clearOverridesOfType(androidx.media3.common.C.TRACK_TYPE_AUDIO)
+                                        .addOverride(androidx.media3.common.TrackSelectionOverride(group.mediaTrackGroup, i))
+                                        .build()
+                                    audioApplied = true
+                                    break
+                                }
+                            }
+                            if (audioApplied) return
                         }
                     }
+                }
+                // --- Субтитры: включить запомненные / выключить («off») ---
+                if (!subsApplied) {
+                    val wantSub = store.playerSubLabel()
+                    if (wantSub.isBlank()) return
+                    subsApplied = true
+                    if (wantSub == "off") {
+                        player.trackSelectionParameters = player.trackSelectionParameters
+                            .buildUpon()
+                            .setTrackTypeDisabled(androidx.media3.common.C.TRACK_TYPE_TEXT, true)
+                            .build()
+                        return
+                    }
+                    for (g in 0 until tracks.groups.size) {
+                        val group = tracks.groups[g]
+                        if (group.type != androidx.media3.common.C.TRACK_TYPE_TEXT) continue
+                        for (i in 0 until group.length) {
+                            val fmt = group.getTrackFormat(i)
+                            val label = (fmt.label ?: "") + " " + (fmt.language ?: "")
+                            if (label.lowercase().contains(wantSub.lowercase())) {
+                                player.trackSelectionParameters = player.trackSelectionParameters
+                                    .buildUpon()
+                                    .setTrackTypeDisabled(androidx.media3.common.C.TRACK_TYPE_TEXT, false)
+                                    .clearOverridesOfType(androidx.media3.common.C.TRACK_TYPE_TEXT)
+                                    .addOverride(androidx.media3.common.TrackSelectionOverride(group.mediaTrackGroup, i))
+                                    .build()
+                                return
+                            }
+                        }
+                    }
+                    subsApplied = false // запомненного трека в этой серии нет — не блокируем будущие
                 }
             }
         }
@@ -584,6 +620,7 @@ fun OnlinePlayerScreen(
                 player = player,
                 onDismiss = { showTrackMenu = false },
                 onAudioPicked = { label -> store.setPlayerAudioLabel(label) },
+                onSubPicked = { label -> store.setPlayerSubLabel(label) },
             )
         }
 

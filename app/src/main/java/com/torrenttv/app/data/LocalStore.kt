@@ -534,6 +534,13 @@ class LocalStore(context: Context) {
         prefs.edit().putString("player_audio_label", v.trim()).apply()
     }
 
+    /** Запомненные субтитры: имя/язык трека; «off» — выключены; «» — не выбирали. */
+    fun playerSubLabel(): String = prefs.getString("player_sub_label", "") ?: ""
+
+    fun setPlayerSubLabel(v: String) {
+        prefs.edit().putString("player_sub_label", v.trim()).apply()
+    }
+
     /** Сдвиг субтитров, мс (−5000..5000): положительный — сабы позже. */
     fun playerSubShift(): Int = prefs.getInt("player_sub_shift", 0)
 
