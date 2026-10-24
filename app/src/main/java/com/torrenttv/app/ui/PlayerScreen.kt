@@ -576,9 +576,6 @@ private fun VideoPlayer(
     var segButton by remember { mutableStateOf<com.torrenttv.app.data.SkipSeg?>(null) }
     // Фокус на кнопке пропуска при её появлении (владелец: «фокус на них»)
     val segSkipFocus = remember { androidx.compose.ui.focus.FocusRequester() }
-    LaunchedEffect(segButton) {
-        if (segButton != null) runCatching { segSkipFocus.requestFocus() }
-    }
     // Тик раз в секунду: авто-заставка/пересказ (прыжок при входе в отрезок)
     // и кнопка «Пропустить» для титров/анонса
     LaunchedEffect(player, skipSegs) {
@@ -796,6 +793,17 @@ private fun VideoPlayer(
     // ---------- Панель «как MX»: показывается при действии пульта ----------
     var showFiles by remember { mutableStateOf(false) }
     var showPanel by remember { mutableStateOf(true) }
+
+    // Фокус на кнопке пропуска, как только она появилась, и после закрытия
+    // панели: ретраи — кнопка попадает в иерархию не мгновенно, первый
+    // requestFocus может прийти раньше композиции и молча не сработать
+    LaunchedEffect(segButton, showPanel, showGear, showFiles) {
+        if (segButton == null) return@LaunchedEffect
+        repeat(5) {
+            runCatching { segSkipFocus.requestFocus() }
+            kotlinx.coroutines.delay(60)
+        }
+    }
     var panelTick by remember { mutableStateOf(0) }
     val playFocus = remember { FocusRequester() }
     // Время автоскрытия — настройка из ⚙ (дефолт 20 сек, 0 = не прятать)
@@ -1058,7 +1066,13 @@ private fun VideoPlayer(
         // «⏭ Пропустить титры» — в последние 3 минуты (поверх панели, без разметки)
         if (showSkip && segSkip == null) {
             val skipFocus = remember { androidx.compose.ui.focus.FocusRequester() }
-            LaunchedEffect(showSkip) { if (showSkip) runCatching { skipFocus.requestFocus() } }
+            LaunchedEffect(showSkip, showPanel, showGear, showFiles) {
+                if (!showSkip) return@LaunchedEffect
+                repeat(5) {
+                    runCatching { skipFocus.requestFocus() }
+                    kotlinx.coroutines.delay(60)
+                }
+            }
             Button(
                 onClick = {
                     showSkip = false
