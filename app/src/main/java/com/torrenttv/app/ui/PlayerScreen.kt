@@ -151,6 +151,29 @@ fun PlayerScreen(
                 }
                 com.torrenttv.app.data.AppLog.log("player", "torrserve: ok hash=${ts.hash} file=\"${file.path}\" buffered=$buffered")
                 if (buffered) {
+                    // Прогрев потока: TorrServe начинает отдавать файл не сразу
+                    // (пиры + 1080p), и ExoPlayer успевал получить TIMEOUT на старте
+                    // («Полдень» не запускался, хотя файл живой). Дёргаем первые
+                    // 128 КБ заранее — плеер стартует уже по горячему соединению.
+                    val warm = withContext(Dispatchers.IO) {
+                        runCatching {
+                            val u = com.torrenttv.app.data.TorrServeService.streamUrl(tsHost, ts.hash, file)
+                            val at = System.currentTimeMillis()
+                            val c = java.net.URL(u).openConnection() as java.net.HttpURLConnection
+                            c.connectTimeout = 20_000
+                            c.readTimeout = 60_000
+                            c.setRequestProperty("Range", "bytes=0-131071")
+                            c.connect()
+                            val buf = ByteArray(65_536)
+                            val n = c.inputStream.read(buf)
+                            c.disconnect()
+                            (System.currentTimeMillis() - at) to n
+                        }.getOrNull()
+                    }
+                    com.torrenttv.app.data.AppLog.log(
+                        "player",
+                        "torrserve: прогрев ${warm?.first ?: -1} мс, байт ${warm?.second ?: -1}",
+                    )
                     torrLink = com.torrenttv.app.data.TorrServeService.streamUrl(tsHost, ts.hash, file)
                     // Серии для переключения в плеере: видео-файлы в естественном
                     // порядке (E01, E02…), индекс текущего — по запущенному файлу
