@@ -86,9 +86,10 @@ fun OnlinePlayerScreen(
     // Ключ источника: своя позиция на каждую ссылку (и серию) онлайн-просмотра
     val onlineKey = item.storeKey + ":online" +
         (if (link.season > 0) ":s%02de%02d".format(link.season, link.episode) else "")
-    // С какой секунды продолжать («Продолжить просмотр»)
+    // С какой секунды продолжать («Продолжить просмотр» + запасное хранилище серий)
     val resumeSec = remember {
-        store.continueWatching().firstOrNull { it.sourceKey == onlineKey }?.positionSec ?: 0
+        store.continueWatching().firstOrNull { it.sourceKey == onlineKey }?.positionSec
+            ?: store.episodePosition(onlineKey)
     }
     var showQuality by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
@@ -96,6 +97,9 @@ fun OnlinePlayerScreen(
     var showJump by remember { mutableStateOf(false) }
     // Список серий (TorrServe): выбор серии прямо в плеере
     var showFiles by remember { mutableStateOf(showFilesOnStart) }
+    // Авто-повтор при ошибке старта потока TorrServe (3003: данные ещё не готовы)
+    var retryTick by remember { mutableStateOf(0) }
+    var retryCount by remember { mutableStateOf(0) }
     // Кнопки на панели: игра/пауза (иконка меняется) + фокус на кнопке Play
     var playing by remember { mutableStateOf(true) }
     val playBtnFocus = remember { FocusRequester() }
@@ -118,7 +122,7 @@ fun OnlinePlayerScreen(
     }
     LaunchedEffect(showPanel) { if (showPanel) runCatching { playBtnFocus.requestFocus() } }
 
-    val player = remember(link.url) {
+    val player = remember(link.url, retryTick) {
         // CDN проверяет Referer: у Filmix — filmix.ac, у HDRezka — её зеркало.
         // TorrServe (label="torrserve") — локальный стрим, Referer не нужен.
         val referer = if (link.label == "torrserve") "" else link.referer.ifBlank { "https://filmix.ac/" }
@@ -155,14 +159,34 @@ fun OnlinePlayerScreen(
                 }
                 playWhenReady = true
                 addListener(object : Player.Listener {
-                    override fun onPlaybackStateChanged(state: Int) { playState = state }
+                    override fun onPlaybackStateChanged(state: Int) {
+                        playState = state
+                        // Стрим реально запустился — сбрасываем счётчик повторов
+                        if (state == Player.STATE_READY) retryCount = 0
+                    }
                     override fun onPlayerError(error: PlaybackException) {
-                        // Не вечный чёрный экран: сообщение + кнопки Повторить/Назад
                         com.torrenttv.app.data.AppLog.log(
                             "player",
-                            "playback error: ${error.errorCodeName} code=${error.errorCode} link=${link.url.take(80)}",
+                            "playback error: ${error.errorCodeName} code=${error.errorCode} retry=$retryCount link=${link.url.take(120)}",
                         )
-                        errorMsg = "Ошибка воспроизведения: ${error.errorCodeName}"
+                        // TorrServe часто отдаёт 3003, если файл ещё «дозревает» —
+                        // молча перезапускаем плеер до 3 раз, без алармов
+                        if (link.label == "torrserve" && retryCount < 3) {
+                            retryCount++
+                            seekInfo = "🔄 Запускаю поток (попытка ${retryCount + 1})…"
+                            panelTick++
+                            retryTick++
+                        } else {
+                            errorMsg = "Ошибка воспроизведения: ${error.errorCodeName}"
+                            // Автовыгрузка лога: пользователю не надо ничего выгружать
+                            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                                val url = runCatching { com.torrenttv.app.data.AppLog.sendToPastebin() }.getOrNull()
+                                if (!url.isNullOrBlank()) {
+                                    com.torrenttv.app.data.AppLog.log("upload", "auto sent -> $url")
+                                    errorMsg = "Ошибка: ${error.errorCodeName}\nЛог уже отправлен: $url\nСкажи разработчику этот адрес."
+                                }
+                            }
+                        }
                     }
                 })
             }
@@ -284,12 +308,16 @@ fun OnlinePlayerScreen(
             KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { player.seekTo(player.currentPosition + 30_000L); seekInfo = "⏩ +30 сек"; panelTick++; true }
             KeyEvent.KEYCODE_MEDIA_REWIND -> { player.seekTo((player.currentPosition - 30_000L).coerceAtLeast(0)); seekInfo = "⏪ −30 сек"; panelTick++; true }
             KeyEvent.KEYCODE_MENU -> { showTrackMenu = !showTrackMenu; true }
-            // BACK: меню/дорожки открыты — закрывает их BackHandler ниже;
-            // панель видна — прячем; скрыта — выходим из плеера
+            // BACK: панель скрыта — СНАЧАЛА показываем панель (защита от
+            // случайного нажатия: выход только вторым BACK при видимой панели).
+            // Открытые оверлеи отдают false — их закрывают BackHandler'ы ниже
             KeyEvent.KEYCODE_BACK -> {
-                if (showJump) { showJump = false; true }
-                else if (showPanel && !showSettings && !showQuality && !showTrackMenu) { showPanel = false; true }
-                else false
+                if (!showPanel && !showSettings && !showQuality && !showTrackMenu && !showFiles && !showJump) {
+                    showPanel = true
+                    panelTick++
+                    seekInfo = "⚠ BACK ещё раз — выход из плеера"
+                    true
+                } else false
             }
             else -> false
         }
@@ -299,10 +327,14 @@ fun OnlinePlayerScreen(
         onDispose { MainActivity.remoteKeyHandler = null }
     }
 
-    BackHandler(enabled = showQuality) { showQuality = false }
+    // BACK-иерархия: в Compose активен ПОСЛЕДНИЙ зарегистрированный enabled —
+    // поэтому базовый выход первым, оверлеи — после (перекрывают его)
+    BackHandler(enabled = showPanel && !showSettings && !showQuality && !showTrackMenu && !showFiles && !showJump) { onBack() }
+    BackHandler(enabled = showJump) { showJump = false }
+    BackHandler(enabled = showFiles) { showFiles = false }
+    BackHandler(enabled = showTrackMenu) { showTrackMenu = false }
     BackHandler(enabled = showSettings) { showSettings = false }
-    BackHandler(enabled = showPanel && !showSettings && !showQuality) { showPanel = false }
-    BackHandler { onBack() }
+    BackHandler(enabled = showQuality) { showQuality = false }
 
     // Галочка «Всегда внешний плеер»: сразу открываем во внешнем плеере и выходим
     val storePrefs = remember { com.torrenttv.app.data.LocalStore(context) }
@@ -394,7 +426,7 @@ fun OnlinePlayerScreen(
         // Ошибка воспроизведения: сообщение + Повторить/Назад (не вечный чёрный экран)
         if (errorMsg.isNotBlank()) {
             val retryFocus = remember { FocusRequester() }
-            LaunchedEffect(Unit) { retryFocus.requestFocus() }
+            runCatching { LaunchedEffect(Unit) { retryFocus.requestFocus() } }
             Column(
                 Modifier
                     .align(Alignment.Center)
@@ -569,7 +601,7 @@ fun OnlinePlayerScreen(
         // Меню настроек (↑ на пульте): качество, дорожки, внешний плеер
         if (showSettings) {
             val firstItemFocus = remember { FocusRequester() }
-            LaunchedEffect(showSettings) { firstItemFocus.requestFocus() }
+            runCatching { LaunchedEffect(showSettings) { firstItemFocus.requestFocus() } }
             Column(
                 Modifier
                     .align(Alignment.CenterEnd)
@@ -806,7 +838,7 @@ fun TrailerScreen(item: MediaItem, onBack: () -> Unit) {    var link by remember
                 )
                 Spacer(Modifier.height(16.dp))
                 val backFocus = remember { FocusRequester() }
-                LaunchedEffect(Unit) { backFocus.requestFocus() }
+                runCatching { LaunchedEffect(Unit) { backFocus.requestFocus() } }
                 Surface(
                     onClick = onBack,
                     modifier = Modifier.focusRequester(backFocus),
@@ -882,7 +914,7 @@ fun RutubeWatchScreen(videoId: String, title: String, onBack: () -> Unit) {
                 )
                 Spacer(Modifier.height(16.dp))
                 val backFocus = remember { FocusRequester() }
-                LaunchedEffect(Unit) { backFocus.requestFocus() }
+                runCatching { LaunchedEffect(Unit) { backFocus.requestFocus() } }
                 Surface(
                     onClick = onBack,
                     modifier = Modifier.focusRequester(backFocus),

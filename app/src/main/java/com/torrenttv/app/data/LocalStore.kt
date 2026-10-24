@@ -132,6 +132,11 @@ class LocalStore(context: Context) {
             .remove("statusitem:" + item.storeKey)
             .remove("lastfile:" + item.storeKey)
             .apply()
+        // Запасные позиции серий этого сериала (epos:<storeKey>:…)
+        val eposKeys = prefs.all.keys.filter { it.startsWith("epos:" + item.storeKey) }
+        if (eposKeys.isNotEmpty()) {
+            prefs.edit().apply { eposKeys.forEach { remove(it) } }.apply()
+        }
         val arr = runCatching { JSONArray(prefs.getString("progress", "[]")) }.getOrDefault(JSONArray())
         val out = JSONArray()
         for (i in 0 until arr.length()) {
@@ -154,6 +159,9 @@ class LocalStore(context: Context) {
         return (0 until arr.length())
             .map { WatchEntry.fromJson(arr.getJSONObject(it)) }
             .sortedByDescending { it.updatedAt }
+            // Дедуп на чтение: чистит старые дубли серий одного сериала,
+            // оставляя самую свежую запись
+            .distinctBy { it.item.storeKey }
     }
 
     /** Сохранить/обновить позицию просмотра. */
@@ -164,14 +172,39 @@ class LocalStore(context: Context) {
         sourceKey: String = item.storeKey,
         episodeLabel: String = "",
     ) {
+        // Позиция конкретной серии/ссылки — отдельно от ленты «Продолжить»:
+        // у серий одного сериала разные sourceKey, и дедуп ленты не должен
+        // терять их resume-позиции
+        if (sourceKey != item.storeKey) {
+            prefs.edit()
+                .putString(
+                    "epos:$sourceKey",
+                    org.json.JSONObject()
+                        .put("pos", positionSec)
+                        .put("dur", durationSec)
+                        .put("at", System.currentTimeMillis())
+                        .toString(),
+                )
+                .apply()
+        }
+        // Одна карточка на сериал/фильм в «Продолжить»: серии одного сериала
+        // имеют разный sourceKey — без этой фильтрации сериал плодит
+        // несколько постеров подряд (баг «3 постера Спецов»)
         val entries = continueWatching()
-            .filter { it.sourceKey != sourceKey }
+            .filter { it.item.storeKey != item.storeKey }
             .toMutableList()
         entries.add(0, WatchEntry(item, positionSec, durationSec, System.currentTimeMillis(), sourceKey, episodeLabel))
         prefs.edit()
             .putString("progress", JSONArray(entries.take(20).map { it.toJson() }).toString())
             .apply()
     }
+
+    /** Позиция серии/ссылки (запасное хранилище при дедупе ленты). */
+    fun episodePosition(sourceKey: String): Int =
+        runCatching {
+            prefs.getString("epos:$sourceKey", null)
+                ?.let { org.json.JSONObject(it).getInt("pos") }
+        }.getOrNull() ?: 0
 
     fun removeProgress(item: MediaItem) {
         val entries = continueWatching().filter { it.item.storeKey != item.storeKey }

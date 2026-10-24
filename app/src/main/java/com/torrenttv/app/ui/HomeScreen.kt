@@ -34,19 +34,16 @@ import com.torrenttv.app.update.UpdateManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** Вкладка «Главная»: hero-баннер, «Продолжить», «Избранное», тренды. */
+/** Вкладка «Главная»: тренды первыми, затем новинки фильмов/сериалов/шоу с переходом в каталог. */
 @Composable
 fun HomeScreen(
     currentVersion: String,
     onOpenDetails: (MediaItem) -> Unit,
+    onOpenCatalog: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
 
-    var favorites by remember { mutableStateOf(store.favorites()) }
-    var watchLater by remember { mutableStateOf(store.watchLater()) }
-    var progress by remember { mutableStateOf(store.continueWatching()) }
-    var newReleases by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var updateInfo by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
     var updateStatus by remember { mutableStateOf("") }
 
@@ -54,13 +51,6 @@ fun HomeScreen(
     // установка по кнопке «Обновить» будет мгновенной
     LaunchedEffect(updateInfo) {
         updateInfo?.let { UpdateManager.startBackgroundDownload(context, it) }
-    }
-
-    LaunchedEffect(Unit) {
-        UpdateManager.checkForUpdate(currentVersion) { updateInfo = it }
-        newReleases = withContext(Dispatchers.IO) {
-            MediaApi.newReleases().filter { store.isAllowed(it) }.take(20)
-        }
     }
 
     Box(
@@ -79,39 +69,41 @@ fun HomeScreen(
                     )
                 }
             }
-            // Продолжить просмотр — первым, это самое нужное
-            if (progress.isNotEmpty()) {
-                item {
-                    // Карточки с прогресс-барами: досмотрено, серия, «осталось N мин»
-                    ContinueRow(
-                        title = "Продолжить просмотр",
-                        entries = progress.distinctBy { it.sourceKey },
-                        onClick = onOpenDetails,
-                        onRemove = { e ->
-                            store.clearWatched(e.item)
-                            runCatching {
-                                java.io.File(context.filesDir, "downloads/" + e.item.storeKey).deleteRecursively()
-                            }
-                            progress = store.continueWatching()
-                        },
-                    )
-                }
+            // Тренды — первыми, это витрина
+            item {
+                PagedMediaRow(
+                    title = "🔥 Сейчас в тренде",
+                    loader = { page -> MediaApi.trending(page) },
+                    onOpen = onOpenDetails,
+                    filterFn = { store.isAllowed(it) },
+                )
             }
-            if (newReleases.isNotEmpty()) {
-                item {
-                    MediaRow(
-                        title = "🆕 Новинки",
-                        items = newReleases,
-                        onClick = onOpenDetails,
-                    )
-                }
+            // Новинки с переходом в каталог (клик по заголовку)
+            item {
+                PagedMediaRow(
+                    title = "🆕 Новинки фильмов",
+                    loader = { page -> MediaApi.newMovies(page) },
+                    onOpen = onOpenDetails,
+                    filterFn = { store.isAllowed(it) },
+                    onTitleClick = { onOpenCatalog("movies") },
+                )
             }
             item {
-                MediaRow(
-                    title = "Смотреть позже",
-                    items = watchLater,
-                    onClick = onOpenDetails,
-                    emptyText = "Пока пусто — отмечайте фильмы кнопкой «＋ Смотреть позже» в карточке",
+                PagedMediaRow(
+                    title = "🆕 Новинки сериалов",
+                    loader = { page -> MediaApi.newTv(page) },
+                    onOpen = onOpenDetails,
+                    filterFn = { store.isAllowed(it) },
+                    onTitleClick = { onOpenCatalog("tv") },
+                )
+            }
+            item {
+                PagedMediaRow(
+                    title = "🎪 Новинки шоу",
+                    loader = { page -> MediaApi.popularShows(page) },
+                    onOpen = onOpenDetails,
+                    filterFn = { store.isAllowed(it) },
+                    onTitleClick = { onOpenCatalog("shows") },
                 )
             }
             // Лента из статусов «Буду смотреть» (кнопка 🔖 в карточке)
@@ -123,22 +115,6 @@ fun HomeScreen(
                         onClick = onOpenDetails,
                     )
                 }
-            }
-            item {
-                MediaRow(
-                    title = "Избранное",
-                    items = favorites,
-                    onClick = onOpenDetails,
-                    emptyText = "Пока пусто — добавьте фильмы из карточки (☆)",
-                )
-            }
-            item {
-                PagedMediaRow(
-                    title = "🔥 Сейчас в тренде",
-                    loader = { page -> MediaApi.trending(page) },
-                    onOpen = onOpenDetails,
-                    filterFn = { store.isAllowed(it) },
-                )
             }
             item { Spacer(Modifier.height(24.dp)) }
         }
@@ -159,7 +135,7 @@ fun HomeScreen(
         updateInfo?.let { info ->
             // Фокус сразу на кнопке «Обновить»: пультом достаточно нажать OK
             val updateFocus = remember { FocusRequester() }
-            LaunchedEffect(info) { updateFocus.requestFocus() }
+            runCatching { LaunchedEffect(info) { updateFocus.requestFocus() } }
             androidx.tv.material3.Surface(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)

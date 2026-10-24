@@ -61,7 +61,7 @@ fun JumpToDialog(
                 modifier = Modifier.padding(bottom = 12.dp),
             )
             val firstFocus = remember { FocusRequester() }
-            LaunchedEffect(Unit) { firstFocus.requestFocus() }
+            runCatching { LaunchedEffect(Unit) { firstFocus.requestFocus() } }
             val presets = listOf(
                 "10% — начало" to 0.10f,
                 "25%" to 0.25f,

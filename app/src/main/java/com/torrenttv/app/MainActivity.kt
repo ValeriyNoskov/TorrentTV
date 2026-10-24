@@ -24,6 +24,8 @@ import com.torrenttv.app.ui.DetailsScreen
 import com.torrenttv.app.ui.EpisodesScreen
 import com.torrenttv.app.ui.TrailerScreen
 import com.torrenttv.app.ui.FavoritesScreen
+import com.torrenttv.app.ui.ContinueScreen
+import com.torrenttv.app.ui.WatchLaterScreen
 import com.torrenttv.app.ui.HomeScreen
 import com.torrenttv.app.ui.MagnetEntryScreen
 import com.torrenttv.app.ui.PlayerScreen
@@ -42,6 +44,8 @@ sealed interface Screen {
     data object TvShows : Screen
     data object Shows : Screen
     data object Favorites : Screen
+    data object Continue : Screen
+    data object WatchLater : Screen
     data object Search : Screen
     data object Settings : Screen
 
@@ -69,7 +73,7 @@ sealed interface Screen {
     ) : Screen
 
     companion object {
-        val TABS: List<Screen> = listOf(Home, Movies, TvShows, Shows, Favorites, Search, Settings)
+        val TABS: List<Screen> = listOf(Home, Movies, TvShows, Shows, Favorites, Continue, WatchLater, Search, Settings)
     }
 }
 
@@ -165,12 +169,21 @@ private fun App() {
                 Screen.Home -> HomeScreen(
                     currentVersion = BuildConfig.VERSION_NAME,
                     onOpenDetails = { screen = Screen.Details(it) },
+                    onOpenCatalog = { mode ->
+                        screen = when (mode) {
+                            "movies" -> Screen.Movies
+                            "tv" -> Screen.TvShows
+                            else -> Screen.Shows
+                        }
+                    },
                 )
 
                 Screen.Movies -> CatalogScreen(mode = "movies", onOpenDetails = { screen = Screen.Details(it) })
                 Screen.TvShows -> CatalogScreen(mode = "tv", onOpenDetails = { screen = Screen.Details(it) })
                 Screen.Shows -> CatalogScreen(mode = "shows", onOpenDetails = { screen = Screen.Details(it) })
                 Screen.Favorites -> FavoritesScreen(onOpenDetails = { screen = Screen.Details(it) })
+                Screen.Continue -> ContinueScreen(onOpenDetails = { screen = Screen.Details(it) })
+                Screen.WatchLater -> WatchLaterScreen(onOpenDetails = { screen = Screen.Details(it) })
                 Screen.Search -> SearchScreen(
                     onBack = { screen = Screen.Home },
                     onOpenDetails = { screen = Screen.Details(it) },

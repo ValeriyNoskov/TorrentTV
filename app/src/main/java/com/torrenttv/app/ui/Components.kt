@@ -24,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -411,15 +412,40 @@ fun MediaRow(    title: String,
     items: List<MediaItem>,
     onClick: (MediaItem) -> Unit,
     emptyText: String? = null,
+    onTitleClick: (() -> Unit)? = null,
 ) {
     Column(Modifier.padding(vertical = 10.dp)) {
-        Text(
-            text = title,
-            color = Color.White,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(horizontal = 32.dp, vertical = 6.dp),
-        )
+        if (onTitleClick != null) {
+            // Кликабельный заголовок: переход в каталог с этим типом
+            Surface(
+                onClick = onTitleClick,
+                modifier = Modifier.padding(start = 24.dp),
+                shape = clickableSurfaceShape(RoundedCornerShape(8.dp)),
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = Color.Transparent,
+                    contentColor = Color.White,
+                    focusedContainerColor = Color(0xFF2A3648),
+                    focusedContentColor = Color(0xFFF5B942),
+                    pressedContainerColor = Color(0xFF223047),
+                    pressedContentColor = Color(0xFFF5B942),
+                ),
+            ) {
+                Text(
+                    text = "$title  ›",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                )
+            }
+        } else {
+            Text(
+                text = title,
+                color = Color.White,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 32.dp, vertical = 6.dp),
+            )
+        }
         if (items.isEmpty() && emptyText != null) {
             Text(
                 text = emptyText,
@@ -451,6 +477,7 @@ fun PagedMediaRow(
     onOpen: (MediaItem) -> Unit,
     keyTag: Any? = null,
     filterFn: (MediaItem) -> Boolean = { true },
+    onTitleClick: (() -> Unit)? = null,
 ) {
     var items by remember(keyTag) { mutableStateOf<List<MediaItem>>(emptyList()) }
     var page by remember(keyTag) { mutableIntStateOf(0) }
@@ -519,13 +546,36 @@ fun PagedMediaRow(
     }
 
     Column(Modifier.padding(vertical = 10.dp)) {
-        Text(
-            text = title,
-            color = Color.White,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(horizontal = 32.dp, vertical = 6.dp),
-        )
+        if (onTitleClick != null) {
+            Surface(
+                onClick = onTitleClick,
+                modifier = Modifier.padding(start = 24.dp),
+                shape = clickableSurfaceShape(RoundedCornerShape(8.dp)),
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = Color.Transparent,
+                    contentColor = Color.White,
+                    focusedContainerColor = Color(0xFF2A3648),
+                    focusedContentColor = Color(0xFFF5B942),
+                    pressedContainerColor = Color(0xFF223047),
+                    pressedContentColor = Color(0xFFF5B942),
+                ),
+            ) {
+                Text(
+                    text = "$title  ›",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                )
+            }
+        } else {
+            Text(
+                text = title,
+                color = Color.White,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 32.dp, vertical = 6.dp),
+            )
+        }
         if (items.isEmpty()) {
             if (failed) {
                 Text(
@@ -598,12 +648,19 @@ fun GenreChipsMulti(
     }
 }
 
-/** Левый навигационный бар: логотип + вертикальные кнопки (иконка + подпись). */
+/** Левый навигационный бар. Свёрнут — только ярлыки (иконки);
+ *  фокус переходит в бар — раскрывается с подписями, ушёл — сворачивается. */
 @Composable
 fun SideNav(active: Screen, onTab: (Screen) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    val width by androidx.compose.animation.core.animateDpAsState(
+        targetValue = if (expanded) 208.dp else 76.dp,
+        animationSpec = androidx.compose.animation.core.tween(180),
+        label = "sidenav",
+    )
     Column(
         modifier = Modifier
-            .width(104.dp)
+            .width(width)
             .fillMaxHeight()
             .background(Color(0xFF12161F))
             .verticalScroll(rememberScrollState())
@@ -611,24 +668,35 @@ fun SideNav(active: Screen, onTab: (Screen) -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(
-            text = "ВНос\nКино",
-            color = Color(0xFFF5B942),
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center,
-            lineHeight = 18.sp,
-            modifier = Modifier.padding(bottom = 10.dp),
-        )
-        SideBarButton("🏠", "Главная", Screen.Home, active, onTab)
-        SideBarButton("🎬", "Фильмы", Screen.Movies, active, onTab)
-        SideBarButton("📺", "Сериалы", Screen.TvShows, active, onTab)
-        SideBarButton("🎪", "Шоу", Screen.Shows, active, onTab)
-        SideBarButton("⭐", "Избранное", Screen.Favorites, active, onTab)
-        SideBarButton("🔍", "Поиск", Screen.Search, active, onTab)
-        SideBarButton("⚙", "Настройки", Screen.Settings, active, onTab)
+        if (expanded) {
+            Text(
+                text = "ВНосКино",
+                color = Color(0xFFF5B942),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                modifier = Modifier.padding(bottom = 10.dp),
+            )
+        } else {
+            Text(
+                text = "ВК",
+                color = Color(0xFFF5B942),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 10.dp),
+            )
+        }
+        SideBarButton("🏠", "Главная", Screen.Home, active, onTab, expanded) { expanded = it }
+        SideBarButton("▶", "Продолжить", Screen.Continue, active, onTab, expanded) { expanded = it }
+        SideBarButton("⭐", "Избранное", Screen.Favorites, active, onTab, expanded) { expanded = it }
+        SideBarButton("🕐", "Смотреть позже", Screen.WatchLater, active, onTab, expanded) { expanded = it }
+        SideBarButton("🎬", "Фильмы", Screen.Movies, active, onTab, expanded) { expanded = it }
+        SideBarButton("📺", "Сериалы", Screen.TvShows, active, onTab, expanded) { expanded = it }
+        SideBarButton("🎪", "Шоу", Screen.Shows, active, onTab, expanded) { expanded = it }
+        SideBarButton("🔍", "Поиск", Screen.Search, active, onTab, expanded) { expanded = it }
+        SideBarButton("⚙", "Настройки", Screen.Settings, active, onTab, expanded) { expanded = it }
         // Сразу после настроек — всегда видна, никаких прыжков вниз
-        SideBarExitButton()
+        SideBarExitButton(expanded) { expanded = it }
     }
 }
 
@@ -639,13 +707,16 @@ fun SideBarButton(
     target: Screen,
     active: Screen,
     onTab: (Screen) -> Unit,
+    expanded: Boolean = true,
+    onFocusInBar: (Boolean) -> Unit = {},
 ) {
     val isActive = active == target
     Surface(
         onClick = { onTab(target) },
         modifier = Modifier
-            .width(92.dp)
-            .mouseClick { onTab(target) },
+            .width(if (expanded) 188.dp else 60.dp)
+            .mouseClick { onTab(target) }
+            .onFocusChanged { onFocusInBar(it.hasFocus) },
         shape = clickableSurfaceShape(RoundedCornerShape(12.dp)),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (isActive) Color(0xFFF5B942) else Color.Transparent,
@@ -656,30 +727,38 @@ fun SideBarButton(
             pressedContentColor = Color(0xFF0E1116),
         ),
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp, horizontal = if (expanded) 12.dp else 0.dp),
         ) {
-            Text(text = icon, fontSize = 22.sp)
             Text(
-                text = label,
-                fontSize = 11.sp,
-                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-                maxLines = 1,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                text = icon,
+                fontSize = 21.sp,
+                modifier = if (expanded) Modifier.padding(end = 10.dp) else Modifier,
             )
+            if (expanded) {
+                Text(
+                    text = label,
+                    fontSize = 14.sp,
+                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                    maxLines = 1,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Left,
+                )
+            }
         }
     }
 }
 
 /** Кнопка «Выход» внизу левого меню — закрывает приложение. */
 @Composable
-fun SideBarExitButton() {
+fun SideBarExitButton(expanded: Boolean = true, onFocusInBar: (Boolean) -> Unit = {}) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var confirm by remember { mutableStateOf(false) }
     androidx.tv.material3.Surface(
         onClick = { confirm = true },
-        modifier = Modifier.width(92.dp),
+        modifier = Modifier
+            .width(if (expanded) 188.dp else 60.dp)
+            .onFocusChanged { onFocusInBar(it.hasFocus) },
         shape = clickableSurfaceShape(RoundedCornerShape(12.dp)),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color.Transparent,
@@ -694,55 +773,190 @@ fun SideBarExitButton() {
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
         ) {
-            Text(text = "⛔", fontSize = 22.sp)
-            Text(
-                text = "Выход",
-                fontSize = 11.sp,
-                maxLines = 1,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = if (expanded) 12.dp else 0.dp),
+            ) {
+                Text(text = "⛔", fontSize = 21.sp, modifier = if (expanded) Modifier.padding(end = 10.dp) else Modifier)
+                if (expanded) {
+                    Text(
+                        text = "Выход",
+                        fontSize = 14.sp,
+                        maxLines = 1,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Left,
+                    )
+                }
+            }
         }
     }
 
     // Подтверждение: случайно нажать «Выход» не страшно — фокус на «Отмене»
     if (confirm) {
-        androidx.activity.compose.BackHandler { confirm = false }
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(Color(0x66000000)),
-            contentAlignment = Alignment.Center,
+        // Dialog — поверх ВСЕГО экрана. Обычный Box здесь сжимался
+        // в ширину сайдбара (104dp): текст по букве, кнопки обрезаны
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { confirm = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
         ) {
             val cancelFocus = remember { FocusRequester() }
-            LaunchedEffect(Unit) { runCatching { cancelFocus.requestFocus() } }
-            Column(
+            // Небольшая задержка: без неё requestFocus срабатывает до
+            // фактической отрисовки Dialog и фокус остаётся на «Выйти»
+            LaunchedEffect(Unit) {
+                kotlinx.coroutines.delay(150)
+                runCatching { cancelFocus.requestFocus() }
+            }
+            Box(
                 Modifier
-                    .width(420.dp)
-                    .background(Color(0xF0151B26), RoundedCornerShape(14.dp))
-                    .padding(18.dp),
+                    .fillMaxSize()
+                    .background(Color(0x66000000)),
+                contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    "Выйти из приложения?",
-                    color = Color(0xFFF5B942),
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    "Нажали случайно? Выберите «Отмена».",
-                    color = Color.White.copy(alpha = 0.6f),
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(top = 6.dp, bottom = 14.dp),
-                )
-                Row {
-                    androidx.tv.material3.Button(
-                        onClick = { confirm = false },
-                        modifier = Modifier.focusRequester(cancelFocus),
-                    ) { Text("Отмена") }
-                    Spacer(Modifier.width(10.dp))
-                    androidx.tv.material3.Button(onClick = {
-                        com.torrenttv.app.data.AppLog.log("app", "выход через боковое меню (подтверждён)")
-                        (context as? android.app.Activity)?.finishAffinity()
-                    }) { Text("Выйти") }
+                Column(
+                    Modifier
+                        .width(420.dp)
+                        .background(Color(0xF0151B26), RoundedCornerShape(14.dp))
+                        .padding(18.dp),
+                ) {
+                    Text(
+                        "Выйти из приложения?",
+                        color = Color(0xFFF5B942),
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        "Нажали случайно? Выберите «Отмена».",
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(top = 6.dp, bottom = 14.dp),
+                    )
+                    Row {
+                        androidx.tv.material3.Button(
+                            onClick = { confirm = false },
+                            modifier = Modifier.focusRequester(cancelFocus),
+                        ) { Text("Отмена") }
+                        Spacer(Modifier.width(10.dp))
+                        androidx.tv.material3.Button(onClick = {
+                            com.torrenttv.app.data.AppLog.log("app", "выход через боковое меню (подтверждён)")
+                            (context as? android.app.Activity)?.finishAffinity()
+                        }) { Text("Выйти") }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Экран «Продолжить просмотр»: все незавершённые карточки с прогрессом. */
+@Composable
+fun ContinueScreen(onOpenDetails: (MediaItem) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val store = remember { LocalStore(context) }
+    var entries by remember { mutableStateOf(store.continueWatching()) }
+    androidx.compose.runtime.LaunchedEffect(Unit) { entries = store.continueWatching() }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0E1116)),
+    ) {
+        Text(
+            text = "▶ Продолжить просмотр",
+            color = Color.White,
+            fontSize = 26.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 32.dp, vertical = 14.dp),
+        )
+        if (entries.isEmpty()) {
+            Text(
+                "Пока пусто — начните фильм или серию, и он появится здесь",
+                color = Color.White.copy(alpha = 0.55f),
+                fontSize = 15.sp,
+                modifier = Modifier.padding(horizontal = 32.dp),
+            )
+        } else {
+            androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(6),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 28.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                items(entries.size, key = { entries[it].item.storeKey }) { i ->
+                    val e = entries[i]
+                    Column {
+                        PosterCard(e.item) { onOpenDetails(e.item) }
+                        // Прогресс-полоска под постером
+                        if (e.durationSec > 0) {
+                            Box(
+                                Modifier
+                                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                                    .fillMaxWidth()
+                                    .height(4.dp)
+                                    .background(Color(0xFF2A3648)),
+                            ) {
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth(
+                                            (e.positionSec.toFloat() / e.durationSec).coerceIn(0f, 1f),
+                                        )
+                                        .height(4.dp)
+                                        .background(Color(0xFFF5B942)),
+                                )
+                            }
+                            Text(
+                                text = buildString {
+                                    if (e.episodeLabel.isNotBlank()) append(e.episodeLabel + " · ")
+                                    val left = (e.durationSec - e.positionSec) / 60
+                                    if (left > 0) append("осталось ~$left мин") else append("почти досмотрено")
+                                },
+                                color = Color.White.copy(alpha = 0.5f),
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                modifier = Modifier.padding(horizontal = 4.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Экран «Смотреть позже»: отложенные карточки. */
+@Composable
+fun WatchLaterScreen(onOpenDetails: (MediaItem) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val store = remember { LocalStore(context) }
+    var list by remember { mutableStateOf(store.watchLater()) }
+    androidx.compose.runtime.LaunchedEffect(Unit) { list = store.watchLater() }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0E1116)),
+    ) {
+        Text(
+            text = "🕐 Смотреть позже",
+            color = Color.White,
+            fontSize = 26.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 32.dp, vertical = 14.dp),
+        )
+        if (list.isEmpty()) {
+            Text(
+                "Пока пусто — отмечайте фильмы кнопкой «＋ Смотреть позже» в карточке",
+                color = Color.White.copy(alpha = 0.55f),
+                fontSize = 15.sp,
+                modifier = Modifier.padding(horizontal = 32.dp),
+            )
+        } else {
+            androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(6),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 28.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                items(list.size) { i ->
+                    PosterCard(list[i]) { onOpenDetails(list[i]) }
                 }
             }
         }

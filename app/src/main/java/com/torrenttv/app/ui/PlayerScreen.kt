@@ -434,7 +434,8 @@ private fun VideoPlayer(
     val watchKey = stream?.let { sourceKey + ":f" + it.fileIndex } ?: sourceKey
 
     val resumeSec = remember(stream) {
-        store.continueWatching().firstOrNull { it.sourceKey == watchKey }?.positionSec ?: 0
+        store.continueWatching().firstOrNull { it.sourceKey == watchKey }?.positionSec
+            ?: store.episodePosition(watchKey)
     }
 
     val player = remember(stream) {
@@ -668,7 +669,7 @@ private fun VideoPlayer(
             if (!showFiles && !showGear && !showTrackMenu) showPanel = false
         }
     }
-    LaunchedEffect(showPanel) { if (showPanel) playFocus.requestFocus() }
+    runCatching { LaunchedEffect(showPanel) { if (showPanel) playFocus.requestFocus() } }
 
     // Единый обработчик кнопок пульта — вызывается и из Compose-перехвата
     // (onPreviewKeyEvent на Box), и из PlayerView: панель появляется при
@@ -810,7 +811,7 @@ private fun VideoPlayer(
         // Фокус на «Отмена» — случайное OK не проматывает сериал
         if (nextCountdown != null) {
             val cancelFocus = remember { FocusRequester() }
-            LaunchedEffect(Unit) { cancelFocus.requestFocus() }
+            runCatching { LaunchedEffect(Unit) { cancelFocus.requestFocus() } }
             Column(
                 Modifier
                     .align(Alignment.Center)

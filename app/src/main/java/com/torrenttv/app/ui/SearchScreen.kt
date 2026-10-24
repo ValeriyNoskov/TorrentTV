@@ -245,7 +245,7 @@ fun SearchScreen(
             Spacer(Modifier.width(10.dp))
             Button(onClick = {
                 showKb = !showKb
-                if (!showKb) findFocus.requestFocus()
+                runCatching { if (!showKb) findFocus.requestFocus() }
             }) { Text(if (showKb) "⌨ Скрыть ввод" else "⌨ Ввод") }
             Spacer(Modifier.width(10.dp))
             Button(onClick = { searchTickForce++ }, modifier = Modifier.focusRequester(findFocus)) {
@@ -462,7 +462,7 @@ fun SearchScreen(
         if (showKb) {
             if (externalKb) {
                 val kbFieldFocus = remember { FocusRequester() }
-                LaunchedEffect(Unit) { kbFieldFocus.requestFocus() }
+                runCatching { LaunchedEffect(Unit) { kbFieldFocus.requestFocus() } }
                 androidx.compose.foundation.text.BasicTextField(
                     value = query,
                     onValueChange = { query = it },
@@ -512,7 +512,7 @@ fun TvKeyboard(
     onClear: () -> Unit,
     firstKeyFocus: FocusRequester? = null,
 ) {
-    LaunchedEffect(Unit) { firstKeyFocus?.requestFocus() }
+    runCatching { LaunchedEffect(Unit) { firstKeyFocus?.requestFocus() } }
 
     Column(
         verticalArrangement = Arrangement.spacedBy(6.dp),

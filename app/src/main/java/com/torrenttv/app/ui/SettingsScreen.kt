@@ -33,6 +33,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -143,6 +147,26 @@ fun SettingsScreen(onBack: () -> Unit) {
             .padding(20.dp),
     ) {
         // ---------- Разделы (слева): компактно, всё видно без прокрутки ----------
+        // Фокус-якоря: 0 = «← Назад», 1..n = разделы, n+1 = «Выход».
+        // LEFT из правой панели возвращает к АКТИВНОМУ разделу, а не в начало.
+        val itemCount = SECTIONS.size + 2
+        val sectionReqs = remember { List(itemCount) { FocusRequester() } }
+        // Куда попадает фокус по RIGHT из разделов — первый контрол правой панели
+        val contentFocus = remember { FocusRequester() }
+        var activeSection by remember { mutableStateOf(1) }
+        val sectionMod: (Int) -> Modifier = { idx ->
+            Modifier
+                .focusRequester(sectionReqs[idx])
+                .onFocusChanged { if (it.hasFocus) activeSection = idx }
+        }
+        // Стартовый фокус — на пункте активного раздела, а не на первом сверху
+        LaunchedEffect(Unit) {
+            val idx = SECTIONS.indexOfFirst { it.first == section } + 1
+            if (idx > 0) {
+                activeSection = idx
+                runCatching { sectionReqs[idx].requestFocus() }
+            }
+        }
         Column(
             Modifier
                 .width(252.dp)
@@ -150,18 +174,27 @@ fun SettingsScreen(onBack: () -> Unit) {
                 .verticalScroll(rememberScrollState())
                 // Фокус не должен убегать влево в главный сайдбар:
                 // OK там переключает вкладку («сброс на главный экран»)
-                .focusProperties { left = FocusRequester.Cancel },
-        ) {
-            SectionItem("← Назад", false) { onBack() }
+                .focusProperties { left = FocusRequester.Cancel }
+                // RIGHT из разделов — в правую панель, а не вниз по колонке
+                .onPreviewKeyEvent {
+                    if (it.key == androidx.compose.ui.input.key.Key.DirectionRight &&
+                        it.type == androidx.compose.ui.input.key.KeyEventType.KeyUp
+                    ) {
+                        runCatching { contentFocus.requestFocus() }.getOrDefault(Unit)
+                        true
+                    } else false
+                },        ) {
+            SectionItem("← Назад", false, sectionMod(0)) { onBack() }
             Spacer(Modifier.height(8.dp))
-            for ((id, title, _) in SECTIONS) {
-                SectionItem(title, section == id) {
+            for ((i, item) in SECTIONS.withIndex()) {
+                val (id, title, _) = item
+                SectionItem(title, section == id, sectionMod(i + 1)) {
                     section = id
                     store.setLastSettingsSection(id)
                     subscreen = null
                 }
             }
-            SectionItem("⛔ Выход", false) {
+            SectionItem("⛔ Выход", false, sectionMod(SECTIONS.size + 1)) {
                 (context as? android.app.Activity)?.finishAffinity()
             }
         }
@@ -182,8 +215,21 @@ fun SettingsScreen(onBack: () -> Unit) {
                 Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
-                    // LEFT из параметров — в колонку разделов, не в сайдбар
-                    .focusProperties { left = FocusRequester.Cancel },
+                    // RIGHT → первый контрол панели; LEFT → к активному разделу.
+                    // Прямой перехват: focusProperties{left} здесь не ловит
+                    // направление из дочерних Surface
+                    .onPreviewKeyEvent {
+                        if (it.type != androidx.compose.ui.input.key.KeyEventType.KeyUp) false
+                        else when (it.key) {
+                            androidx.compose.ui.input.key.Key.DirectionRight -> {
+                                runCatching { contentFocus.requestFocus() }.getOrDefault(Unit); true
+                            }
+                            androidx.compose.ui.input.key.Key.DirectionLeft -> {
+                                runCatching { sectionReqs[activeSection].requestFocus() }.getOrDefault(Unit); true
+                            }
+                            else -> false
+                        }
+                    },
             ) {
                 when (section) {
                     "jackett" -> {
@@ -191,6 +237,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             title = "Адрес сервера",
                             value = jackettUrl.ifBlank { "Не задан" },
                             valueOk = jackettUrl.isNotBlank(),
+                            modifier = Modifier.focusRequester(contentFocus),
                         ) { openEdit("jurl", jackettUrl, "Адрес Jackett") }
                         SettingsRow(
                             title = "API-ключ",
@@ -218,6 +265,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                         var updBusy by remember { mutableStateOf(false) }
                         SettingsRow(
                             title = "⬆ Проверить обновления",
+                            modifier = Modifier.focusRequester(contentFocus),
                             value = when {
                                 updBusy -> "Проверяю…"
                                 updInfo != null ->
@@ -244,6 +292,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 updMsg = ""
                                 com.torrenttv.app.update.UpdateManager.checkForUpdate(
                                     com.torrenttv.app.BuildConfig.VERSION_NAME,
+                                    com.torrenttv.app.update.UpdateManager.ghToken(context),
                                 ) { info ->
                                     updInfo = info
                                     updBusy = false
@@ -265,6 +314,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             title = if (extPlayer) "✅ Всегда внешний плеер" else "⬜ Всегда внешний плеер",
                             value = if (extPlayer) "ВКЛ — видео открывается в VLC/MX Player" else "ВЫКЛ — встроенный плеер",
                             valueOk = extPlayer,
+                            modifier = Modifier.focusRequester(contentFocus),
                         ) {
                             extPlayer = !extPlayer
                             store.setUseExternalPlayer(extPlayer)
@@ -310,6 +360,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             title = if (recOn) "✅ Запись логов" else "⬜ Запись логов",
                             value = if (recOn) "Ведётся" else "Выключена",
                             valueOk = recOn,
+                            modifier = Modifier.focusRequester(contentFocus),
                         ) {
                             recOn = !recOn
                             com.torrenttv.app.data.AppLog.recording = recOn
@@ -376,6 +427,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             title = if (extKb) "✅ Внешняя клавиатура" else "⬜ Внешняя клавиатура",
                             value = if (extKb) "ВКЛ — системный ввод (пульт с клавиатурой, Air Mouse, USB)" else "ВЫКЛ — встроенная экранная клавиатура",
                             valueOk = extKb,
+                            modifier = Modifier.focusRequester(contentFocus),
                         ) {
                             extKb = !extKb
                             store.setUseExternalKeyboard(extKb)
@@ -393,6 +445,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             title = "Ключ Кинопоиск API",
                             value = if (kpKey.isNotBlank()) "•••••••• (свой)" else "Общий (вшит в приложение)",
                             valueOk = kpKey.isNotBlank(),
+                            modifier = Modifier.focusRequester(contentFocus),
                         ) { openEdit("kpkey", kpKey, "Ключ Кинопоиск API") }
                         SettingsRow(
                             title = "Ключ TMDB",
@@ -424,6 +477,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             title = "🩺 Запустить проверку",
                             value = "Проверить все источники",
                             valueOk = true,
+                            modifier = Modifier.focusRequester(contentFocus),
                         ) { subscreen = "netcheck" }
                         SettingsNote(
                             "Проверка показывает, какие источники (торренты, база фильмов, " +
@@ -438,6 +492,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             title = "Адрес сервера",
                             value = store.torrServeHost(),
                             valueOk = true,
+                            modifier = Modifier.focusRequester(contentFocus),
                         ) { openEdit("ts", store.torrServeHost(), "http://127.0.0.1:8090") }
                         SettingsNote(
                             "TorrServe (MatriX) — отдельное бесплатное приложение-движок " +
@@ -550,10 +605,15 @@ fun SettingsScreen(onBack: () -> Unit) {
 
 /** Пункт списка разделов слева. */
 @Composable
-private fun SectionItem(title: String, selected: Boolean, onClick: () -> Unit) {
+private fun SectionItem(
+    title: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
     Surface(
         onClick = onClick,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 2.dp)
             .mouseClick { onClick() },
@@ -585,11 +645,12 @@ private fun SettingsRow(
     value: String,
     valueOk: Boolean = false,
     danger: Boolean = false,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     Surface(
         onClick = onClick,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 3.dp)
             .mouseClick { onClick() },
@@ -681,7 +742,7 @@ private fun EditScreen(
             Button(onClick = onCancel) { Text("Отмена") }
         }
         if (externalKb) {
-            LaunchedEffect(Unit) { kbFocus.requestFocus() }
+            runCatching { LaunchedEffect(Unit) { kbFocus.requestFocus() } }
             androidx.compose.foundation.text.BasicTextField(
                 value = value,
                 onValueChange = onChange,

@@ -44,6 +44,11 @@ object UpdateManager {
     fun readyToInstall(info: UpdateInfo): Boolean =
         downloaded?.first?.version == info.version
 
+    /** Токен для GitHub: настройки ТВ → вшитый в сборку. */
+    fun ghToken(context: Context): String =
+        com.torrenttv.app.data.LocalStore(context).githubToken()
+            .ifBlank { com.torrenttv.app.BuildConfig.GH_EMBEDDED_TOKEN }
+
     /**
      * Тихо скачать APK в кеш (если ещё не скачан). Ничего не показывает
      * и не устанавливает — результат ждёт в readyToInstall().
@@ -53,7 +58,9 @@ object UpdateManager {
         downloading = true
         Thread {
             try {
-                val request = Request.Builder().url(info.apkUrl).build()
+                val request = Request.Builder().url(info.apkUrl)
+                    .apply { val t = ghToken(context); if (t.isNotBlank()) header("Authorization", "Bearer $t") }
+                    .build()
                 http.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}")
                     val apkFile = File(context.cacheDir, "update-${info.version}.apk")
@@ -73,13 +80,18 @@ object UpdateManager {
         }.start()
     }
 
-    /** Проверить наличие обновления. Результат — в колбеке (главный поток). */
-    fun checkForUpdate(currentVersion: String, onResult: (UpdateInfo?) -> Unit) {
+    /**
+     * Проверить наличие обновления. Результат — в колбеке (главный поток).
+     * @param token GitHub-токен (настройки ТВ или вшитый) — обязателен
+     *              для приватного репозитория
+     */
+    fun checkForUpdate(currentVersion: String, token: String = "", onResult: (UpdateInfo?) -> Unit) {
         Thread {
             try {
                 val request = Request.Builder()
                     .url(RELEASES_API)
                     .header("Accept", "application/vnd.github+json")
+                    .apply { if (token.isNotBlank()) header("Authorization", "Bearer $token") }
                     .build()
                 http.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}")
@@ -136,7 +148,9 @@ object UpdateManager {
         Thread {
             try {
                 mainHandler.post { onProgress("Скачивание v${info.version}…") }
-                val request = Request.Builder().url(info.apkUrl).build()
+                val request = Request.Builder().url(info.apkUrl)
+                    .apply { val t = ghToken(context); if (t.isNotBlank()) header("Authorization", "Bearer $t") }
+                    .build()
                 http.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}")
                     val apkFile = File(context.cacheDir, "update-${info.version}.apk")

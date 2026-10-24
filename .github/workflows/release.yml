@@ -45,12 +45,13 @@ jobs:
           KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
 
       - name: Сборка подписанного APK
-        run: ./gradlew assembleRelease --stacktrace
+        run: ./gradlew assembleRelease --stacktrace -PghEmbeddedToken="$GH_EMBEDDED_TOKEN"
         env:
           VNOSKINO_KEYSTORE: ${{ github.workspace }}/keystore/release-keystore.jks
           VNOSKINO_STORE_PASSWORD: ${{ secrets.KS_STORE_PASSWORD }}
           VNOSKINO_KEY_PASSWORD: ${{ secrets.KS_KEY_PASSWORD }}
           VNOSKINO_KEY_ALIAS: vnoskino
+          GH_EMBEDDED_TOKEN: ${{ secrets.GH_EMBEDDED_TOKEN }}
 
       - name: Переименовать APK
         run: |
