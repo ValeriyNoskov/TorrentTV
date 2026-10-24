@@ -210,14 +210,21 @@ fun OnlinePlayerScreen(
         // TorrServe (label="torrserve") — локальный стрим, Referer не нужен.
         // TorrServe-движок узнаём по адресу, а не по метке ссылки:
         // SmartPlay создаёт ссылки с произвольными label («⚡ Играть сразу…»),
-        // из-за метки не срабатывали retry/таймауты
-        val isTorrserve = link.url.contains("127.0.0.1:8090")
+        // из-за метки не срабатывали retry/таймауты.
+        // ВАЖНО: TorrServe может стоять не на 127.0.0.1, а на другом хосте
+        // в сети (192.168.3.78:8090) — раньше такой поток считался обычным
+        // HTTP: таймаут 15 сек вместо 60 и без повторов, отсюда «просмотр встал».
+        val tsHost = store.torrServeHost().trimEnd('/')
+        val isTorrserve = (tsHost.isNotBlank() && link.url.startsWith(tsHost)) ||
+            (link.url.contains(":8090/") && link.url.contains("/stream/"))
         val referer = if (isTorrserve) "" else link.referer.ifBlank { "https://filmix.ac/" }
         val httpFactory = DefaultHttpDataSource.Factory()
             .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
             .apply { if (referer.isNotBlank()) setDefaultRequestProperties(mapOf("Referer" to referer)) }
             .setConnectTimeoutMs(15_000)
-            .setReadTimeoutMs(if (isTorrserve) 60_000 else 15_000)
+            // TorrServe отдаёт первые байты, пока качает куски с пиров:
+            // 60 сек на чтение, иначе media3 рвёт живой поток по таймауту
+            .setReadTimeoutMs(if (isTorrserve) 90_000 else 15_000)
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(httpFactory))
             .build()

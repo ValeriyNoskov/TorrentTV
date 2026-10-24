@@ -624,6 +624,22 @@ class LocalStore(context: Context) {
     // ---------- TorrServe (внешний движок стриминга торрентов) ----------
 
     /** Адрес TorrServe (внешний движок стриминга торрентов). */
+    // ---------- IPTV ----------
+
+    /** Свой плейлист каналов (m3u/m3u8) — добавляется к встроенному списку. */
+    fun iptvPlaylistUrl(): String = prefs.getString("iptv_playlist_url", "") ?: ""
+
+    fun setIptvPlaylistUrl(v: String) {
+        prefs.edit().putString("iptv_playlist_url", v.trim()).apply()
+    }
+
+    /** Подключать свой плейлист к встроенному (по умолчанию — да, если задан). */
+    fun iptvUseOwnPlaylist(): Boolean = prefs.getBoolean("iptv_use_own", true)
+
+    fun setIptvUseOwnPlaylist(v: Boolean) {
+        prefs.edit().putBoolean("iptv_use_own", v).apply()
+    }
+
     fun torrServeHost(): String = prefs.getString("torrserve_host", "http://127.0.0.1:8090") ?: "http://127.0.0.1:8090"
 
     fun setTorrServeHost(v: String) {
@@ -681,28 +697,55 @@ class LocalStore(context: Context) {
 
     // ---------- Каталог «Торренты»: сохранение фильтров ----------
 
-    /** Фильтры раздела «Торренты» (type/genre/year/country) — переживают выход. */
-    fun saveTorrentsFilter(type: String, genre: String?, year: String?, country: String?) {
+    /**
+     * Фильтры раздела «Торренты» — мультивыбор по каждому разделу
+     * (тип, жанры, страны, годы). Пустой набор = «любой».
+     */
+    data class TorrentsFilters(
+        val types: Set<String> = emptySet(),     // movie | tv | show
+        val genres: Set<String> = emptySet(),    // slug'и категорий трекера
+        val countries: Set<String> = emptySet(),
+        val years: Set<String> = emptySet(),     // «2024» или «2010-е»
+    ) {
+        val count: Int get() = types.size + genres.size + countries.size + years.size
+        val isEmpty: Boolean get() = count == 0
+    }
+
+    /** Фильтры «Торрентов» (мультивыбор) — переживают выход и перезапуск. */
+    fun saveTorrentsFilters(f: TorrentsFilters) {
         prefs.edit().putString(
-            "torrents_filter",
+            "torrents_filters",
             JSONObject()
-                .put("type", type)
-                .put("genre", genre ?: "")
-                .put("year", year ?: "")
-                .put("country", country ?: "")
+                .put("types", JSONArray(f.types.toList()))
+                .put("genres", JSONArray(f.genres.toList()))
+                .put("countries", JSONArray(f.countries.toList()))
+                .put("years", JSONArray(f.years.toList()))
                 .toString(),
         ).apply()
     }
 
-    fun loadTorrentsFilter(): Array<String?> = runCatching {
+    fun loadTorrentsFilters(): TorrentsFilters = runCatching {
+        val raw = prefs.getString("torrents_filters", null)
+        if (raw == null) return@runCatching legacyTorrentsFilter()
+        val o = JSONObject(raw)
+        fun set(name: String): Set<String> {
+            val arr = o.optJSONArray(name) ?: return emptySet()
+            return (0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }.toSet()
+        }
+        TorrentsFilters(set("types"), set("genres"), set("countries"), set("years"))
+    }.getOrDefault(TorrentsFilters())
+
+    /** Старый формат (одиночный выбор) — читаем, чтобы фильтры не сбросились. */
+    private fun legacyTorrentsFilter(): TorrentsFilters = runCatching {
         val o = JSONObject(prefs.getString("torrents_filter", "{}") ?: "{}")
-        arrayOf(
-            o.safeString("type", "all").ifBlank { "all" },
-            o.safeString("genre").ifBlank { null },
-            o.safeString("year").ifBlank { null },
-            o.safeString("country").ifBlank { null },
+        val type = o.safeString("type", "all").ifBlank { "all" }
+        TorrentsFilters(
+            types = if (type == "all" || type.isBlank()) emptySet() else setOf(type),
+            genres = listOfNotNull(o.safeString("genre").ifBlank { null }).toSet(),
+            countries = listOfNotNull(o.safeString("country").ifBlank { null }).toSet(),
+            years = listOfNotNull(o.safeString("year").ifBlank { null }).toSet(),
         )
-    }.getOrDefault(arrayOf("all", null, null, null))
+    }.getOrDefault(TorrentsFilters())
 
     // ---------- Плеер: запоминание настроек (как в Just/Next Player) ----------
 

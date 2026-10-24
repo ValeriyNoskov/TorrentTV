@@ -21,7 +21,9 @@ object JackettProvider {
         if (!config.isConfigured) return emptyList()
         val base = config.url.trimEnd('/')
         val q = URLEncoder.encode(query, "UTF-8")
-        val url = "$base/api/v2.0/all/results?apikey=${config.apiKey}&query=$q&cat=2000,5000&limit=100"
+        // torznab-эндпоинт: без t=search Jackett возвращает пустой ответ
+        val url = "$base/api/v2.0/indexers/all/results/torznab/api" +
+            "?apikey=${config.apiKey}&t=search&q=$q&cat=2000,5000&limit=100"
         val xml = TorrentHttp.get(url) ?: return emptyList()
         return parseTorznab(xml)
     }

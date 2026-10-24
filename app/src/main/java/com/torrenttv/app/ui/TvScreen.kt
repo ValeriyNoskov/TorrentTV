@@ -1,0 +1,285 @@
+package com.torrenttv.app.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.tv.material3.Text
+import com.torrenttv.app.data.AppLog
+import com.torrenttv.app.data.Epg
+import com.torrenttv.app.data.Iptv
+import com.torrenttv.app.data.IptvChannel
+import com.torrenttv.app.data.LocalStore
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+
+/** Канал + что идёт сейчас (из телепрограммы). */
+private data class TvEntry(
+    val channel: IptvChannel,
+    val now: Epg.Program?,
+    val next: Epg.Program?,
+)
+
+/**
+ * Раздел «📡 ТВ»: живые каналы по HLS + телепрограмма.
+ *
+ * Состав каналов — только то, что реально открывается из Москвы (встроенный
+ * плейлист проверен: манифест 200 + первый сегмент 206), плюс свой плейлист
+ * из настроек. Ace Stream и NoxBit не используются — это не HLS.
+ *
+ * Программа: teleguide.info (XMLTV), большой файл качается один раз в 12 ч
+ * и кэшируется; в плитке видно «Сейчас …», в плеере — «Сейчас/Далее».
+ */
+@Composable
+fun TvScreen(onPlay: (IptvChannel, List<IptvChannel>) -> Unit) {
+    val context = LocalContext.current
+    val store = remember { LocalStore(context) }
+
+    var channels by remember { mutableStateOf<List<IptvChannel>>(emptyList()) }
+    var group by remember { mutableStateOf("Все") }
+    var loading by remember { mutableStateOf(true) }
+    var epgLoading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf("") }
+    var epg by remember { mutableStateOf<Map<String, List<Epg.Program>>>(emptyMap()) }
+    var clock by remember { mutableStateOf(System.currentTimeMillis()) }
+    var refreshTick by remember { mutableStateOf(0) }
+
+    // Каналы: свой плейлист (если задан) + встроенный
+    LaunchedEffect(refreshTick) {
+        loading = true
+        val list = withContext(Dispatchers.IO) {
+            runCatching {
+                Iptv.load(context, store.iptvPlaylistUrl(), store.iptvUseOwnPlaylist())
+            }.getOrElse {
+                error = "${it.javaClass.simpleName}: ${it.message ?: "ошибка плейлиста"}"
+                emptyList()
+            }
+        }
+        channels = list
+        loading = false
+        AppLog.log("tv", "каналов загружено: ${list.size}, групп: ${Iptv.groups(list).size}")
+    }
+
+    // Телепрограмма: из кэша сразу, обновление — в фоне (не блокирует каналы)
+    LaunchedEffect(channels, refreshTick) {
+        if (channels.isEmpty()) return@LaunchedEffect
+        epgLoading = true
+        val names = channels.map { it.name }
+        epg = withContext(Dispatchers.IO) { Epg.load(context, names) }
+        epgLoading = false
+    }
+
+    // Раз в минуту пересчитываем «сейчас идёт»
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(60_000)
+            clock = System.currentTimeMillis()
+        }
+    }
+
+    val groups = remember(channels) { Iptv.groups(channels) }
+    val shownChannels = remember(channels, group) {
+        if (group == "Все") channels else channels.filter { it.group == group }
+    }
+    val shown = remember(shownChannels, epg, clock) {
+        shownChannels.map { ch ->
+            val list = Epg.forChannel(epg, ch.name)
+            TvEntry(
+                channel = ch,
+                now = list.firstOrNull { it.isNow(clock) },
+                next = list.firstOrNull { it.start > clock },
+            )
+        }
+    }
+
+    Box(Modifier.fillMaxSize().background(Color(0xFF0E1116))) {
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 32.dp, vertical = 8.dp),
+            ) {
+                Text(
+                    "📡 ТВ",
+                    color = Color.White,
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(Modifier.width(14.dp))
+                Text(
+                    when {
+                        loading -> "Загружаю каналы…"
+                        channels.isEmpty() -> "Каналы не загрузились"
+                        else -> buildString {
+                            append("${shown.size} каналов · ${groups.size} групп")
+                            if (epg.isNotEmpty()) append(" · программа есть")
+                            if (epgLoading) append(" · обновляю программу…")
+                        }
+                    },
+                    color = Color.White.copy(alpha = 0.45f),
+                    fontSize = 14.sp,
+                )
+                Spacer(Modifier.weight(1f))
+                TvPill("↻ Обновить") {
+                    refreshTick++
+                }
+            }
+
+            // Фильтр по группам: «Все» + группы плейлиста
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 32.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                item {
+                    TvPill(if (group == "Все") "✓ Все" else "Все", active = group == "Все") { group = "Все" }
+                }
+                items(groups) { (name, count) ->
+                    TvPill(
+                        text = if (group == name) "✓ $name · $count" else "$name · $count",
+                        active = group == name,
+                    ) { group = name }
+                }
+            }
+
+            if (error.isNotBlank()) {
+                Text(
+                    "⚠ $error",
+                    color = Color(0xFFF5B942),
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(horizontal = 36.dp, vertical = 6.dp),
+                )
+            }
+
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(210.dp),
+                contentPadding = PaddingValues(horizontal = 28.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                items(shown, key = { it.channel.name + it.channel.url }) { entry ->
+                    ChannelTile(entry) { onPlay(entry.channel, shownChannels) }
+                }
+            }
+        }
+    }
+}
+
+/** Компактная кнопка-«пилюля» (группы, обновление). */
+@Composable
+private fun TvPill(text: String, active: Boolean = false, onClick: () -> Unit) {
+    androidx.tv.material3.Surface(
+        onClick = onClick,
+        shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+        colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+            containerColor = if (active) Color(0xFF3A2E14) else Color(0xFF1F2430),
+            contentColor = if (active) Color(0xFFF5B942) else Color.White.copy(alpha = 0.85f),
+            focusedContainerColor = Color(0xFFF5B942),
+            focusedContentColor = Color(0xFF0E1116),
+        ),
+    ) {
+        Text(text, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp))
+    }
+}
+
+/** Плитка канала: имя, «сейчас идёт», качество. */
+@Composable
+private fun ChannelTile(entry: TvEntry, onClick: () -> Unit) {
+    val channel = entry.channel
+    androidx.tv.material3.Surface(
+        onClick = onClick,
+        shape = clickableSurfaceShape(RoundedCornerShape(12.dp)),
+        colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+            containerColor = Color(0xFF1A1F29),
+            contentColor = Color.White,
+            focusedContainerColor = Color(0xFF2B3648),
+            focusedContentColor = Color.White,
+        ),
+        modifier = Modifier.fillMaxWidth().aspectRatio(16f / 10f),
+    ) {
+        Column(
+            Modifier.fillMaxSize().padding(12.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                "● ${channel.group}",
+                color = Color(0xFFF5B942),
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Column {
+                Text(
+                    channel.name,
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                val now = entry.now
+                if (now != null) {
+                    Text(
+                        "Сейчас: ${now.title}",
+                        color = Color(0xFF9FB0C0),
+                        fontSize = 12.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    // Полоска прогресса передачи: видно, сколько осталось
+                    val total = (now.end - now.start).coerceAtLeast(1)
+                    val passed = (System.currentTimeMillis() - now.start).coerceIn(0, total)
+                    Spacer(Modifier.height(5.dp))
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(3.dp)
+                            .background(Color(0xFF2B3648), RoundedCornerShape(2.dp)),
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth(passed.toFloat() / total)
+                                .height(3.dp)
+                                .background(Color(0xFFF5B942), RoundedCornerShape(2.dp)),
+                        )
+                    }
+                } else {
+                    Text(
+                        channel.quality.ifBlank { "прямой эфир" },
+                        color = Color.White.copy(alpha = 0.4f),
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+        }
+    }
+}

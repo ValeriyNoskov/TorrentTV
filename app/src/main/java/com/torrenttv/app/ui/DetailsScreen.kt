@@ -112,14 +112,14 @@ fun DetailsScreen(
         Modifier
             .fillMaxSize()
             .background(Color(0xFF0E1116))
-            .padding(32.dp),
+            .padding(horizontal = 24.dp, vertical = 18.dp),
     ) {
         Row(Modifier.weight(1f)) {
             // Постер (обогащённый из КП, если карточка была заглушкой)
             if (itemState.posterUrl.isBlank()) {
                 Box(
                     Modifier
-                        .width(220.dp)
+                        .width(190.dp)
                         .fillMaxHeight()
                         .background(Color(0xFF1F2430), RoundedCornerShape(12.dp)),
                     contentAlignment = Alignment.Center,
@@ -129,7 +129,7 @@ fun DetailsScreen(
                     model = itemState.posterUrl,
                     contentDescription = item.title,
                     modifier = Modifier
-                        .width(220.dp)
+                        .width(190.dp)
                         .fillMaxHeight(),
                     contentScale = ContentScale.Crop,
                 )
@@ -145,7 +145,7 @@ fun DetailsScreen(
                     .fillMaxHeight()
                     .verticalScroll(rememberScrollState()),
             ) {
-                Text(item.title, color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Bold)
+                Text(item.title, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
                 Text(
                     text = buildString {
                         append(item.typeLabel)
@@ -243,51 +243,78 @@ fun DetailsScreen(
                     Text(
                         text = item.overview,
                         color = Color.White.copy(alpha = 0.75f),
-                        fontSize = 16.sp,
-                        lineHeight = 24.sp,
-                        maxLines = 8,
+                        fontSize = 15.sp,
+                        lineHeight = 21.sp,
+                        maxLines = 5,
                         modifier = Modifier.padding(top = 14.dp),
                     )
                 }
 
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(14.dp))
 
-                // Zona-стиль: одна главная кнопка «Смотреть» (приложение само
-                // решает — онлайн или торрент), ручной онлайн и меню «Ещё».
-                // Фокус при входе — сразу на «Смотреть»: иначе он улетает на
-                // «Назад» внизу и ОК на пульте закрывает карточку.
-                Row {
-                    Button(
-                        onClick = {
+                // Все действия — ОДНИМ рядом с прокруткой: на узком экране
+                // ничего не «уезжает» за границу, а «В избранное» и
+                // «Убрать из просмотра» больше не спрятаны в меню «Ещё».
+                androidx.compose.foundation.lazy.LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    item {
+                        Button(
+                            onClick = {
+                                com.torrenttv.app.data.AppLog.log(
+                                    "ui",
+                                    "нажал: «▶ Смотреть» «${item.title}» (${if (magnet) "торрент-карточка" else "умный подбор"})",
+                                )
+                                if (magnet) {
+                                    // Фиксируем начало просмотра и открываем плеер
+                                    store.saveProgress(item, positionSec = 0, durationSec = 0)
+                                    onWatch()
+                                } else {
+                                    onWatchSmart()
+                                }
+                            },
+                            modifier = Modifier.focusRequester(watchFocus),
+                        ) { Text("▶ Смотреть") }
+                    }
+                    // Сериал — «Эпизоды» всегда рядом со «Смотреть» (Zona-стиль)
+                    if (item.type == "tv") {
+                        item {
+                            Button(onClick = {
+                                com.torrenttv.app.data.AppLog.log("ui", "нажал: «Эпизоды» на карточке «${item.title}»")
+                                onEpisodes(0)
+                            }) { Text("🎬 Эпизоды") }
+                        }
+                    }
+                    item {
+                        Button(onClick = {
+                            fav = store.toggleFavorite(item)
                             com.torrenttv.app.data.AppLog.log(
                                 "ui",
-                                "нажал: «▶ Смотреть» «${item.title}» (${if (magnet) "торрент-карточка" else "умный подбор"})",
+                                "нажал: «${if (fav) "В избранном" else "В избранное"}» «${item.title}»",
                             )
-                            if (magnet) {
-                                // Фиксируем начало просмотра и открываем плеер
-                                store.saveProgress(item, positionSec = 0, durationSec = 0)
-                                onWatch()
-                            } else {
-                                onWatchSmart()
-                            }
-                        },
-                        modifier = Modifier.focusRequester(watchFocus),
-                    ) { Text("▶ Смотреть") }
-                    Spacer(Modifier.width(16.dp))
-                    // Сериал — кнопка «Эпизоды» всегда на виду (Zona-стиль),
-                    // не спрятана в меню
-                    if (item.type == "tv") {
-                        Button(onClick = {
-                            com.torrenttv.app.data.AppLog.log("ui", "нажал: «Эпизоды» на карточке «${item.title}»")
-                            onEpisodes(0)
-                        }) { Text("🎬 Эпизоды") }
-                        Spacer(Modifier.width(16.dp))
+                        }) { Text(if (fav) "★ В избранном" else "☆ В избранное") }
                     }
-                    // Трейлер: играет ВНУТРИ приложения (поиск по Rutube API,
-                    // HLS в нашем плеере) — на приставке не нужны Rutube-приложение и браузер
-                    Button(onClick = onTrailer) { Text("🎬 Трейлер") }
-                    Spacer(Modifier.width(16.dp))
-                    Button(onClick = { menu = !menu }) { Text("⋯ Ещё") }
+                    if (statusTag.isNotBlank() || store.hasProgress(item)) {
+                        item {
+                            Button(onClick = {
+                                store.clearWatched(item)
+                                statusTag = ""
+                                magnet = store.getMagnet(item) != null
+                                // Кэш скачанного тоже под нож — фильм больше «не в просмотре»
+                                runCatching {
+                                    java.io.File(context.filesDir, "downloads/" + item.storeKey).deleteRecursively()
+                                }
+                                com.torrenttv.app.data.AppLog.log("ui", "нажал: «Убрать из просмотра» «${item.title}»")
+                            }) { Text("✕ Убрать из просмотра") }
+                        }
+                    }
+                    item {
+                        Button(onClick = onTrailer) { Text("🎬 Трейлер") }
+                    }
+                    item {
+                        Button(onClick = { menu = !menu }) { Text("⋯ Ещё") }
+                    }
                 }
 
                 // Бесплатный легальный стрим: полные фильмы/серии на Rutube.
@@ -332,9 +359,6 @@ fun DetailsScreen(
                             Text(if (magnet) "🔗 Заменить magnet" else "🔗 Указать magnet")
                         }
                         Spacer(Modifier.width(12.dp))
-                        Button(onClick = { fav = store.toggleFavorite(item) }) {
-                            Text(if (fav) "★ В избранном" else "☆ В избранное")
-                        }
                         Button(onClick = { later = store.toggleWatchLater(item); menu = false }) {
                             Text(if (later) "✓ Смотреть позже" else "＋ Смотреть позже")
                         }
@@ -343,21 +367,6 @@ fun DetailsScreen(
                             menu = false
                         }) {
                             Text(statusLabel(statusTag))
-                        }
-                        // Убрать из просмотренных: статус + лента «Продолжить» + кэш
-                        if (statusTag.isNotBlank() || store.hasProgress(item)) {
-                            Button(onClick = {
-                                store.clearWatched(item)
-                                statusTag = ""
-                                magnet = store.getMagnet(item) != null
-                                // Кэш скачанного тоже под нож — фильм больше «не в просмотре»
-                                runCatching {
-                                    java.io.File(context.filesDir, "downloads/" + item.storeKey).deleteRecursively()
-                                }
-                                menu = false
-                            }) {
-                                Text("✕ Убрать из просмотренных")
-                            }
                         }
                     }
                 }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,6 +39,7 @@ fun HomeScreen(
     currentVersion: String,
     onOpenDetails: (MediaItem) -> Unit,
     onOpenCatalog: (String) -> Unit = {},
+    onOpenTv: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
@@ -76,6 +78,61 @@ fun HomeScreen(
                         fontSize = 14.sp,
                         modifier = Modifier.padding(horizontal = 32.dp),
                     )
+                }
+            }
+            // Живое ТВ — сразу с главной: каналы открываются одним нажатием.
+            // Каналы берём из встроенного плейлиста (без сети), полный список — в разделе «📡 ТВ»
+            item {
+                val tvPreview = remember { com.torrenttv.app.data.Iptv.builtIn(context).take(10) }
+                if (tvPreview.isNotEmpty()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 32.dp, vertical = 6.dp),
+                    ) {
+                        Text(
+                            "📡 Телевидение",
+                            color = Color.White,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Spacer(Modifier.padding(horizontal = 8.dp))
+                        Button(onClick = onOpenTv) { Text("Все каналы →") }
+                    }
+                    androidx.compose.foundation.lazy.LazyRow(
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 32.dp, vertical = 6.dp),
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(tvPreview.size) { i ->
+                            val ch = tvPreview[i]
+                            androidx.tv.material3.Surface(
+                                onClick = onOpenTv,
+                                shape = clickableSurfaceShape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
+                                colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                                    containerColor = Color(0xFF1A1F29),
+                                    contentColor = Color.White,
+                                    focusedContainerColor = Color(0xFF2B3648),
+                                    focusedContentColor = Color.White,
+                                ),
+                                modifier = Modifier.width(150.dp),
+                            ) {
+                                Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                                    Text(
+                                        "● ${ch.group}",
+                                        color = Color(0xFFF5B942),
+                                        fontSize = 10.sp,
+                                        maxLines = 1,
+                                    )
+                                    Text(
+                                        ch.name,
+                                        color = Color.White,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 2,
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
             // Тренды — первыми, это витрина

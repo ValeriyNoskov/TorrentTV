@@ -693,6 +693,7 @@ fun SideNav(active: Screen, onTab: (Screen) -> Unit) {
         SideBarButton("🎬", "Фильмы", Screen.Movies, active, onTab, expanded) { expanded = it }
         SideBarButton("📺", "Сериалы", Screen.TvShows, active, onTab, expanded) { expanded = it }
         SideBarButton("🎪", "Шоу", Screen.Shows, active, onTab, expanded) { expanded = it }
+        SideBarButton("📡", "ТВ", Screen.Tv, active, onTab, expanded) { expanded = it }
         SideBarButton("🧲", "Торренты", Screen.Torrents, active, onTab, expanded) { expanded = it }
         SideBarButton("🔍", "Поиск", Screen.Search, active, onTab, expanded) { expanded = it }
         SideBarButton("⚙", "Настройки", Screen.Settings, active, onTab, expanded) { expanded = it }

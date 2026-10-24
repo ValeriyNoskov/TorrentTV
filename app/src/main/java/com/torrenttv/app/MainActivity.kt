@@ -43,6 +43,8 @@ import com.torrenttv.app.ui.SmartPlayScreen
 import com.torrenttv.app.ui.TorrentFilesScreen
 import com.torrenttv.app.ui.TorrentResultsScreen
 import com.torrenttv.app.ui.TorrentSearchScreen
+import com.torrenttv.app.ui.TvScreen
+import com.torrenttv.app.ui.LivePlayerScreen
 
 /** Экраны приложения. Верхние — вкладки с общей панелью табов. */
 sealed interface Screen {
@@ -50,6 +52,7 @@ sealed interface Screen {
     data object Movies : Screen
     data object TvShows : Screen
     data object Shows : Screen
+    data object Tv : Screen
     data object Torrents : Screen
     data object Favorites : Screen
     data object Continue : Screen
@@ -72,6 +75,9 @@ sealed interface Screen {
     data class RutubeWatch(val videoId: String, val title: String, val thumb: String) : Screen
     data class Player(val item: MediaItem, val episode: com.torrenttv.app.data.Episode? = null, val fileIndex: Int = -1) : Screen
     data class TorrentFiles(val item: MediaItem, val magnet: String) : Screen
+
+    /** Живое ТВ: канал и весь список (для переключения ←/→ в плеере). */
+    data class Live(val channel: com.torrenttv.app.data.IptvChannel, val channels: List<com.torrenttv.app.data.IptvChannel>) : Screen
     data class TorrentResults(
         val item: MediaItem,
         val query: String,
@@ -82,7 +88,7 @@ sealed interface Screen {
 
     companion object {
         val TABS: List<Screen> = listOf(
-            Home, Movies, TvShows, Shows, Torrents, Favorites, Continue, WatchLater, Search, Settings,
+            Home, Movies, TvShows, Shows, Tv, Torrents, Favorites, Continue, WatchLater, Search, Settings,
         )
     }
 }
@@ -184,6 +190,7 @@ private fun App() {
             Screen.Movies -> "Фильмы"
             Screen.TvShows -> "Сериалы"
             Screen.Shows -> "Шоу"
+            Screen.Tv -> "ТВ"
             Screen.Torrents -> "Торренты"
             Screen.Favorites -> "Избранное"
             Screen.Continue -> "Продолжить"
@@ -200,6 +207,7 @@ private fun App() {
             is Screen.Player -> if (s.episode != null) "Плеер «${s.item.title}» ${s.episode.code}" else "Плеер «${s.item.title}»"
             is Screen.TorrentFiles -> "Состав раздачи «${s.item.title}»"
             is Screen.TorrentResults -> "Результаты «${s.item.title}»"
+            is Screen.Live -> "ТВ «${s.channel.name}»"
         }
         com.torrenttv.app.data.AppLog.log("nav", "открыл: $name")
     }
@@ -250,6 +258,7 @@ private fun App() {
                 Screen.Home -> HomeScreen(
                     currentVersion = BuildConfig.VERSION_NAME,
                     onOpenDetails = { screen = Screen.Details(it) },
+                    onOpenTv = { screen = Screen.Tv },
                     onOpenCatalog = { mode ->
                         screen = when (mode) {
                             "movies" -> Screen.Movies
@@ -262,6 +271,9 @@ private fun App() {
                 Screen.Movies -> CatalogScreen(mode = "movies", onOpenDetails = { screen = Screen.Details(it) })
                 Screen.TvShows -> CatalogScreen(mode = "tv", onOpenDetails = { screen = Screen.Details(it) })
                 Screen.Shows -> CatalogScreen(mode = "shows", onOpenDetails = { screen = Screen.Details(it) })
+                Screen.Tv -> TvScreen(
+                    onPlay = { ch, list -> screen = Screen.Live(ch, list) },
+                )
                 Screen.Torrents -> TorrentsScreen(onOpenDetails = { screen = Screen.Details(it) })
                 Screen.Favorites -> FavoritesScreen(onOpenDetails = { screen = Screen.Details(it) })
                 Screen.Continue -> ContinueScreen(onOpenDetails = { screen = Screen.Details(it) })
@@ -367,6 +379,13 @@ private fun App() {
                     screen = Screen.TorrentFiles(s.item, com.torrenttv.app.data.TorrentSearch.toMagnet(r))
                 },
                 onBack = { screen = Screen.Search },
+            )
+
+            is Screen.Live -> LivePlayerScreen(
+                channel = s.channel,
+                channels = s.channels,
+                onBack = { screen = lastTab },
+                onSwitch = { ch -> screen = Screen.Live(ch, s.channels) },
             )
 
             is Screen.TorrentSearch -> TorrentSearchScreen(

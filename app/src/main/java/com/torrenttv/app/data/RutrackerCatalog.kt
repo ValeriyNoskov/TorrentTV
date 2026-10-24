@@ -33,7 +33,7 @@ object RutrackerrCatalog {
         }
 
     /** Поиск: AJAX сайта возвращает список раздач — группируем по названиям. */
-    fun search(query: String): List<MediaItem> {
+    fun search(query: String, limit: Int = 40): List<MediaItem> {
         val html = TorrentHttp.postForm(
             url = "https://rutrackerr.ru/engine/modules/search-torrents/search.php",
             fields = mapOf("fraza" to query, "id" to "", "search_ok" to "go_search"),
@@ -46,18 +46,29 @@ object RutrackerrCatalog {
         val seen = mutableSetOf<String>()
         val isTvByKey = mutableMapOf<String, Boolean>()
         val items = mutableListOf<MediaItem>()
+        // Слова запроса: «титаны 2 сезон» не должно требовать точного вхождения
+        // всей строки — иначе поиск выглядел пустым при любом уточнении
+        val words = query.lowercase().replace('ё', 'е')
+            .split(Regex("""[^a-zа-я0-9]+"""))
+            .filter { it.length >= 2 }
         for (r in rows) {
             val name = Regex("""<td><b>([^<]{4,})</b></td>""").find(r)?.groupValues?.get(1)?.trim() ?: continue
             val clean = name.replace(Regex("""\s*\[.*$"""), "").trim()          // «Спецы [01x01-08…]» → «Спецы»
             val m = Regex("""^(.*?)\s*\((\d{4})\)""").find(clean)
-            val title = (m?.groupValues?.get(1) ?: clean).replace("|", "").trim()
-            val year = m?.groupValues?.get(2) ?: ""
+            // Название чистим: «Матрица / The Matrix | 1999 | UHD BDRemux…» →
+            // «Матрица» (иначе в поиске карточки с километровыми именами раздач)
+            val title = (m?.groupValues?.get(1) ?: clean)
+                .substringBefore(" | ")
+                .substringBefore(" / ")
+                .replace("|", "")
+                .trim()
+            val year = m?.groupValues?.get(2)
+                ?: Regex("""\b(19|20)\d{2}\b""").find(name)?.value.orEmpty()
             val key = title.lowercase().replace('ё', 'е')
-            // Фильтр мусора: название должно содержать запрос (иначе поиск
-            // «спецы» возвращает «Специи», книги, спорт)
-            val q = query.lowercase().replace('ё', 'е').trim()
             if (title.length < 2 || !seen.add(key)) continue
-            if (!key.contains(q)) continue
+            // Фильтр мусора: в названии должно быть хоть одно слово запроса
+            // (поиск «спецы» не должен возвращать «Специи», книги, спорт)
+            if (words.isNotEmpty() && words.none { key.contains(it) }) continue
             // Сериал? S01E05, 1x05, [01x01-08], «Сезон 1», «Серии» в названии
             val tv = isTvByKey.getOrPut(key) {
                 Regex("""(?i)[sс]\d{1,2}[eеxх]\d{1,3}|\[\d{2}x\d{2}|сезон|сери[ияя]""").containsMatchIn(name)
@@ -68,10 +79,33 @@ object RutrackerrCatalog {
                 title = title,
                 year = year,
                 posterUrl = "",
+                // Жанр из названия раздачи — чтобы фильтр жанров работал и в поиске
+                rtGenres = listOfNotNull(
+                    if (tv) "serialy" else null,
+                    genreSlugByTitle(name),
+                ),
             )
-            if (items.size >= 12) break
+            if (items.size >= limit) break
         }
         return items
+    }
+
+    /** Жанр по ключевому слову в названии раздачи (для клиентского фильтра). */
+    private fun genreSlugByTitle(name: String): String? {
+        val n = name.lowercase().replace('ё', 'е')
+        return when {
+            Regex("""комеди""").containsMatchIn(n) -> "komedii"
+            Regex("""драм""").containsMatchIn(n) -> "dramy"
+            Regex("""боевик|экшен""").containsMatchIn(n) -> "boeviki"
+            Regex("""ужас""").containsMatchIn(n) -> "uzhasy"
+            Regex("""фантаст""").containsMatchIn(n) -> "fantastika"
+            Regex("""фэнтези|фентези""").containsMatchIn(n) -> "fjentezi"
+            Regex("""триллер""").containsMatchIn(n) -> "trillery"
+            Regex("""детектив""").containsMatchIn(n) -> "kriminal"
+            Regex("""мелодрам""").containsMatchIn(n) -> "melodramy"
+            Regex("""мульт|аниме""").containsMatchIn(n) -> "multfilmy"
+            else -> null
+        }
     }
 
     /** «Похожее» для элемента из Рутрекера: блок похожих на его странице. */
