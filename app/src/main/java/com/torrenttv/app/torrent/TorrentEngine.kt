@@ -138,18 +138,23 @@ object TorrentEngine {
          * не годится: он суммирует скачанные куски без непрерывности, после
          * перемотки даёт ложную готовность.
          */
-        fun isRangeReady(filePos: Long, length: Long): Boolean {
+        fun isRangeReady(filePos: Long, length: Long): Boolean = readyFraction(filePos, length) >= 1f
+
+        /** Доля готовых кусков в диапазоне файла [filePos, filePos+length), 0..1. */
+        fun readyFraction(filePos: Long, length: Long): Float {
             try {
                 val pieceLen = ti.pieceLength()
-                if (pieceLen <= 0) return true
+                if (pieceLen <= 0) return 1f
                 val abs = fileOffset + filePos
-                val end = abs + length
+                val end = (abs + length).coerceAtMost(fileOffset + fileSize)
                 val first = (abs / pieceLen).toInt().coerceIn(0, ti.numPieces() - 1)
                 val last = ((end - 1).coerceAtLeast(abs) / pieceLen).toInt().coerceIn(0, ti.numPieces() - 1)
-                for (i in first..last) if (!handle.havePiece(i)) return false
-                return true
+                if (last < first) return 1f
+                var have = 0
+                for (i in first..last) if (handle.havePiece(i)) have++
+                return have.toFloat() / (last - first + 1)
             } catch (_: Exception) {
-                return false
+                return 0f
             }
         }
 

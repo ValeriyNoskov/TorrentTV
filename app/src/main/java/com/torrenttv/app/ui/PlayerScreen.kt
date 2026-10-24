@@ -198,10 +198,13 @@ fun PlayerScreen(
         val threshold = if (com.torrenttv.app.BuildConfig.DEBUG) 256L * 1024
             else minOf(maxOf(12L * 1024 * 1024, st.fileSize / 20), 96L * 1024 * 1024)
         // Диагностика и таймаут: если за 3 минуты не скачалось — говорим прямо,
-        // вместо вечного «Буферизация»
+        // вместо вечного «Буферизация». Прогресс — по готовности кусков вокруг
+        // стартовой позиции (havePiece), а не по общей скачанной голове: при
+        // возобновлении с середины голова файла ни при чём
+        val startPos = if (resumeSec > 30 && durationSec > 0) st.fileSize * resumeSec / durationSec else 0L
         val deadline = System.currentTimeMillis() + 180_000
-        while (st.headBytes() < threshold) {
-            bufferedPct = ((st.headBytes() * 100) / threshold).toInt().coerceIn(0, 100)
+        while (!st.isRangeReady(startPos, threshold)) {
+            bufferedPct = ((st.readyFraction(startPos, threshold) * 100).toInt()).coerceIn(0, 100)
             val mb = st.headBytes() / 1024 / 1024
             val speed = st.speedBps() / 1024
             netInfo = if (st.peers() > 0) {
