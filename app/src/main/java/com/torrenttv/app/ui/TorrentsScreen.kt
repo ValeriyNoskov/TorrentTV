@@ -144,6 +144,8 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
 
     // Перезагрузка при смене фильтров
     var loadError by remember { mutableStateOf("") }
+    // Офлайн-режим: показываем кеш, время последнего успешного обновления
+    var offlineSince by remember { mutableStateOf(0L) }
     LaunchedEffect(type, genre, year, country, reloadTick) {
         loading = true
         loadError = ""
@@ -155,12 +157,24 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
         AppLog.log("torrents", "загрузка каталога: тип=$type жанр=$genre год=$year")
         try {
             items = loadPage(1).distinctBy { it.storeKey }
+            if (items.isNotEmpty() && !searchMode) store.saveTorrentsCache(items)
         } catch (e: Exception) {
             // Молчаливое падение корутины = «чёрный экран» без объяснений —
             // фиксируем в лог и показываем пользователю
             items = emptyList()
             loadError = "${e.javaClass.simpleName}: ${e.message ?: "ошибка загрузки"}"
             AppLog.log("torrents", "ОШИБКА загрузки каталога: $loadError")
+        }
+        // Офлайн-каталог (ROADMAP №12): сайт не ответил — показываем последний
+        // сохранённый список, чтобы раздел не был пустой дырой
+        if (items.isEmpty() && loadError.isNotBlank()) {
+            val (cached, ts) = store.loadTorrentsCache()
+            if (cached.isNotEmpty()) {
+                items = cached
+                offlineSince = ts
+                loadError = ""
+                AppLog.log("torrents", "офлайн: показан кеш ${cached.size} карточек")
+            }
         }
         loading = false
         AppLog.log("torrents", "каталог: тип=$type жанр=$genre год=$year страна=$country поиск=$searchMode → ${items.size}")
@@ -320,6 +334,10 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Text(
                     text = when {
+                        offlineSince > 0 ->
+                            "📡 Офлайн: сайт не ответил — показан сохранённый список от " +
+                                java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+                                    .format(java.util.Date(offlineSince)) + " · «↻ Повторить» ниже"
                         loadError.isNotEmpty() -> "⚠ Не удалось загрузить каталог: $loadError"
                         loading && items.isEmpty() -> "Загружаю раздачи…"
                         shown.isEmpty() -> "По этим фильтрам ничего нет — ослабьте фильтры"

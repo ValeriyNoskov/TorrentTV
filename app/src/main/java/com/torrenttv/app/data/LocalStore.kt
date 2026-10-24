@@ -322,6 +322,30 @@ class LocalStore(context: Context) {
     fun normWatchKey(title: String, suffix: String): String =
         "norm:" + title.lowercase().filter { it.isLetterOrDigit() } + suffix
 
+    // ---------- Офлайн-каталог «Торрентов» (ROADMAP №12) ----------
+
+    /** Сохранить последний удачный список карточек (JSON в prefs). */
+    fun saveTorrentsCache(items: List<MediaItem>) {
+        if (items.isEmpty()) return
+        val arr = org.json.JSONArray()
+        items.forEach { arr.put(it.toJson()) }
+        prefs.edit()
+            .putString("torrents_cache", arr.toString())
+            .putLong("torrents_cache_ts", System.currentTimeMillis())
+            .apply()
+    }
+
+    /** Сохранённый список и когда он был получен (мс) — для «Офлайн: от 14:30». */
+    fun loadTorrentsCache(): Pair<List<MediaItem>, Long> {
+        val raw = prefs.getString("torrents_cache", null) ?: return emptyList<MediaItem>() to 0L
+        return runCatching {
+            val arr = org.json.JSONArray(raw)
+            (0 until arr.length()).mapNotNull { i ->
+                runCatching { MediaItem.fromJson(arr.getJSONObject(i)) }.getOrNull()
+            } to prefs.getLong("torrents_cache_ts", 0L)
+        }.getOrDefault(emptyList<MediaItem>() to 0L)
+    }
+
     /** Серия отмечена просмотренной (кнопкой или досмотрена ≥95%)? */
     fun isWatchedKey(key: String): Boolean =
         prefs.getStringSet("watched", emptySet())?.contains(key) == true
@@ -369,6 +393,25 @@ class LocalStore(context: Context) {
                 )
             }.sortedBy { it.number }
         }.getOrDefault(emptyList())
+
+    // ---------- Бейдж «+N серий» (ROADMAP A) ----------
+
+    /**
+     * Сколько серий появилось с последнего «просмотра списка» — дос-поиск
+     * доложил новые, а пользователь их ещё не открывал.
+     */
+    fun newEpisodes(item: MediaItem): Int {
+        val cached = loadEpisodeCache(item).sumOf { it.episodes.size }
+        if (cached == 0) return 0
+        val seen = prefs.getInt("epsSeen:" + item.storeKey, 0)
+        return (cached - seen).coerceAtLeast(0)
+    }
+
+    /** Пользователь открыл список серий — новые увидел, бейдж погасить. */
+    fun markEpisodesSeen(item: MediaItem) {
+        val cached = loadEpisodeCache(item).sumOf { it.episodes.size }
+        prefs.edit().putInt("epsSeen:" + item.storeKey, cached).apply()
+    }
 
     // ---------- Настройки фильтрации поиска ----------
 
