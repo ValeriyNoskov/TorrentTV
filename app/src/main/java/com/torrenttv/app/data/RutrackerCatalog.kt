@@ -131,8 +131,9 @@ object RutrackerrCatalog {
     /** Разбор страницы категории/подобного списка: карточки rutef_movie. */
     private fun category(url: String, page: Int): List<MediaItem> {
         val full = if (page > 1) url.trimEnd('/') + "/page/$page/" else url
-        val html = TorrentHttp.getFast(full, UA) ?: return emptyList()
-        return parseCards(html)
+        val html = TorrentHttp.getFast(full, UA)
+        AppLog.log("torrents", "запрос $full → ${if (html != null) "${html.length} байт" else "НЕТ ОТВЕТА"}")
+        return if (html != null) parseCards(html) else emptyList()
     }
 
     private fun parseCards(html: String): List<MediaItem> {

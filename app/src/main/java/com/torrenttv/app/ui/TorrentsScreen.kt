@@ -62,6 +62,10 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
     var genre by remember { mutableStateOf(saved[1]) }                  // slug или null
     var year by remember { mutableStateOf(saved[2]) }                   // «2024» или null
     var country by remember { mutableStateOf(saved[3]) }                // клиентский фильтр
+    // Трассировка «чёрного экрана»: композиция экрана дошла до сюда?
+    androidx.compose.runtime.SideEffect {
+        AppLog.log("torrents", "композиция «Торрентов»: тип=$type жанр=$genre год=$year страна=$country")
+    }
     LaunchedEffect(type, genre, year, country) {
         store.saveTorrentsFilter(type, genre, year, country)
     }
@@ -145,8 +149,9 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
         loadError = ""
         page = 1
         endReached = false
-        // Лог ДО запроса: если строка есть, а «каталог: …» не пришла —
-        // запрос висит (сеть ТВ), а не падает
+        // Трассировка: эффект запущен (если этой строки в логе нет при
+        // наличии «композиции» — эффект не стартует, аномалия Recomposer)
+        AppLog.log("torrents", "эффект загрузки запущен (reloadTick=$reloadTick)")
         AppLog.log("torrents", "загрузка каталога: тип=$type жанр=$genre год=$year")
         try {
             items = loadPage(1).distinctBy { it.storeKey }
