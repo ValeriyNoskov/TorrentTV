@@ -264,7 +264,15 @@ fun EpisodesScreen(
             Row(Modifier.padding(top = 12.dp)) {
                 LazyRow {
                     itemsIndexed(seasons) { _, s ->
-                        SeasonChip("Сезон ${s.number}", s.number == (selected ?: seasons.first().number)) {
+                        // «⬇» на чипе — весь сезон скачан на сервер (серии
+                        // стартуют мгновенно); пересчёт лёгкий: магниты из хранилища
+                        val seasonOffline = remember(tick, s.number) {
+                            com.torrenttv.app.data.ServerDownloads.isSeasonOnServer(store, item, s.episodes)
+                        }
+                        SeasonChip(
+                            "Сезон ${s.number}${if (seasonOffline) " ⬇" else ""}",
+                            s.number == (selected ?: seasons.first().number),
+                        ) {
                             com.torrenttv.app.data.AppLog.log("episodes", "выбран сезон ${s.number} (серий ${s.episodes.size})")
                             selected = s.number
                             store.saveLastSeason(item, s.number) // «Титаны»: открыл S05 — запомнить
@@ -347,6 +355,22 @@ fun EpisodesScreen(
                                     fontSize = 13.sp,
                                     fontWeight = if (notAired) FontWeight.SemiBold else FontWeight.Normal,
                                     modifier = Modifier.padding(end = 18.dp),
+                                )
+                            }
+                            // ⬇ — серия на сервере (её раздача скачана целиком):
+                            // мгновенный старт, пиры не нужны
+                            val offlineHash = com.torrenttv.app.data.TorrServeService.hashOf(
+                                store.getMagnet(item, ep.sourceSuffix) ?: "",
+                            )
+                            val offline = offlineHash != null &&
+                                com.torrenttv.app.data.ServerDownloads.isTorrentOnServer(offlineHash)
+                            if (offline) {
+                                Text(
+                                    text = "⬇",
+                                    color = Color(0xFFBFE3F7),
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(end = 10.dp),
                                 )
                             }
                             Text(

@@ -134,6 +134,21 @@ class MainActivity : ComponentActivity() {
                     "стоп-слов=${s0.excludedKeywords().size}, лог=${if (s0.loggingEnabled()) "вкл" else "выкл"}",
             )
         }
+        // Автокачалка избранного на сервер: раздачи избранного докачиваются
+        // целиком (включая новые серии свежих раздач) — просмотр потом
+        // мгновенный. Через 30 с после старта, далее каждые 3 часа: свежий
+        // поиск по каждому сериалу ловит новые серии, просмотренные не качаем.
+        Thread {
+            while (true) {
+                Thread.sleep(30_000)
+                runCatching {
+                    com.torrenttv.app.data.ServerDownloads.syncFavorites(
+                        com.torrenttv.app.data.LocalStore(this),
+                    )
+                }
+                Thread.sleep(3 * 60 * 60_000L)
+            }
+        }.apply { isDaemon = true }.start()
         // Настройки переживают сброс данных: из пустого хранилища восстановим бэкап из Gist.
         // Ключи применены ниже в onCreate — после восстановления применяем их повторно.
         com.torrenttv.app.data.SettingsBackup.restoreIfNeeded(this) {

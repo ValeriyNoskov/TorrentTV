@@ -668,12 +668,72 @@ fun SettingsScreen(onBack: () -> Unit) {
                     }
 
                     "torrserve" -> {
+                        // Сводка о сервере: статус, число раздач, занятый кеш —
+                        // запрашивается при входе в раздел (запрос в IO-потоке)
+                        var tsSummary by remember { mutableStateOf("проверяю…") }
+                        LaunchedEffect(Unit) {
+                            val h = store.torrServeHost()
+                            tsSummary = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                com.torrenttv.app.data.TorrServeService.serverSummary(h)
+                            }
+                        }
+                        SettingsRow(
+                            title = "Сервер",
+                            value = tsSummary,
+                            valueOk = tsSummary.startsWith("✓"),
+                            modifier = Modifier.focusRequester(contentFocus),
+                        ) { }
                         SettingsRow(
                             title = "Адрес сервера",
                             value = store.torrServeHost(),
                             valueOk = true,
-                            modifier = Modifier.focusRequester(contentFocus),
                         ) { openEdit("ts", store.torrServeHost(), "http://127.0.0.1:8090") }
+                        // Очистка старого кеша: сносим с сервера раздачи, которых
+                        // нет в избранном (разовые просмотры, старые проверки).
+                        // Деструктивное — подтверждение вторым нажатием.
+                        var confirmClean by remember { mutableStateOf(false) }
+                        var cleanResult by remember { mutableStateOf<String?>(null) }
+                        SectionItem(
+                            title = if (confirmClean) "⚠ Точно снести НЕ избранные раздачи? (нажмите ещё раз)"
+                            else "🧹 Очистить старый кеш (раздачи не из избранного)",
+                            selected = false,
+                        ) {
+                            if (!confirmClean) {
+                                confirmClean = true
+                                com.torrenttv.app.data.AppLog.log("ui", "нажал: «Очистить старый кеш» — ждёт подтверждения")
+                            } else {
+                                confirmClean = false
+                                val host = store.torrServeHost()
+                                com.torrenttv.app.data.AppLog.log("ui", "нажал: «Очистить старый кеш» — ПОДТВЕРЖДЕНО")
+                                cleanResult = "чистлю…"
+                                Thread {
+                                    val saved = HashSet<String>()
+                                    for (fav in store.favorites()) {
+                                        for (m in store.savedMagnets(fav)) {
+                                            com.torrenttv.app.data.TorrServeService.hashOf(m)
+                                                ?.let { saved.add(it.lowercase()) }
+                                        }
+                                    }
+                                    val list = com.torrenttv.app.data.TorrServeService.listTorrents(host) ?: emptyList()
+                                    val stale = list.filter { it.hash.lowercase() !in saved }
+                                    var freed = 0L
+                                    for (t in stale) {
+                                        freed += t.preloadedBytes
+                                        com.torrenttv.app.data.TorrServeService.removeTorrent(host, t.hash)
+                                    }
+                                    val msg = if (list.isEmpty()) "сервер не ответил" else
+                                        "снесено раздач: ${stale.size} из ${list.size}, освобождено ~${freed / 1024 / 1024 / 1024.0} ГБ"
+                                    com.torrenttv.app.data.AppLog.log("serverdl", "очистка кеша сервера: $msg")
+                                    cleanResult = msg
+                                    tsSummary = com.torrenttv.app.data.TorrServeService.serverSummary(host)
+                                }.apply { isDaemon = true }.start()
+                            }
+                        }
+                        cleanResult?.let { SettingsNote("🧹 $it") }
+                        SettingsNote(
+                            "Очистка сносит раздачи, которых нет в избранном — избранные и их докачка " +
+                                "не трогаются. Место на сервере освобождается сразу."
+                        )
                         SectionItem(
                             title = (if (store.fallbackInternal()) "✓" else "○") +
                                 " Качать на ТВ, если TorrServe не отдаёт поток",

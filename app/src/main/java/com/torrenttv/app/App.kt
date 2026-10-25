@@ -28,6 +28,19 @@ class TorrentTVApp : Application(), ImageLoaderFactory {
                     .build()
             }
             .respectCacheHeaders(false)
+            // Wikimedia (постеры из Википедии, как у «Спецов») отдаёт 403 на
+            // дефолтный UA okhttp — маскируемся под браузер
+            .okHttpClient {
+                okhttp3.OkHttpClient.Builder()
+                    .addInterceptor { chain ->
+                        chain.proceed(
+                            chain.request().newBuilder()
+                                .header("User-Agent", "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36")
+                                .build(),
+                        )
+                    }
+                    .build()
+            }
             // Лог ошибок ВСЕХ картинок (постеры/бэкдропы/логотипы): без него
             // «слетел постер» не диагностируется — в логе просто тишина
             .eventListener(object : coil.EventListener {

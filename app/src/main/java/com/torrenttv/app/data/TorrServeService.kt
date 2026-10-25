@@ -116,6 +116,29 @@ object TorrServeService {
     }
 
     /**
+     * Удалить торрент из TorrServe: освобождает кеш сервера (используется при
+     * удалении тайтса из избранного — «в избранном = качаем на сервер,
+     * удалил из избранного = снесли с сервера»).
+     */
+    fun removeTorrent(host: String, hash: String): Boolean {
+        val req = JSONObject().put("action", "rem").put("hash", hash).toString()
+        val resp = postJson(host, req) ?: run {
+            AppLog.log("serverdl", "torrserve: rem $hash… — сервер не ответил")
+            return false
+        }
+        // Формат ответа зависит от версии: {"ok":true} или пустой — считаем
+        // успехом сам факт ответа без «error»
+        val err = runCatching { JSONObject(resp).optString("error", "") }.getOrDefault("")
+        val ok = err.isBlank()
+        AppLog.log("serverdl", "torrserve: rem $hash… → ${if (ok) "удалён" else "FAIL: $err"}")
+        return ok
+    }
+
+    /** Хэш из магнит-ссылки (urn:btih:…) или null. */
+    fun hashOf(magnet: String): String? =
+        Regex("urn:btih:([0-9a-fA-F]{40})").find(magnet)?.groupValues?.get(1)?.lowercase()
+
+    /**
      * Добавить magnet и дождаться метаданных:
      * 1) POST /torrents action=add — сервер возвращает hash, метаданные ещё не готовы;
      * 2) GET /stream/<title>?link=<hash>&index=0&preload — родной способ TorrServer
@@ -202,6 +225,28 @@ object TorrServeService {
         return runCatching { parseTorrent(JSONObject(resp)) }.getOrNull()
     }
 
+    /**
+     * Список всех раздач на сервере (action=list) — для карточки сервера
+     * в настройках: статус, число раздач, занятое кешем место.
+     */
+    fun listTorrents(host: String): List<TSTorrent>? {
+        val resp = postJson(host, JSONObject().put("action", "list").toString()) ?: return null
+        return runCatching {
+            val arr = JSONArray(resp)
+            (0 until arr.length()).mapNotNull { i ->
+                runCatching { parseTorrent(arr.getJSONObject(i)) }.getOrNull()
+            }
+        }.getOrNull()
+    }
+
+    /** Однострочная сводка о сервере: «отвечает · раздач N · кеш X, Y ГБ» / «не отвечает». */
+    fun serverSummary(host: String): String {
+        if (host.isBlank()) return "адрес не задан"
+        val list = listTorrents(host) ?: return "⚠ не отвечает"
+        val cached = list.sumOf { it.preloadedBytes } / 1024 / 1024 / 1024.0
+        return "✓ отвечает · раздач ${list.size} · кеш ${"%.1f".format(cached)} ГБ"
+    }
+
     private fun parseTorrent(o: JSONObject): TSTorrent {
         val files = mutableListOf<TSFile>()
         (o.optJSONArray("file_stats") ?: JSONArray()).let { arr ->
@@ -241,8 +286,11 @@ object TorrServeService {
         hash: String,
         file: TSFile,
         timeoutMs: Long = 90_000L,
+        thresholdBytes: Long? = null,
         onStatus: (String) -> Unit = {},
     ): Boolean {
+        // thresholdBytes — докачать файл ЦЕЛИКОМ (качка на сервер): null = только
+        // порог для старта стрима (32 МБ)
         val name = file.path.substringAfterLast('/')
         Thread {
             runCatching {
@@ -257,11 +305,14 @@ object TorrServeService {
         // Порог прогрева: для 4K-файлов (десятки ГБ, битрейт 40–80 Мбит/с) 4 МБ
         // мало — плеер стартует и сразу упирается в буфер. Даём до 32 МБ:
         // старт дольше на десятки секунд, зато без заиканий в начале.
-        val threshold = minOf(32L * 1024 * 1024, maxOf(4L * 1024 * 1024, file.length / 20))
+        // thresholdBytes задаёт качать до конца файла (режим «скачать на сервер»)
+        val threshold = thresholdBytes ?: minOf(32L * 1024 * 1024, maxOf(4L * 1024 * 1024, file.length / 20))
         val deadline = System.currentTimeMillis() + timeoutMs
         var lastProgress = -1L
+        var lastProgressAt = System.currentTimeMillis()
         var lastLogAt = 0L
         var stalled = 0
+        var zeroStalls = 0
         while (System.currentTimeMillis() < deadline) {
             Thread.sleep(1500)
             val t = get(host, hash) ?: continue
@@ -281,10 +332,39 @@ object TorrServeService {
                 lastLogAt = now
             }
             if (pb >= threshold) return true
-            // Нет прогресса 4 замера подряд — скорость нулевая, выходим раньше
-            stalled = if (pb > lastProgress) 0 else stalled + 1
-            lastProgress = pb
-            if (stalled >= 4 && pb > 0) return pb >= threshold
+            if (thresholdBytes == null) {
+                // Ранние выходы — только для стрим-режима: полная закачка на
+                // сервер терпит паузы между кусками (перестановка приоритетов)
+                // Нет прогресса 4 замера подряд — скорость нулевая, выходим раньше
+                stalled = if (pb > lastProgress) 0 else stalled + 1
+                lastProgress = pb
+                if (stalled >= 4 && pb > 0) return pb >= threshold
+                // Полный ноль: пиров может не быть вовсе или они не отдают куски —
+                // ждём только ~20 с (не все 90), чтобы раньше попробовать другой путь
+                zeroStalls = if (pb == 0L) zeroStalls + 1 else 0
+                if (zeroStalls >= 12) {
+                    AppLog.log(
+                        "player",
+                        "preload нулевой: 20 с ни одного байта, пиров=${t.peers} — файл неоткуда скачать",
+                    )
+                    return false
+                }
+            } else {
+                // Режим полной закачки: паузы между кусками терпим, но ПОЛНЫЙ
+                // застой > 15 минут — признак беды: на сервере кончилось место
+                // (запись падает, байты замирают) или раздача умерла. Бросаем
+                // файл, иначе простаиваем до 6 ч на каждом.
+                if (pb > lastProgress) lastProgressAt = now
+                lastProgress = pb
+                if (now - lastProgressAt > 15 * 60_000L) {
+                    AppLog.log(
+                        "serverdl",
+                        "preload застой: 15 мин ни одного байта (${pb / 1024 / 1024} МБ из " +
+                            "${threshold / 1024 / 1024}) — место на сервере кончилось или раздача умерла",
+                    )
+                    return false
+                }
+            }
         }
         AppLog.log("player", "preload FAIL: за ${timeoutMs / 1000} с не набрано ${threshold / 1024 / 1024} МБ (последнее: ${lastProgress / 1024 / 1024} МБ)")
         return false
