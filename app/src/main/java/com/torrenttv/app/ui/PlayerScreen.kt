@@ -26,7 +26,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -1272,32 +1278,99 @@ private fun VideoPlayer(
                     maxLines = 1,
                 )
                 Spacer(Modifier.height(8.dp))
-                // Сикбар во всю ширину: буфер + позиция + время
-                Box(
-                    Modifier
+                // Сикбар как в MX: в фокусе ←/→ листают позицию с растущим
+                // шагом (10с → 30с → 1мин → 5мин), OK — прыжок
+                var jumpTarget by remember { mutableStateOf<Long?>(null) }
+                var seekSteps by remember { mutableStateOf(0) }
+                fun mxStep(): Long = when {
+                    seekSteps < 3 -> 10_000L
+                    seekSteps < 6 -> 30_000L
+                    seekSteps < 12 -> 60_000L
+                    else -> 300_000L
+                }
+                androidx.tv.material3.Surface(
+                    onClick = {
+                        jumpTarget?.let { player.seekTo(it) }
+                        jumpTarget = null
+                        seekSteps = 0
+                        seekInfo = "⏱ Перемотка"
+                        panelTick++
+                    },
+                    modifier = Modifier
                         .fillMaxWidth()
-                        .height(14.dp),
+                        .focusable()
+                        .onKeyEvent { e ->
+                            if (e.type == KeyEventType.KeyUp) { seekSteps = 0; return@onKeyEvent false }
+                            if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
+                            val base = jumpTarget ?: player.currentPosition
+                            val dur = if (player.duration > 0) player.duration else 0L
+                            when (e.key) {
+                                Key.DirectionLeft -> {
+                                    seekSteps++
+                                    jumpTarget = (base - mxStep()).coerceIn(0L, dur)
+                                    panelTick++
+                                    true
+                                }
+                                Key.DirectionRight -> {
+                                    seekSteps++
+                                    jumpTarget = if (dur > 0) (base + mxStep()).coerceIn(0L, dur) else base
+                                    panelTick++
+                                    true
+                                }
+                                else -> false
+                            }
+                        },
+                    shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(6.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color.Transparent,
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0x33F5B942),
+                        focusedContentColor = Color.White,
+                    ),
                 ) {
-                    Box(
-                        Modifier
-                            .fillMaxWidth(bufFrac.coerceAtLeast(posFrac))
-                            .height(5.dp)
-                            .align(Alignment.CenterStart)
-                            .background(Color(0xFF4A5568), RoundedCornerShape(3.dp)),
-                    )
-                    Box(
-                        Modifier
-                            .fillMaxWidth(posFrac)
-                            .height(8.dp)
-                            .align(Alignment.CenterStart)
-                            .background(Color(0xFFF5B942), RoundedCornerShape(4.dp)),
-                    )
-                    Text(
-                        posText,
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        modifier = Modifier.align(Alignment.CenterEnd),
-                    )
+                    Column(Modifier.padding(vertical = 4.dp)) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(14.dp),
+                        ) {
+                            val shownFrac = jumpTarget?.let { jt ->
+                                val dur = player.duration
+                                if (dur > 0) (jt.toFloat() / dur).coerceIn(0f, 1f) else posFrac
+                            } ?: posFrac
+                            Box(
+                                Modifier
+                                    .fillMaxWidth(bufFrac.coerceAtLeast(shownFrac))
+                                    .height(5.dp)
+                                    .align(Alignment.CenterStart)
+                                    .background(Color(0xFF4A5568), RoundedCornerShape(3.dp)),
+                            )
+                            Box(
+                                Modifier
+                                    .fillMaxWidth(shownFrac)
+                                    .height(8.dp)
+                                    .align(Alignment.CenterStart)
+                                    .background(if (jumpTarget != null) Color.White else Color(0xFFF5B942), RoundedCornerShape(4.dp)),
+                            )
+                            Text(
+                                posText,
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                modifier = Modifier.align(Alignment.CenterEnd),
+                            )
+                        }
+                        if (jumpTarget != null) {
+                            val jt = jumpTarget ?: 0L
+                            Text(
+                                (if (jt >= 3_600_000L)
+                                    "⏱ %d:%02d:%02d — OK чтобы перейти".format(jt / 3600000, (jt / 60000) % 60, (jt / 1000) % 60)
+                                else
+                                    "⏱ %d:%02d — OK чтобы перейти".format(jt / 60000, (jt / 1000) % 60)),
+                                color = Color.White,
+                                fontSize = 12.sp,
+                            )
+                        }
+                    }
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {

@@ -1115,10 +1115,20 @@ fun OnlinePlayerScreen(
                 // позицию по 1 минуте, OK — прыжок. Раньше таймлайн был
                 // только индикатором без прокрутки
                 var jumpTarget by remember { mutableStateOf<Long?>(null) }
+                // MX-стиль: шаг растёт при удержании стрелки
+                // (10с → 30с → 1мин → 5мин), отпускание сбрасывает
+                var seekSteps by remember { mutableStateOf(0) }
+                fun mxStep(): Long = when {
+                    seekSteps < 3 -> 10_000L
+                    seekSteps < 6 -> 30_000L
+                    seekSteps < 12 -> 60_000L
+                    else -> 300_000L
+                }
                 androidx.tv.material3.Surface(
                     onClick = {
                         jumpTarget?.let { player.seekTo(it) }
                         jumpTarget = null
+                        seekSteps = 0
                         seekInfo = "⏱ Перемотка"
                         panelTick++
                     },
@@ -1127,17 +1137,20 @@ fun OnlinePlayerScreen(
                         .height(26.dp)
                         .focusable()
                         .onKeyEvent { e: androidx.compose.ui.input.key.KeyEvent ->
+                            if (e.type == KeyEventType.KeyUp) { seekSteps = 0; return@onKeyEvent false }
                             if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
                             val base = jumpTarget ?: player.currentPosition
                             val dur = if (player.duration > 0) player.duration else 0L
                             when (e.key) {
                                 Key.DirectionLeft -> {
-                                    jumpTarget = (base - 60_000L).coerceIn(0L, dur)
+                                    seekSteps++
+                                    jumpTarget = (base - mxStep()).coerceIn(0L, dur)
                                     panelTick++
                                     true
                                 }
                                 Key.DirectionRight -> {
-                                    jumpTarget = if (dur > 0) (base + 60_000L).coerceIn(0L, dur) else base
+                                    seekSteps++
+                                    jumpTarget = if (dur > 0) (base + mxStep()).coerceIn(0L, dur) else base
                                     panelTick++
                                     true
                                 }
@@ -1171,7 +1184,10 @@ fun OnlinePlayerScreen(
                         }
                         if (jumpTarget != null) {
                             Text(
-                                "⏱ %d:%02d — OK чтобы перейти".format(shownMs / 60000, (shownMs / 1000) % 60),
+                                (if (shownMs >= 3_600_000L)
+                                    "⏱ %d:%02d:%02d — OK чтобы перейти".format(shownMs / 3600000, (shownMs / 60000) % 60, (shownMs / 1000) % 60)
+                                else
+                                    "⏱ %d:%02d — OK чтобы перейти".format(shownMs / 60000, (shownMs / 1000) % 60)),
                                 color = Color(0xFFFFFFFF),
                                 fontSize = 12.sp,
                             )
@@ -1186,7 +1202,7 @@ fun OnlinePlayerScreen(
                     )
                     Spacer(Modifier.width(14.dp))
                     Text(
-                        "⏳ $bufPct%" + if (bufPct >= 100) "" else " · полоса: ← → минута · OK переход",
+                        "⏳ $bufPct%" + if (bufPct >= 100) "" else " · полоса: ← → перемотка · OK переход",
                         color = Color.White.copy(alpha = 0.45f),
                         fontSize = 13.sp,
                     )
