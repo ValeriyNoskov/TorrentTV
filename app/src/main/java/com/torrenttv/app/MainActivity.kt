@@ -121,6 +121,19 @@ class MainActivity : ComponentActivity() {
         com.torrenttv.app.update.UpdateManager.cleanupApks(this)
         // Дисковый кэш метаданных: экономит дневной лимит API и работает без сети
         com.torrenttv.app.data.KinopoiskClient.attachCache(cacheDir)
+        // Конфигурация при старте: по логу сразу видно, как настроено устройство,
+        // без вопросов «какой у тебя адрес TorrServe» (полное логирование)
+        runCatching {
+            val s0 = com.torrenttv.app.data.LocalStore(this)
+            com.torrenttv.app.data.AppLog.log(
+                "app",
+                "конфигурация: torrserve=${s0.torrServeHost()} (настроен=${s0.torrServeConfigured()}, " +
+                    "качать на ТВ=${if (s0.fallbackInternal()) "вкл" else "выкл"}), " +
+                    "jackett=${if (s0.jackettConfig() != null) "задан" else "нет"}, " +
+                    "приватные трекеры=${s0.privateTrackers().size}, " +
+                    "стоп-слов=${s0.excludedKeywords().size}, лог=${if (s0.loggingEnabled()) "вкл" else "выкл"}",
+            )
+        }
         // Настройки переживают сброс данных: из пустого хранилища восстановим бэкап из Gist.
         // Ключи применены ниже в onCreate — после восстановления применяем их повторно.
         com.torrenttv.app.data.SettingsBackup.restoreIfNeeded(this) {

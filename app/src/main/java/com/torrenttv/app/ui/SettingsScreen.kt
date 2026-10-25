@@ -652,6 +652,18 @@ fun SettingsScreen(onBack: () -> Unit) {
                             com.torrenttv.app.data.AppLog.log("ui", "нажал: «Запустить проверку» (Проверка сети)")
                             subscreen = "netcheck"
                         }
+                        SettingsRow(
+                            title = "🧪 Запустить тест-кейсы",
+                            value = "Полный самотест: хранилище, парсеры, сеть, поиск",
+                            valueOk = true,
+                        ) {
+                            com.torrenttv.app.data.AppLog.log("ui", "нажал: «Запустить тест-кейсы» (самотест)")
+                            subscreen = "selftest"
+                        }
+                        SettingsNote(
+                            "Тест-кейсы проверяют приложение изнутри: настройки, магниты, парсеры, " +
+                                "доступность TorrServe/GitHub/КП, поиск раздач. Отчёт автоматически уйдёт в Gist."
+                        )
                         SettingsNote("Крестик у источника — его блокирует провайдер, это не неисправность.")
                     }
 
@@ -699,6 +711,7 @@ fun SettingsScreen(onBack: () -> Unit) {
         BackHandler { subscreen = null }
         when (sub) {
             "netcheck" -> NetCheckScreen(onClose = { subscreen = null })
+            "selftest" -> SelfTestScreen(onClose = { subscreen = null })
 
             // Ввод кода разработчика: 4 цифры с пульта, верно — показать блок
             "devcode" -> DevCodeScreen(
@@ -1395,5 +1408,95 @@ private fun DevCodeScreen(onOk: () -> Unit, onClose: () -> Unit) {
             }
             Button(onClick = onClose, modifier = Modifier.padding(top = 24.dp)) { Text("← Отмена") }
         }
+    }
+}
+
+/** Экран самотеста: прогон тест-кейсов с пульта, отчёт — автоматически в Gist. */
+@Composable
+private fun SelfTestScreen(onClose: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val store = remember { com.torrenttv.app.data.LocalStore(context) }
+    var results by remember { mutableStateOf<List<com.torrenttv.app.data.SelfTest.Result>>(emptyList()) }
+    var running by remember { mutableStateOf(false) }
+    var current by remember { mutableStateOf("") }
+    var reportUrl by remember { mutableStateOf("") }
+    var uploadState by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        running = true
+        com.torrenttv.app.data.AppLog.log("selftest", "=== старт самотеста ===")
+        results = com.torrenttv.app.data.SelfTest.run(context, store)
+        val fails = results.count { !it.ok }
+        com.torrenttv.app.data.AppLog.log(
+            "selftest", "готово: ${results.size - fails}/${results.size} пройдено",
+        )
+        // Отчёт — сразу в Gist: разработчику можно прислать одну ссылку
+        uploadState = "Выгружаю отчёт…"
+        val url = kotlinx.coroutines.withContext(Dispatchers.IO) {
+            com.torrenttv.app.data.AppLog.sendToPastebin(
+                githubToken = store.githubToken().ifBlank {
+                    com.torrenttv.app.update.UpdateManager.ghToken(context).ifBlank { null }
+                },
+                overrideContent = com.torrenttv.app.data.SelfTest.report(results),
+                overrideTitle = "ВНосКино самотест",
+            )
+        }
+        com.torrenttv.app.data.AppLog.log("selftest", if (url.isNotBlank()) "отчёт выгружен" else "выгрузка отчёта FAIL")
+        reportUrl = url
+        uploadState = if (url.isNotBlank()) "" else "Не удалось выгрузить отчёт — вышлите лог вручную"
+        running = false
+    }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0E1116))
+            .padding(32.dp),
+    ) {
+        Text("🧪 Тест-кейсы", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(14.dp))
+        if (running && results.isEmpty()) {
+            Text(current.ifBlank { "Запускаю проверки…" }, color = Color(0xFFBFE3F7), fontSize = 17.sp)
+        }
+        for (r in results) {
+            Column(Modifier.padding(vertical = 5.dp)) {
+                Text(
+                    (if (r.ok) "✓ " else "✗ ") + r.name,
+                    color = if (r.ok) Color(0xFF7ED49A) else Color(0xFFF28B82),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    "${r.detail} · ${r.ms} мс",
+                    color = Color.White.copy(alpha = 0.55f),
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(start = 22.dp),
+                )
+            }
+        }
+        if (running && results.isNotEmpty()) {
+            Text("⏳ Следующая проверка…", color = Color(0xFFBFE3F7), fontSize = 15.sp)
+        }
+        Spacer(Modifier.height(20.dp))
+        if (!running && results.isNotEmpty()) {
+            val okN = results.count { it.ok }
+            Text(
+                "Итог: $okN/${results.size} пройдено",
+                color = Color.White,
+                fontSize = 19.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            if (reportUrl.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "✓ Отчёт выгружен — пришлите разработчику ссылку:",
+                    color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp,
+                )
+                Text(reportUrl, color = Color(0xFFBFE3F7), fontSize = 14.sp)
+            }
+            if (uploadState.isNotBlank()) SettingsNote(uploadState)
+        }
+        Spacer(Modifier.height(24.dp))
+        Button(onClick = onClose, enabled = !running) { Text(if (running) "Идёт проверка…" else "← Назад") }
     }
 }

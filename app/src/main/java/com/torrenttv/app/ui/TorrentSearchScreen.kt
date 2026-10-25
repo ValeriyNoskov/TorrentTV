@@ -89,6 +89,10 @@ fun TorrentSearchScreen(
     // частная раздача — сначала скачивание .torrent (см. LaunchedEffect(selecting))
     fun select(r: TorrentResult) {
         val suffix = episode?.sourceSuffix ?: ""
+        com.torrenttv.app.data.AppLog.log(
+            "search",
+            "выбрана раздача: ${r.name.take(70)} (${r.seeds} сидов${if (r.isPrivate) ", приватный" else ""})${if (episode != null) " для $suffix" else ""}",
+        )
         if (r.isPrivate) {
             selecting = r
         } else {

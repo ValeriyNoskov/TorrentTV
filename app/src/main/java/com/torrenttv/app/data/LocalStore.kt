@@ -716,6 +716,20 @@ class LocalStore(context: Context) {
     fun torrServeConfigured(): Boolean =
         !prefs.getString("torrserve_host", null).isNullOrBlank()
 
+    // ---------- Самотест (Настройки → Для разработчика) ----------
+
+    fun setFallbackInternalWriteProbe(value: String) {
+        prefs.edit().putString("selftest_probe", value).apply()
+    }
+
+    fun readProbe(key: String): String? = prefs.getString(key, null)
+
+    /** Убрать тестовые/устаревшие ключи по префиксу (самотест чистит за собой). */
+    fun debugRemoveKeys(prefix: String) {
+        prefs.all.keys.filter { it.startsWith(prefix) }.toList()
+            .forEach { prefs.edit().remove(it).apply() }
+    }
+
     fun setTorrServeHost(v: String) {
         prefs.edit().putString("torrserve_host", v.trim().removeSuffix("/")).apply()
     }

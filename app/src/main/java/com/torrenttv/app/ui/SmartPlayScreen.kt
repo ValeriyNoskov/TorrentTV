@@ -290,6 +290,14 @@ fun SmartPlayScreen(
                         val c = choices[i]
                         androidx.tv.material3.Surface(
                             onClick = {
+                                com.torrenttv.app.data.AppLog.log(
+                                    "smart",
+                                    when (c) {
+                                        is SmartChoice.Resume -> "выбор: «Продолжить» (сохранённый магнит)"
+                                        is SmartChoice.Instant -> "выбор: «Играть сразу» → ${c.r.name.take(60)} (${c.r.seeds} сидов)"
+                                        is SmartChoice.Torrent -> "выбор: раздача → ${c.r.name.take(60)} (${c.r.seeds} сидов)"
+                                    },
+                                )
                                 when (c) {
                                     is SmartChoice.Resume -> onPlayTorrent()
                                     // Сериал — сначала список файлов (серий), фильм — сразу в плеер

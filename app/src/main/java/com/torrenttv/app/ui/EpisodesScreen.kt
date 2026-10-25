@@ -265,6 +265,7 @@ fun EpisodesScreen(
                 LazyRow {
                     itemsIndexed(seasons) { _, s ->
                         SeasonChip("Сезон ${s.number}", s.number == (selected ?: seasons.first().number)) {
+                            com.torrenttv.app.data.AppLog.log("episodes", "выбран сезон ${s.number} (серий ${s.episodes.size})")
                             selected = s.number
                             store.saveLastSeason(item, s.number) // «Титаны»: открыл S05 — запомнить
                         }

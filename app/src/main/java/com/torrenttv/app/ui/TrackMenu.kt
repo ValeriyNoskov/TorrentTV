@@ -139,6 +139,11 @@ fun TrackMenuOverlay(
                         focusRequester = focusRequester,
                         onClick = { row ->
                             if (row != null) {
+                                val fmt0 = row.group.getTrackFormat(row.trackIndex)
+                                com.torrenttv.app.data.AppLog.log(
+                                    "player",
+                                    "выбрана аудиодорожка: ${fmt0.label ?: fmt0.language ?: "№${row.trackIndex + 1}"}",
+                                )
                                 player.trackSelectionParameters = player.trackSelectionParameters
                                     .buildUpon()
                                     .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
@@ -187,6 +192,14 @@ fun TrackMenuOverlay(
                         },
                         focusRequester = if (audioRows.isEmpty()) focusRequester else null,
                         onClick = { row ->
+                            com.torrenttv.app.data.AppLog.log(
+                                "player",
+                                if (row == null) "субтитры выключены"
+                                else {
+                                    val f = row.group.getTrackFormat(row.trackIndex)
+                                    "выбраны субтитры: ${f.label ?: f.language ?: "№${row.trackIndex + 1}"}"
+                                },
+                            )
                             player.trackSelectionParameters = player.trackSelectionParameters
                                 .buildUpon()
                                 .clearOverridesOfType(C.TRACK_TYPE_TEXT)

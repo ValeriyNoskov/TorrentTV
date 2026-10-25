@@ -622,7 +622,11 @@ fun OnlinePlayerScreen(
             KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
                 val delta = if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) 10_000L else -10_000L
                 val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
-                player.seekTo((player.currentPosition + delta).coerceIn(0L, dur))
+                val target = (player.currentPosition + delta).coerceIn(0L, dur)
+                com.torrenttv.app.data.AppLog.log(
+                    "player", "перемотка ${if (delta > 0) "+" else "−"}10 с → ${target / 1000} с",
+                )
+                player.seekTo(target)
                 seekInfo = if (delta > 0) "⏩︎ +10 сек" else "⏪︎ −10 сек"
                 panelTick++
                 true
@@ -631,14 +635,35 @@ fun OnlinePlayerScreen(
             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> { panelTick++; true }
             // OK — пауза/продолжить (как в YouTube TV)
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
-                if (player.isPlaying) player.pause() else player.play()
-                seekInfo = if (player.isPlaying) "▶︎ Продолжаем" else "▮▮ Пауза"
+                if (player.isPlaying) {
+                    com.torrenttv.app.data.AppLog.log("player", "пауза на ${player.currentPosition / 1000} с")
+                    player.pause()
+                    seekInfo = "▮▮ Пауза"
+                } else {
+                    com.torrenttv.app.data.AppLog.log("player", "продолжение с ${player.currentPosition / 1000} с")
+                    player.play()
+                    seekInfo = "▶︎ Продолжаем"
+                }
                 panelTick++; true
             }
-            KeyEvent.KEYCODE_MEDIA_PLAY -> { player.play(); panelTick++; true }
-            KeyEvent.KEYCODE_MEDIA_PAUSE -> { player.pause(); panelTick++; true }
-            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { player.seekTo(player.currentPosition + 30_000L); seekInfo = "⏩︎ +30 сек"; panelTick++; true }
-            KeyEvent.KEYCODE_MEDIA_REWIND -> { player.seekTo((player.currentPosition - 30_000L).coerceAtLeast(0)); seekInfo = "⏪︎ −30 сек"; panelTick++; true }
+            KeyEvent.KEYCODE_MEDIA_PLAY -> {
+                com.torrenttv.app.data.AppLog.log("player", "play (кнопка пульта)")
+                player.play(); panelTick++; true
+            }
+            KeyEvent.KEYCODE_MEDIA_PAUSE -> {
+                com.torrenttv.app.data.AppLog.log("player", "pause (кнопка пульта)")
+                player.pause(); panelTick++; true
+            }
+            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
+                val t = player.currentPosition + 30_000L
+                com.torrenttv.app.data.AppLog.log("player", "перемотка +30 с → ${t / 1000} с")
+                player.seekTo(t); seekInfo = "⏩︎ +30 сек"; panelTick++; true
+            }
+            KeyEvent.KEYCODE_MEDIA_REWIND -> {
+                val t = (player.currentPosition - 30_000L).coerceAtLeast(0)
+                com.torrenttv.app.data.AppLog.log("player", "перемотка −30 с → ${t / 1000} с")
+                player.seekTo(t); seekInfo = "⏪︎ −30 сек"; panelTick++; true
+            }
             KeyEvent.KEYCODE_MENU -> { showTrackMenu = !showTrackMenu; true }
             // BACK: панель скрыта — СНАЧАЛА показываем панель (защита от
             // случайного нажатия: выход только вторым BACK при видимой панели).
@@ -1282,6 +1307,7 @@ fun OnlinePlayerScreen(
                     speedIdx = (speedIdx + 1) % speeds.size
                     player.setPlaybackSpeed(speeds[speedIdx])
                     speedLabel = if (speeds[speedIdx] == 1f) "1×" else "${speeds[speedIdx]}×"
+                    com.torrenttv.app.data.AppLog.log("player", "скорость → ${speeds[speedIdx]}×")
                     seekInfo = "Скорость ${speeds[speedIdx]}×"; panelTick++
                 }
                 GItem("🎵 Дорожки") { showTrackMenu = true; panelTick++ }
@@ -1394,7 +1420,12 @@ fun OnlinePlayerScreen(
                     androidx.tv.material3.Surface(
                         onClick = {
                             showFiles = false
-                            if (!current) onSelectFile(idx)
+                            if (!current) {
+                                com.torrenttv.app.data.AppLog.log(
+                                    "player", "выбрана серия: файл #$idx «${name.substringAfterLast('/')}»",
+                                )
+                                onSelectFile(idx)
+                            }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1533,7 +1564,10 @@ fun OnlinePlayerScreen(
                 val options = listOf(null to "Авто (по каналу)", 2160 to "2160p · 4K", 1080 to "1080p", 720 to "720p", 480 to "480p")
                 for ((q, label) in options) {
                     androidx.tv.material3.Surface(
-                        onClick = { maxQuality = q; showQuality = false },
+                        onClick = {
+                            com.torrenttv.app.data.AppLog.log("player", "качество потока → $label")
+                            maxQuality = q; showQuality = false
+                        },
                         modifier = Modifier
                             .width(220.dp)
                             .padding(vertical = 3.dp)

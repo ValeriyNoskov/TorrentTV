@@ -122,8 +122,8 @@ object AppLog {
      * Gist — секретный: открывается по ссылке без пароля, но не виден в профиле.
      * Токен хранится в Настройках ТВ (не в APK) с правами только на gists.
      */
-    fun sendToPastebin(githubToken: String? = null): String {
-        val content = dump().toByteArray(Charsets.UTF_8)
+    fun sendToPastebin(githubToken: String? = null, overrideContent: String? = null, overrideTitle: String? = null): String {
+        val content = (overrideContent ?: dump()).toByteArray(Charsets.UTF_8)
         val client = TorrentHttp.client
 
         // 0) GitHub Gist от имени владельца токена: я (разработчик) читаю его сам
@@ -132,10 +132,11 @@ object AppLog {
                 val stamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm").format(java.util.Date())
                 val fileContent = org.json.JSONObject.quote(String(content, Charsets.UTF_8))
                 val payload = org.json.JSONObject()
-                    .put("description", "ВНосКино лог $stamp")
+                    .put("description", (overrideTitle ?: "ВНосКино лог") + " $stamp")
                     .put("public", false)
                     .put("files", org.json.JSONObject()
-                        .put("vnoskino_log.txt", org.json.JSONObject().put("content", String(content, Charsets.UTF_8))))
+                        .put(overrideTitle?.let { "vnoskino_selftest.txt" } ?: "vnoskino_log.txt",
+                            org.json.JSONObject().put("content", String(content, Charsets.UTF_8))))
                     .toString()
                 val body = okhttp3.RequestBody.create(
                     "application/json; charset=utf-8".toMediaTypeOrNull(),
