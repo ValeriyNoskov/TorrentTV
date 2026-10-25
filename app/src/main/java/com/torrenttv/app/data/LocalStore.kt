@@ -244,6 +244,18 @@ class LocalStore(context: Context) {
     fun getMagnet(item: MediaItem, suffix: String = ""): String? =
         prefs.getString("magnet:" + item.storeKey + suffix, null)
 
+    /**
+     * Все сохранённые магниты сериала: общий («Продолжить») + по сериям.
+     * Уникальные значения: паковые раздачи пишут один магнит на много серий.
+     * Нужен, чтобы проверить файлы УЖЕ известной раздачи на новые серии
+     * (на Рутрекере серии дописывают в ту же раздачу) — без нового поиска.
+     */
+    fun savedMagnets(item: MediaItem): List<String> =
+        prefs.all.entries
+            .filter { it.key.startsWith("magnet:" + item.storeKey) }
+            .mapNotNull { it.value as? String }
+            .distinct()
+
     // ---------- Последний выбранный сезон (экран эпизодов) ----------
 
     /** Запомнить выбранный на экране эпизодов сезон («Титаны»: открыл S05 — откроется S05). */

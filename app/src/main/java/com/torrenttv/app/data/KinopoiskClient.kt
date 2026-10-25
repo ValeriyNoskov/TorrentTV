@@ -36,7 +36,9 @@ object KinopoiskClient {
     fun attachCache(dir: java.io.File) {
         if (cacheDir != null) return
         cacheDir = dir
-        ApiUsage.attach(dir)
+        // Счётчики API — в filesDir: cacheDir система может подчистить в любой
+        // момент, и счётчик обнулялся посреди дня (расхождение с кабинетом КП)
+        ApiUsage.attach(java.io.File(dir.parentFile, "files"))
         runCatching {
             val f = java.io.File(dir, "kp_cache.json")
             if (f.exists()) {
@@ -92,6 +94,23 @@ object KinopoiskClient {
         .connectTimeout(6, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
         .build()
+
+    // Троттлинг: тариф КП — не больше 5 запросов/сек на ключ. Массовое
+    // обогащение постерами бьёт пачкой и ловит 429 (rate limit) — они
+    // не только мусорят в логах, но и тратят попытки ретраев на соседних
+    // ключах. Пауза между запусками запросов — 220 мс (≈4.5 req/sec).
+    private val throttleLock = Any()
+    private var lastCallAt: Long = 0
+
+    private fun throttle() {
+        synchronized(throttleLock) {
+            val wait = lastCallAt + 220 - System.currentTimeMillis()
+            if (wait > 0) {
+                try { Thread.sleep(wait) } catch (_: InterruptedException) {}
+            }
+            lastCallAt = System.currentTimeMillis()
+        }
+    }
 
     // Кэш жанров: имя → числовой id (эндпоинт filters). Жанры в выдачах идут
     // только именами, а фильтры и стоп-слова в приложении работают по числовым id.
@@ -189,6 +208,7 @@ object KinopoiskClient {
 
     /** Один сетевой вызов; возвращает тело или null. Кэширует успех. */
     private fun fetch(url: String, attempt: Int = 0): String? {
+        throttle()
         ApiUsage.kpRequest(keyIndex) // расход лимита ключа — для счётчиков в настройках
         val resp = try {
             http.newCall(

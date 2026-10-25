@@ -231,7 +231,9 @@ fun FilterListDialog(
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(start = 20.dp, top = 14.dp),
             )
-            // Поиск: всегда первое поле; ОК — клавиатурная шторка
+            // Поиск: всегда первое поле; ОК — клавиатурная шторка.
+            // Фокус забираем себе: иначе DPAD двигал подсветку по полкам
+            // каталога ПОД модалкой — казалось, что фильтр не открывается.
             Surface(
                 onClick = { keyboard = true },
                 shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
@@ -244,6 +246,7 @@ fun FilterListDialog(
                 modifier = Modifier
                     .padding(horizontal = 16.dp, vertical = 10.dp)
                     .fillMaxWidth()
+                    .focusRequester(listFocus)
                     // mouseClick — чтобы Surface кликался тапом мыши в эмуляторе
                     .mouseClick { keyboard = true },
             ) {

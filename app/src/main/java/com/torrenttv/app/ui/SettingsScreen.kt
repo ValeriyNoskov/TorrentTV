@@ -628,6 +628,16 @@ fun SettingsScreen(onBack: () -> Unit) {
                                     color = Color(0xFF9CCC65),
                                     fontSize = 15.sp,
                                 )
+                                Text(
+                                    // Сайт КП считает запросы ключа СО ВСЕХ устройств:
+                                    // ТВ + телефон/эмулятор + ручные проверки. Наш
+                                    // счётчик — только это устройство, числа не совпадут.
+                                    "Счётчик — только по этому устройству. " +
+                                        "На сайте КП расход ключа суммарный.",
+                                    color = Color.White.copy(alpha = 0.5f),
+                                    fontSize = 13.sp,
+                                    modifier = Modifier.padding(top = 6.dp),
+                                )
                             }
                         }
                     }

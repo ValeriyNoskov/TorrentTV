@@ -113,6 +113,17 @@ fun SmartPlayScreen(
         val isTv = item.type != "movie"
         com.torrenttv.app.data.AppLog.log("smart", "sources: \"$query\" isTv=$isTv")
 
+        // Сохранённый магнит (смотрели/выбирали раздачу раньше) — мгновенное
+        // «Продолжить» БЕЗ ожидания поиска: раздача уже известна и записана.
+        // Поиск остальных вариантов продолжается фоном и дополняет список —
+        // раньше экран молча искал заново даже для избранного/просматриваемого
+        val savedMagnet = store.getMagnet(item)
+        if (savedMagnet != null) {
+            choices = listOf(SmartChoice.Resume)
+            done = true
+            status = "Можно продолжить — ищу и другие варианты…"
+        }
+
         val online = mutableListOf<SmartChoice>()
 
         // ---- Торренты (со всех трекеров) ----
@@ -193,13 +204,10 @@ fun SmartPlayScreen(
             .take(10)
             .map { SmartChoice.Torrent(it) }
 
-        choices = (best?.let { listOf(SmartChoice.Instant(it)) } ?: emptyList()) +
+        val resumeList = if (savedMagnet != null) listOf(SmartChoice.Resume) else emptyList()
+        choices = resumeList +
+            (best?.let { listOf(SmartChoice.Instant(it)) } ?: emptyList()) +
             choices + torrentChoices
-
-        // Сериалы: продолжение с последней серии — самая верхняя строка
-        if (isTv && store.getMagnet(item) != null) {
-            choices = listOf(SmartChoice.Resume) + choices
-        }
         done = choices.isNotEmpty()
         failed = choices.isEmpty()
         status = if (failed) {

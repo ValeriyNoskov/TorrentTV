@@ -441,23 +441,6 @@ internal suspend fun seasonsFromTorrents(
         AppLog.log("episodes", "torrserve: не отвечает ($host) — эпизоды из раздачи недоступны")
         return emptyList<Season>() to "TorrServe не отвечает — откройте приложение TorrServe и повторите"
     }
-    val found: List<TorrentResult> = try {
-        // Полный набор параметров, как в SmartPlayScreen: jackett/приватные
-        // трекеры/исключения — иначе поиск сужен и «Спецы» не находятся
-        TorrentSearch.searchDetailed(
-            query = item.title,
-            isTvShow = item.type != "movie",
-            imdbId = item.imdbId,
-            jackett = store.jackettConfig(),
-            privateTrackers = store.privateTrackers(),
-            excludedKeywords = store.excludedKeywords().toSet(),
-        ).first
-    } catch (e: Exception) {
-        // Раньше падение глоталось молча — в логе «найдено 0» без причины
-        AppLog.log("episodes", "поиск раздач FAIL: ${e.message}")
-        emptyList()
-    }
-    AppLog.log("episodes", "«${item.title}»: раздач для эпизодов найдено ${found.size}")
     // Собираем сезоны из НЕСКОЛЬКИХ раздач: сезоны одного сериала часто лежат
     // отдельными раздачами («Титаны» S01–S04 в одной, S05 — в другой).
     // Выбор раздач: группируем по номеру сезона из НАЗВАНИЯ и берём ЛУЧШУЮ
@@ -468,27 +451,10 @@ internal suspend fun seasonsFromTorrents(
         Regex("S(\\d{1,2})", RegexOption.IGNORE_CASE).find(r.name)?.groupValues?.get(1)?.toIntOrNull()
             ?: Regex("(\\d{1,2})\\s*[сС]езон").find(r.name)?.groupValues?.get(1)?.toIntOrNull()
     }
-    val perSeason = found.filter { torrentSeasonOf(it) != null }
-        .groupBy { torrentSeasonOf(it)!! }
-        .mapValues { (_, rs) -> rs.maxByOrNull { it.seeds }!! }
-        .values
-    val multipack = found.filter { torrentSeasonOf(it) == null }.sortedByDescending { it.seeds }.take(2)
-    val picked = (perSeason + multipack).sortedByDescending { it.seeds }
-    AppLog.log("episodes", "«${item.title}»: к загрузке выбраны раздачи: " +
-        picked.joinToString("; ") { "${it.name.take(50)} (S${torrentSeasonOf(it) ?: "?"}, ${it.seeds} сидов)" })
     val allSeasons = sortedMapOf<Int, MutableMap<Int, Episode>>()
-    for (r in picked) {
-        val t = runCatching {
-            TorrServeService.addMagnet(host, TorrentSearch.toMagnet(r), item.title, 45_000)
-        }.getOrNull() ?: continue
-        val video = t.files.filter {
-            it.path.substringAfterLast('.', "").lowercase() in TorrentEngine.VIDEO_EXT
-        }
-        // Сезон из названия раздачи: «Титаны.S05» / «5 сезон» — для пачек,
-        // где файлы названы просто «05. …» без метки сезона
-        val torrentSeason = Regex("S(\\d{1,2})", RegexOption.IGNORE_CASE).find(r.name)
-            ?.groupValues?.get(1)?.toIntOrNull()
-            ?: Regex("(\\d{1,2})\\s*[сС]езон").find(r.name)?.groupValues?.get(1)?.toIntOrNull()
+
+    /** Разложить файлы сессии TorrServe по сезонам/сериям; вернуть НОВЫЕ серии (s,e). */
+    fun ingestFiles(video: List<TorrServeService.TSFile>, torrentSeason: Int?): List<Pair<Int, Int>> {
         val bySeason = sortedMapOf<Int, MutableList<Episode>>()
         for (f in video) {
             val parsed = Episode.fileNumbers(f.path) ?: run {
@@ -507,13 +473,94 @@ internal suspend fun seasonsFromTorrents(
                 ),
             )
         }
-        if (bySeason.isEmpty()) continue
-        val magnet = TorrentSearch.toMagnet(r)
-        for (eps in bySeason.values) for (ep in eps) store.saveMagnet(item, magnet, ep.sourceSuffix)
+        val added = mutableListOf<Pair<Int, Int>>()
         for ((num, eps) in bySeason) {
             val target = allSeasons.getOrPut(num) { mutableMapOf() }
-            for (ep in eps) target.putIfAbsent(ep.episode, ep)
+            for (ep in eps) if (target.putIfAbsent(ep.episode, ep) == null) added.add(num to ep.episode)
         }
+        return added
+    }
+
+    // ---- 1. Сохранённые магниты — БЕЗ поиска ----
+    // Паковые раздачи дописывают серии в ту же тему («05x01-06» → появится
+    // E07): TorrServe вернёт актуальный список файлов по уже известному
+    // магниту. Это мгновенно и не тратит поиск — новые серии проверяются
+    // прямо в той раздаче, где смотрели.
+    val saved = store.savedMagnets(item)
+    for (magnet in saved) {
+        val t = runCatching {
+            TorrServeService.addMagnet(host, magnet, item.title, 45_000)
+        }.getOrNull() ?: continue
+        val video = t.files.filter {
+            it.path.substringAfterLast('.', "").lowercase() in TorrentEngine.VIDEO_EXT
+        }
+        // Сезон берём из имён файлов (fileNumbers); для файлов без метки —
+        // из пути/названия раздачи: торрсервер не отдаёт имя темы, поэтому
+        // пробуем «Sxx» в имени каталога раздачи
+        val folderSeason = video.firstNotNullOfOrNull { f ->
+            Regex("S(\\d{1,2})", RegexOption.IGNORE_CASE).find(f.path)?.groupValues?.get(1)?.toIntOrNull()
+        }
+        val before = allSeasons.values.sumOf { it.size }
+        ingestFiles(video, folderSeason)
+        val after = allSeasons.values.sumOf { it.size }
+        if (after > before) {
+            AppLog.log("episodes", "«${item.title}»: из сохранённой раздачи добавились серии (${before} → ${after})")
+        }
+    }
+    if (saved.isNotEmpty()) {
+        AppLog.log("episodes", "«${item.title}»: сохранённых раздач ${saved.size}, сезоны после проверки ${allSeasons.keys}")
+    }
+
+    // ---- 2. Поиск раздач (обновления, новые сезоны) ----
+    val found: List<TorrentResult> = try {
+        // Полный набор параметров, как в SmartPlayScreen: jackett/приватные
+        // трекеры/исключения — иначе поиск сужен и «Спецы» не находятся
+        TorrentSearch.searchDetailed(
+            query = item.title,
+            isTvShow = item.type != "movie",
+            imdbId = item.imdbId,
+            jackett = store.jackettConfig(),
+            privateTrackers = store.privateTrackers(),
+            excludedKeywords = store.excludedKeywords().toSet(),
+        ).first
+    } catch (e: Exception) {
+        // Раньше падение глоталось молча — в логе «найдено 0» без причины
+        AppLog.log("episodes", "поиск раздач FAIL: ${e.message}")
+        emptyList()
+    }
+    AppLog.log("episodes", "«${item.title}»: раздач для эпизодов найдено ${found.size}")
+    val perSeason = found.filter { torrentSeasonOf(it) != null }
+        .groupBy { torrentSeasonOf(it)!! }
+        .mapValues { (_, rs) -> rs.maxByOrNull { it.seeds }!! }
+        .values
+    val multipack = found.filter { torrentSeasonOf(it) == null }.sortedByDescending { it.seeds }.take(2)
+    val picked = (perSeason + multipack).sortedByDescending { it.seeds }
+    AppLog.log("episodes", "«${item.title}»: к загрузке выбраны раздачи: " +
+        picked.joinToString("; ") { "${it.name.take(50)} (S${torrentSeasonOf(it) ?: "?"}, ${it.seeds} сидов)" })
+    for (r in picked) {
+        val t = runCatching {
+            TorrServeService.addMagnet(host, TorrentSearch.toMagnet(r), item.title, 45_000)
+        }.getOrNull() ?: continue
+        val video = t.files.filter {
+            it.path.substringAfterLast('.', "").lowercase() in TorrentEngine.VIDEO_EXT
+        }
+        // Сезон из названия раздачи: «Титаны.S05» / «5 сезон» — для пачек,
+        // где файлы названы просто «05. …» без метки сезона
+        val added = ingestFiles(video, torrentSeasonOf(r))
+        if (added.isEmpty()) continue
+        // Магнит раздачи сохраняем сериям, которые из неё пришли: серия
+        // играет из конкретной раздачи, а не ищется заново
+        val magnet = TorrentSearch.toMagnet(r)
+        for ((s, e) in added) {
+            val ep = allSeasons[s]?.get(e) ?: continue
+            store.saveMagnet(item, magnet, ep.sourceSuffix)
+        }
+        AppLog.log(
+            "episodes",
+            "«${item.title}»: раздача «${r.name.take(40)}» дала серии ${added.size}, новые: ${
+                added.takeLast(3).joinToString(", ") { "S%02dE%02d".format(it.first, it.second) }
+            }",
+        )
     }
     if (allSeasons.isEmpty()) return emptyList<Season>() to "Раздач с сериями не нашлось"
     AppLog.log("episodes", "«${item.title}»: из раздач собраны сезоны ${allSeasons.keys}")
