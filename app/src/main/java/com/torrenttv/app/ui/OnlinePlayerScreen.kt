@@ -1526,7 +1526,7 @@ fun OnlinePlayerScreen(
                             contentColor = if (maxQuality == q) Color(0xFF0E1116) else Color.White,
                             focusedContainerColor = Color(0xFFFFFFFF),
                             focusedContentColor = Color(0xFF0E1116),
-                            pressedContainerColor = Color(0xFFE0A82E),
+                            pressedContainerColor = Color(0xFFD5DAE4), // без жёлтого (v0.9.4)
                             pressedContentColor = Color(0xFF0E1116),
                         ),
                     ) {
@@ -1559,7 +1559,7 @@ fun OnlinePlayerScreen(
                             contentColor = if (panelHideSec == sec) Color(0xFF0E1116) else Color.White,
                             focusedContainerColor = Color(0xFFFFFFFF),
                             focusedContentColor = Color(0xFF0E1116),
-                            pressedContainerColor = Color(0xFFE0A82E),
+                            pressedContainerColor = Color(0xFFD5DAE4), // без жёлтого (v0.9.4)
                             pressedContentColor = Color(0xFF0E1116),
                         ),
                     ) {
@@ -1590,7 +1590,7 @@ internal fun SettingsMenuItem(label: String, focusRequester: FocusRequester? = n
             contentColor = Color.White,
             focusedContainerColor = Color(0xFFE8ECF4),
             focusedContentColor = Color(0xFF0E1116),
-            pressedContainerColor = Color(0xFFE0A82E),
+            pressedContainerColor = Color(0xFFD5DAE4), // без жёлтого (v0.9.4)
             pressedContentColor = Color(0xFF0E1116),
         ),
     ) {

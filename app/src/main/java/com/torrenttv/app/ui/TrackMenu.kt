@@ -164,17 +164,17 @@ fun TrackMenuOverlay(
                     // Сдвиг субтитров ±0.5с (как в Kodi): субы отстают/спешат
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Сдвиг: ", color = Color(0xFFB8C0CC), fontSize = 14.sp)
-                        Surface(onClick = { onSubShift(-500) }, shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)), colors = ClickableSurfaceDefaults.colors(containerColor = Color(0xFF1F2430), contentColor = Color.White, focusedContainerColor = Color(0xFFF5B942), focusedContentColor = Color.Black)) {
+                        Surface(onClick = { onSubShift(-500) }, shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)), colors = ClickableSurfaceDefaults.colors(containerColor = Color(0xFF1F2430), contentColor = Color.White, focusedContainerColor = Color(0xB3FFFFFF), focusedContentColor = Color(0xFF0E1116))) {
                             Text("−0.5с", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp))
                         }
                         Text(
                             "%+.1fс".format(subShiftMs / 1000f),
-                            color = if (subShiftMs == 0) Color(0xFFB8C0CC) else Color(0xFFF5B942),
+                            color = Color(0xFFB8C0CC),
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(horizontal = 10.dp),
                         )
-                        Surface(onClick = { onSubShift(+500) }, shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)), colors = ClickableSurfaceDefaults.colors(containerColor = Color(0xFF1F2430), contentColor = Color.White, focusedContainerColor = Color(0xFFF5B942), focusedContentColor = Color.Black)) {
+                        Surface(onClick = { onSubShift(+500) }, shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)), colors = ClickableSurfaceDefaults.colors(containerColor = Color(0xFF1F2430), contentColor = Color.White, focusedContainerColor = Color(0xB3FFFFFF), focusedContentColor = Color(0xFF0E1116))) {
                             Text("+0.5с", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp))
                         }
                     }
@@ -223,7 +223,7 @@ fun TrackMenuOverlay(
 
 @Composable
 private fun SectionTitle(text: String) {
-    Text(text, fontSize = 14.sp, color = Color(0xFFF5B942), fontWeight = FontWeight.SemiBold)
+    Text(text, fontSize = 14.sp, color = Color(0xFFB8C0CC), fontWeight = FontWeight.SemiBold)
 }
 
 @Composable
@@ -246,9 +246,9 @@ private fun TrackItemList(
                 colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
                     containerColor = Color(0xFF141821),
                     contentColor = Color.White,
-                    focusedContainerColor = Color(0xFFF5B942),
+                    focusedContainerColor = Color(0xB3FFFFFF), // без жёлтого (v0.9.4)
                     focusedContentColor = Color(0xFF0E1116),
-                    pressedContainerColor = Color(0xFFE0A82E),
+                    pressedContainerColor = Color(0xFFD5DAE4),
                     pressedContentColor = Color(0xFF0E1116),
                 ),
             ) {

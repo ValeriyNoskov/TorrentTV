@@ -348,7 +348,7 @@ fun EpisodesScreen(
 internal fun enrichWithTrakt(item: MediaItem, seasons: List<Season>, trakt: List<Season>): List<Season> {
     if (trakt.isEmpty()) return seasons
     val bySeason = trakt.associateBy { it.number }
-    return seasons.map { s ->
+    val result = seasons.map { s ->
         val t = bySeason[s.number] ?: return@map s
         val tEps = t.episodes.associateBy { it.episode }
         val merged = s.episodes.map { ep ->
@@ -357,7 +357,11 @@ internal fun enrichWithTrakt(item: MediaItem, seasons: List<Season>, trakt: List
         }.toMutableList()
         for (te in t.episodes) if (merged.none { it.episode == te.episode }) merged.add(te)
         Season(s.number, merged.sortedBy { it.episode })
-    }
+    }.toMutableList()
+    // Сезоны, которых нет ни в КП, ни в раздачах (только в Trakt), — добавить целиком:
+    // иначе «не все сезоны» на экране
+    for (t in trakt) if (result.none { it.number == t.number }) result.add(t)
+    return result.sortedBy { it.number }
 }
 
 /**
@@ -503,8 +507,9 @@ private fun SeasonChip(label: String, selected: Boolean, onClick: () -> Unit) {
             contentColor = if (selected) Color(0xFF0E1116) else Color.White,
             focusedContainerColor = Color(0xB3FFFFFF),
             focusedContentColor = Color(0xFF0E1116),
-            pressedContainerColor = Color(0xFFE0A82E),
-            pressedContentColor = Color(0xFF0E1116),
+            // Без жёлтого: пережиток старого дизайна, убран в v0.9.4
+            pressedContainerColor = Color(0xFF273548),
+            pressedContentColor = Color.White,
             disabledContainerColor = Color(0xFF1F2430),
             disabledContentColor = Color.White,
         ),

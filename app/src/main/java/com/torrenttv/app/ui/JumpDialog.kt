@@ -48,7 +48,7 @@ fun JumpToDialog(
         ) {
             androidx.tv.material3.Text(
                 "⏱ Перейти к…",
-                color = Color(0xFFF5B942),
+                color = Color(0xFFB8C0CC), // без жёлтого в плеере (v0.9.4)
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(bottom = 4.dp),

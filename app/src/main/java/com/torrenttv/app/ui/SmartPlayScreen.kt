@@ -225,7 +225,11 @@ fun SmartPlayScreen(
         Column(Modifier.fillMaxSize()) {
             Text(item.title, color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(6.dp))
-            Text(status, color = if (failed) Color(0xFFFFD54F) else Color(0xFFF5B942), fontSize = 16.sp)
+            Text(
+                status,
+                color = if (failed) Color(0xFFE57373) else Color(0xFFB8C0CC), // без жёлтого (v0.9.4)
+                fontSize = 16.sp,
+            )
             Spacer(Modifier.height(16.dp))
 
             if (failed) {
@@ -269,7 +273,7 @@ fun SmartPlayScreen(
                     Modifier.fillMaxWidth().height(90.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text("⏳ " + status, color = Color(0xFFF5B942).copy(alpha = alpha), fontSize = 17.sp)
+                    Text("⏳ " + status, color = Color.White.copy(alpha = alpha), fontSize = 17.sp)
                 }
             } else {
                 val listState = rememberLazyListState()
