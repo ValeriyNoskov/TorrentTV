@@ -39,6 +39,7 @@ fun MagnetEntryScreen(item: MediaItem, onDone: () -> Unit, onBack: () -> Unit) {
     var magnet by remember { mutableStateOf(store.getMagnet(item) ?: "") }
     var error by remember { mutableStateOf("") }
     val kbFocus = remember { FocusRequester() }
+    var showKb by remember { mutableStateOf(true) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     Column(
@@ -99,16 +100,24 @@ fun MagnetEntryScreen(item: MediaItem, onDone: () -> Unit, onBack: () -> Unit) {
                 },
             ) { Text("Сохранить и смотреть") }
             Spacer(Modifier.width(16.dp))
-            Button(onClick = onBack) { Text("← Назад") }
+            Spacer(Modifier.width(16.dp))
+        Button(onClick = { showKb = true }) { Text("⌨ Ввести") }
+        Spacer(Modifier.width(16.dp))
+        Button(onClick = onBack) { Text("← Назад") }
         }
 
         Spacer(Modifier.height(8.dp))
 
-        TvKeyboard(
-            onChar = { magnet += it },
-            onBackspace = { if (magnet.isNotEmpty()) magnet = magnet.dropLast(1) },
-            onClear = { magnet = "" },
-            firstKeyFocus = kbFocus,
-        )
+        if (showKb) {
+            KeyboardSheet(
+                value = magnet,
+                title = "Ссылка magnet / http",
+                doneLabel = "✓ Готово",
+                onChar = { magnet += it },
+                onBackspace = { if (magnet.isNotEmpty()) magnet = magnet.dropLast(1) },
+                onClear = { magnet = "" },
+                onDismiss = { showKb = false },
+            )
+        }
     }
 }

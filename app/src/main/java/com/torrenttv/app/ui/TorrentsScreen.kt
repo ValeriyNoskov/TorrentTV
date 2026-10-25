@@ -459,23 +459,16 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
                         ) { runSearch() }
                     }
                 } else {
-                    Row(
-                        verticalAlignment = Alignment.Top,
-                        modifier = Modifier.padding(horizontal = 32.dp, vertical = 4.dp),
-                    ) {
-                        TvKeyboard(
-                            onChar = { searchQ += it },
-                            onBackspace = { if (searchQ.isNotEmpty()) searchQ = searchQ.dropLast(1) },
-                            onClear = { searchQ = "" },
-                            firstKeyFocus = kbFieldFocus,
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        ActionPill(
-                            text = "Найти ▶",
-                            active = true,
-                            modifier = Modifier.focusRequester(findFocus),
-                        ) { runSearch() }
-                    }
+                    KeyboardSheet(
+                        value = searchQ,
+                        title = "Поиск раздач",
+                        doneLabel = "🔍 Найти",
+                        onDone = { runSearch() },
+                        onChar = { searchQ += it },
+                        onBackspace = { if (searchQ.isNotEmpty()) searchQ = searchQ.dropLast(1) },
+                        onClear = { searchQ = "" },
+                        onDismiss = { inputOpen = false },
+                    )
                 }
             }
 

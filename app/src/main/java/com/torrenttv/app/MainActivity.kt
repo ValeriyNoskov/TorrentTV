@@ -290,9 +290,9 @@ private fun App() {
                     },
                 )
 
-                Screen.Movies -> CatalogScreen(mode = "movies", onOpenDetails = { screen = Screen.Details(it) })
-                Screen.TvShows -> CatalogScreen(mode = "tv", onOpenDetails = { screen = Screen.Details(it) })
-                Screen.Shows -> CatalogScreen(mode = "shows", onOpenDetails = { screen = Screen.Details(it) })
+                Screen.Movies -> CatalogScreen(mode = "movies", onOpenDetails = { screen = Screen.Details(it) }, onSearch = { screen = Screen.Search })
+                Screen.TvShows -> CatalogScreen(mode = "tv", onOpenDetails = { screen = Screen.Details(it) }, onSearch = { screen = Screen.Search })
+                Screen.Shows -> CatalogScreen(mode = "shows", onOpenDetails = { screen = Screen.Details(it) }, onSearch = { screen = Screen.Search })
                 Screen.Tv -> TvScreen(
                     onPlay = { ch, list -> screen = Screen.Live(ch, list) },
                 )

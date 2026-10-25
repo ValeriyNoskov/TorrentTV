@@ -2,6 +2,9 @@ package com.torrenttv.app.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -32,7 +35,7 @@ import kotlinx.coroutines.withContext
  * Полоса жанров + полки «Популярные» и «Топ» с бесконечной подгрузкой.
  */
 @Composable
-fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit) {
+fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: () -> Unit = {}) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
     val noun = when (mode) { "movies" -> "фильмы"; "shows" -> "шоу"; else -> "сериалы" }
@@ -50,6 +53,55 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit) {
     var genres by remember { mutableStateOf<List<Genre>>(emptyList()) }
     // Жанр запоминается: выход из карточки не сбрасывает выбор (как в «Торрентах»)
     var selected by remember { mutableStateOf<Genre?>(null) }
+    // ⚙ Фильтры прямо в каталоге (как у Кинопоиска): скрытые жанры + страны
+    var showFilters by remember { mutableStateOf(false) }
+    var movieGenresAll by remember { mutableStateOf<List<Genre>>(emptyList()) }
+    var tvGenresAll by remember { mutableStateOf<List<Genre>>(emptyList()) }
+    var countriesAll by remember { mutableStateOf<List<Genre>>(emptyList()) }
+    var excludedG by remember { mutableStateOf(store.excludedGenreIds().toSet()) }
+    var excludedC by remember { mutableStateOf(store.excludedCountryIds().toSet()) }
+    LaunchedEffect(showFilters) {
+        if (showFilters && movieGenresAll.isEmpty()) {
+            withContext(Dispatchers.IO) {
+                movieGenresAll = runCatching { MediaApi.movieGenres() }.getOrDefault(emptyList())
+                tvGenresAll = runCatching { MediaApi.tvGenres() }.getOrDefault(emptyList())
+                countriesAll = runCatching { MediaApi.countries() }.getOrDefault(emptyList())
+            }
+        }
+    }
+    if (showFilters) {
+        FilterPicker(
+            title = "Скрыть из каталогов",
+            groups = listOf("Жанры фильмов:" to movieGenresAll, "Жанры сериалов:" to tvGenresAll, "Страны:" to countriesAll),
+            excluded = excludedG + excludedC,
+            onToggle = { g ->
+                if (g.id in excludedG || g.id in excludedC) {
+                    // снять: id может быть и жанром, и страной — чистим оба набора
+                    excludedG = excludedG - g.id
+                    excludedC = excludedC - g.id
+                } else {
+                    // жанры и страны могут пересекаться по id у КП — относим к жанрам,
+                    // если id есть в их списках, иначе к странам
+                    if (movieGenresAll.any { it.id == g.id } || tvGenresAll.any { it.id == g.id }) {
+                        excludedG = excludedG + g.id
+                        store.setExcludedGenreIds(excludedG)
+                        return@FilterPicker
+                    }
+                    excludedC = excludedC + g.id
+                }
+                store.setExcludedGenreIds(excludedG)
+                store.setExcludedCountryIds(excludedC)
+            },
+            onClearAll = {
+                excludedG = emptySet()
+                excludedC = emptySet()
+                store.setExcludedGenreIds(excludedG)
+                store.setExcludedCountryIds(excludedC)
+            },
+            onClose = { showFilters = false },
+        )
+        return
+    }
 
     LaunchedEffect(mode) {
         genres = withContext(Dispatchers.IO) {
@@ -89,6 +141,39 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit) {
             }
         }
         item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // 🔍 Поиск — на каждой вкладке (просьба владельца)
+                androidx.tv.material3.Surface(
+                    onClick = onSearch,
+                    shape = clickableSurfaceShape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
+                    colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                        containerColor = Color(0xFF1F2430),
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContentColor = Color.Black,
+                    ),
+                ) { Text("🔍", fontSize = 16.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) }
+                Spacer(Modifier.width(8.dp))
+                // ⚙ Фильтры — с счётчиком скрытого (как у Кинопоиска)
+                val hiddenN = excludedG.size + excludedC.size
+                androidx.tv.material3.Surface(
+                    onClick = { showFilters = true },
+                    shape = clickableSurfaceShape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
+                    colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                        containerColor = Color(0xFF1F2430),
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContentColor = Color.Black,
+                    ),
+                ) {
+                    Text(
+                        if (hiddenN > 0) "⚙ Фильтры · $hiddenN" else "⚙ Фильтры",
+                        fontSize = 15.sp,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                    )
+                }
+            }
+            Spacer(Modifier.height(6.dp))
             SortChips(sortOptions, sort) {
                 sort = it
                 store.saveCatalogSort(mode, it)

@@ -52,13 +52,24 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 // Раскладка экранной клавиатуры (ЙЦУКЕН)
-private val KEY_ROWS = listOf(
+// Буквенные ряды: переключение RU/EN кнопкой внизу слева
+private val KEY_ROWS_RU = listOf(
     listOf('Й', 'Ц', 'У', 'К', 'Е', 'Н', 'Г', 'Ш', 'Щ', 'З', 'Х', 'Ъ'),
     listOf('Ф', 'Ы', 'В', 'А', 'П', 'Р', 'О', 'Л', 'Д', 'Ж', 'Э'),
     listOf('Я', 'Ч', 'С', 'М', 'И', 'Т', 'Ь', 'Б', 'Ю'),
-    listOf('1', '2', '3', '4', '5', '6', '7', '8', '9', '0'),
-    listOf('-', '.', ','),
 )
+
+private val KEY_ROWS_EN = listOf(
+    listOf('Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'),
+    listOf('A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'),
+    listOf('Z', 'X', 'C', 'V', 'B', 'N', 'M'),
+)
+
+// Цифры и пунктуация — одним рядом (общий для обоих языков)
+private val KEY_ROWS_NUM = listOf('1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '.', ',')
+
+/** Язык экранной клавиатуры: живёт глобально, выбор переживает закрытие модалки. */
+var keyboardLang by mutableStateOf("ru")
 
 /**
  * Экран поиска: экранная клавиатура для пульта + голосовой ввод микрофоном.
@@ -571,19 +582,20 @@ fun SearchScreen(
                     },
                 )
             } else {
-                TvKeyboard(
+                KeyboardSheet(
+                    value = query,
+                    title = "Поиск",
                     onChar = { query += it },
                     onBackspace = { if (query.isNotEmpty()) query = query.dropLast(1) },
                     onClear = { query = "" },
-                    firstKeyFocus = firstKeyFocus,
+                    onDismiss = { showKb = false },
                 )
             }
         }
     }
 }
 
-/** TV-клавиатура: сетка фокусируемых клавиш, навигация с пульта. */
-@Composable
+/** TV-клавиатура: сетка фокусируемых клавиш, навигация с пульта. */@Composable
 fun TvKeyboard(
     onChar: (Char) -> Unit,
     onBackspace: () -> Unit,
@@ -596,25 +608,25 @@ fun TvKeyboard(
         verticalArrangement = Arrangement.spacedBy(6.dp),
         modifier = Modifier.padding(top = 8.dp),
     ) {
-        KEY_ROWS.forEachIndexed { rowIndex, row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        val letterRows = if (keyboardLang == "ru") KEY_ROWS_RU else KEY_ROWS_EN
+        (letterRows + listOf(KEY_ROWS_NUM)).forEachIndexed { rowIndex, row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 row.forEachIndexed { colIndex, ch ->
                     KeyboardKey(
                         ch,
                         focusRequester = if (rowIndex == 0 && colIndex == 0) firstKeyFocus else null,
                     ) { onChar(ch) }
                 }
-                // Пробел — в КАЖДОЙ строке. Раньше он был только в ряду цифр,
-                // и набранная фраза склеивалась в одно слово
-                // («СпецыТиТаныПолдень»).
-                KeyboardKey('␣', wide = true, onClick = { onChar(' ') })
-                if (rowIndex == KEY_ROWS.lastIndex) {
-                    KeyboardKey('⌫', wide = true, onClick = onBackspace)
-                }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        // Нижний ряд — как у Gboard TV: RU/EN · Очистить · длинный пробел · ⌫
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            KeyboardKey(' ', wide = true, label = if (keyboardLang == "ru") "РУС" else "ENG") {
+                keyboardLang = if (keyboardLang == "ru") "en" else "ru"
+            }
             KeyboardKey('О', wide = true, label = "Очистить", onClick = onClear)
+            KeyboardKey('␣', label = "пробел", onClick = { onChar(' ') })
+            KeyboardKey('⌫', wide = true, onClick = onBackspace)
         }
     }
 }
@@ -630,8 +642,14 @@ private fun KeyboardKey(
     Surface(
         onClick = onClick,
         modifier = Modifier
-            .width(if (wide) 140.dp else 58.dp)
-            .height(52.dp)
+            .width(
+                when {
+                    symbol == '␣' -> 190.dp // длинный пробел — как у Gboard TV
+                    wide -> 110.dp
+                    else -> 46.dp
+                },
+            )
+            .height(44.dp)
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .mouseClick { onClick() },
         shape = clickableSurfaceShape(RoundedCornerShape(8.dp)),
@@ -649,8 +667,8 @@ private fun KeyboardKey(
         Box(contentAlignment = Alignment.Center) {
             Text(
                 text = label ?: symbol.toString(),
-                color = Color.White,
-                fontSize = 20.sp,
+                color = Color.White.copy(alpha = if (symbol == '␣') 0.6f else 1f),
+                fontSize = 17.sp,
                 fontWeight = FontWeight.Medium,
             )
         }

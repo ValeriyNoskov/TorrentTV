@@ -3,6 +3,7 @@
 package com.torrenttv.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
@@ -69,7 +70,7 @@ private const val COUNTRIES_PAGE = 12
 /** Разделы настроек: id, заголовок, краткое описание. */
 private val SECTIONS = listOf(
     Triple("update", "⬆ Обновление", "Проверить и установить новую версию"),
-    Triple("search", "🔍 Поиск и фильтры", "Что скрывать из каталогов и поиска"),
+    Triple("keywords", "🚫 Стоп-слова", "Слова-исключения для поиска раздач"),
     Triple("tv", "📡 ТВ-каналы", "Свой плейлист добавляется к встроенному списку"),
     Triple("netcheck", "🩺 Проверка сети", "Какие источники доступны с этого устройства"),
     Triple("logs", "📝 Логи", "Запись событий и выгрузка лога в Gist"),
@@ -535,24 +536,14 @@ fun SettingsScreen(onBack: () -> Unit) {
                         SettingsNote("Необязательно: стрим через TorrServe быстрее. Без него работает встроенный движок.")
                     }
 
-                    else -> { // search
-                        SettingsRow(
-                            title = "Скрытые жанры",
-                            value = "${excluded.size} выбрано",
-                            valueOk = excluded.isNotEmpty(),
-                        ) { subscreen = "genres" }
-                        SettingsRow(
-                            title = "Скрытые страны",
-                            value = "${excludedCountries.size} выбрано",
-                            valueOk = excludedCountries.isNotEmpty(),
-                        ) { subscreen = "countries" }
+                    else -> { // keywords
                         SettingsRow(
                             title = "Стоп-слова",
                             value = if (keywords.isEmpty()) "Нет" else keywords.take(3).joinToString(", ") +
                                 if (keywords.size > 3) " …" else "",
                             valueOk = keywords.isNotEmpty(),
                         ) { subscreen = "keywords" }
-                        SettingsNote("Фильтры скрывают контент в каталогах, трендах и поиске.")
+                        SettingsNote("Слова-исключения для поиска раздач. Жанры и страны скрываются кнопкой «⚙ Фильтры» прямо в каталогах.")
                     }
                 }
             }
@@ -565,21 +556,30 @@ fun SettingsScreen(onBack: () -> Unit) {
         when (sub) {
             "netcheck" -> NetCheckScreen(onClose = { subscreen = null })
 
-            "genres" -> SubscreenGenres(
-                movieGenres, tvGenres, excluded,
-                onToggle = { id ->
-                    excluded = if (id in excluded) excluded - id else excluded + id
+            "genres" -> FilterPicker(
+                title = "Скрытые жанры",
+                groups = listOf("Фильмы:" to movieGenres, "Сериалы:" to tvGenres),
+                excluded = excluded,
+                onToggle = { g ->
+                    excluded = if (g.id in excluded) excluded - g.id else excluded + g.id
                     store.setExcludedGenreIds(excluded)
                 },
+                onClearAll = { excluded = emptySet(); store.setExcludedGenreIds(excluded) },
                 onClose = { subscreen = null },
             )
 
-            "countries" -> SubscreenCountries(
-                countries, excludedCountries,
+            "countries" -> FilterPicker(
+                title = "Скрытые страны",
+                groups = listOf("Страны:" to countries),
+                excluded = excludedCountries,
                 onToggle = { c ->
                     excludedCountries =
                         if (c.id in excludedCountries) excludedCountries - c.id
                         else excludedCountries + c.id
+                    store.setExcludedCountryIds(excludedCountries)
+                },
+                onClearAll = {
+                    excludedCountries = emptySet()
                     store.setExcludedCountryIds(excludedCountries)
                 },
                 onClose = { subscreen = null },
@@ -597,6 +597,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                     keywords = keywords - w
                     store.setExcludedKeywords(keywords)
                 },
+                onClearAll = { keywords = emptyList(); store.setExcludedKeywords(keywords) },
                 onClose = { subscreen = null },
             )
         }
@@ -743,6 +744,7 @@ private fun EditScreen(
     onCancel: () -> Unit,
 ) {
     val kbFocus = remember { FocusRequester() }
+    var showKb by remember { mutableStateOf(true) }
     val externalKb = androidx.compose.ui.platform.LocalContext.current.let {
         remember { com.torrenttv.app.data.LocalStore(it).useExternalKeyboard() }
     }
@@ -765,6 +767,8 @@ private fun EditScreen(
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = onSave) { Text("💾 Сохранить") }
+            Spacer(Modifier.width(12.dp))
+            Button(onClick = { showKb = true }) { Text("⌨ Ввести") }
             Spacer(Modifier.width(16.dp))
             Button(onClick = onCancel) { Text("Отмена") }
         }
@@ -796,11 +800,13 @@ private fun EditScreen(
                 },
             )
         } else {
-            TvKeyboard(
+            KeyboardSheet(
+                value = value,
+                title = title,
                 onChar = { ch -> onChange(value + ch) },
                 onBackspace = { if (value.isNotEmpty()) onChange(value.dropLast(1)) },
                 onClear = { onChange("") },
-                firstKeyFocus = kbFocus,
+                onDismiss = { showKb = false },
             )
         }
     }
@@ -1020,122 +1026,15 @@ private fun NetCheckScreen(onClose: () -> Unit) {
 
 /** Выбор скрываемых жанров: фильмы и сериалы. */
 @Composable
-private fun SubscreenGenres(
-    movieGenres: List<Genre>,
-    tvGenres: List<Genre>,
-    excluded: Set<Int>,
-    onToggle: (Int) -> Unit,
-    onClose: () -> Unit,
-) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(Color(0xFF0E1116))
-            .padding(28.dp)
-            .onGloballyPositioned { c ->
-                com.torrenttv.app.data.AppLog.log(
-                    "settings",
-                    "genres screen size=${c.size.width}x${c.size.height} pos=${c.positionInRoot()}",
-                )
-            },
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = onClose) { Text("← Готово") }
-            Spacer(Modifier.width(16.dp))
-            Text(
-                "Скрытые жанры (золотые чипы — исключены)",
-                color = Color.White,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(top = 12.dp),
-        ) {
-            Text("Фильмы:", color = Color.White.copy(alpha = 0.7f), fontSize = 17.sp)
-            GenreChipsMulti(movieGenres, excluded, onToggle)
-            Text(
-                "Сериалы:",
-                color = Color.White.copy(alpha = 0.7f),
-                fontSize = 17.sp,
-                modifier = Modifier.padding(top = 14.dp),
-            )
-            GenreChipsMulti(tvGenres, excluded, onToggle)
-        }
-    }
-}
-
-/** Выбор скрываемых стран (чипы, постранично). */
-@Composable
-private fun SubscreenCountries(
-    countries: List<Genre>,
-    excluded: Set<Int>,
-    onToggle: (Genre) -> Unit,
-    onClose: () -> Unit,
-) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(Color(0xFF0E1116))
-            .padding(28.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = onClose) { Text("← Готово") }
-            Spacer(Modifier.width(16.dp))
-            Text(
-                "Скрытые страны (☑ — исключены)",
-                color = Color.White,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-        if (countries.isEmpty()) {
-            Text(
-                "Список стран загрузится после первого открытия каталогов",
-                color = Color.White.copy(alpha = 0.35f),
-                fontSize = 17.sp,
-                modifier = Modifier.padding(top = 16.dp),
-            )
-            return@Column
-        }
-        var page by remember { mutableStateOf(0) }
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 12.dp)) {
-            Text(
-                "${page * COUNTRIES_PAGE + 1}–${page * COUNTRIES_PAGE + countries.drop(page * COUNTRIES_PAGE).take(COUNTRIES_PAGE).size} из ${countries.size}",
-                color = Color.White.copy(alpha = 0.55f),
-                fontSize = 16.sp,
-                modifier = Modifier.width(120.dp),
-            )
-            Button(onClick = { if (page > 0) page-- }, enabled = page > 0) { Text("←") }
-            Spacer(Modifier.width(8.dp))
-            Button(
-                onClick = { if ((page + 1) * COUNTRIES_PAGE < countries.size) page++ },
-                enabled = (page + 1) * COUNTRIES_PAGE < countries.size,
-            ) { Text("→") }
-        }
-        val visible = countries.drop(page * COUNTRIES_PAGE).take(COUNTRIES_PAGE)
-        LazyRow(Modifier.padding(top = 8.dp)) {
-            items(visible.size) { i ->
-                val c = visible[i]
-                CheckChip(c.name, c.id in excluded) { onToggle(c) }
-            }
-        }
-    }
-}
-
-/** Стоп-слова: список (клик — удалить) + добавление с клавиатуры. */
-@Composable
 private fun SubscreenKeywords(
     keywords: List<String>,
     onAdd: (String) -> Unit,
     onRemove: (String) -> Unit,
+    onClearAll: () -> Unit = {},
     onClose: () -> Unit,
 ) {
     var draft by remember { mutableStateOf("") }
-    val kbFocus = remember { FocusRequester() }
+    var showKb by remember { mutableStateOf(false) }
     Column(
         Modifier
             .fillMaxSize()
@@ -1167,23 +1066,17 @@ private fun SubscreenKeywords(
             )
         }
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 12.dp)) {
-            Text(
-                text = draft.ifBlank { "Новое стоп-слово…" },
-                color = if (draft.isBlank()) Color.White.copy(alpha = 0.35f) else Color(0xFFF5B942),
-                fontSize = 17.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.width(280.dp),
-            )
-            Spacer(Modifier.width(16.dp))
-            Button(onClick = { onAdd(draft.trim()); draft = "" }) { Text("➕ Добавить") }
+            Button(onClick = { showKb = true }) { Text("⌨ Ввести слово") }
             Spacer(Modifier.width(12.dp))
-            Button(onClick = { draft = "" }) { Text("Очистить") }
+            Button(onClick = onClearAll, enabled = keywords.isNotEmpty()) { Text("🗑 Удалить все") }
         }
-        TvKeyboard(
+        KeyboardSheet(
+            value = draft,
+            title = "Новое стоп-слово",
             onChar = { ch -> draft += ch },
             onBackspace = { if (draft.isNotEmpty()) draft = draft.dropLast(1) },
             onClear = { draft = "" },
-            firstKeyFocus = kbFocus,
+            onDismiss = { showKb = false },
         )
     }
 }

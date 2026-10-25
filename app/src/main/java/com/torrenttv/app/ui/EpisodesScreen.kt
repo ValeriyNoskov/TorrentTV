@@ -72,7 +72,11 @@ fun EpisodesScreen(
     // Список открыт — «N новых серий» пользователь увидел, бейдж погасить
     LaunchedEffect(item.id) { store.markEpisodesSeen(item) }
 
-    LaunchedEffect(item) {
+    // 🔄 Обновить — принудительный пересбор серий из раздач: дос-досылка
+    // срабатывает раз в 12 ч, а свежий сезон («Титаны» S05) хочется увидеть сразу
+    var refreshTick by remember { mutableStateOf(0) }
+
+    LaunchedEffect(item, refreshTick) {
         // Кеш: найденные однажды серии запоминаются — повторные открытия
         // показываются мгновенно, без поиска (жалоба: «запоминай ссылки»)
         val cached = store.loadEpisodeCache(item)
@@ -89,7 +93,7 @@ fun EpisodesScreen(
             AppLog.log("episodes", "«${item.title}»: из кеша ${cached.sumOf { it.episodes.size }} серий")
             // Дос-досылка: серии выходят периодически — тихо ищем раз в 12 ч,
             // добавляем ТОЛЬКО недостающие, названия старых не трогаем
-            if (System.currentTimeMillis() - store.episodeCacheTime(item) > 12 * 3_600_000L) {
+            if (refreshTick > 0 || System.currentTimeMillis() - store.episodeCacheTime(item) > 12 * 3_600_000L) {
                 val (found, reason) = withContext(Dispatchers.IO) { seasonsFromTorrents(item, store, context) }
                 if (found.isNotEmpty()) {
                     val merged = mergeSeasons(cached, found)
@@ -163,7 +167,31 @@ fun EpisodesScreen(
             .padding(32.dp),
     ) {
         Text("🎬 Эпизоды", color = Color(0xFFF5B942), fontSize = 16.sp)
-        Text(item.title, color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(item.title, color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            // 🔄 Принудительный пересбор серий из раздач: дос-досылка раз в 12 ч,
+            // а свежий сезон («Титаны» S05) хочется увидеть сразу
+            androidx.tv.material3.Surface(
+                onClick = {
+                    if (!loading) {
+                        loading = true
+                        refreshTick++
+                        AppLog.log("episodes", "«${item.title}»: ручное обновление серий")
+                    }
+                },
+                enabled = !loading,
+                modifier = Modifier.padding(start = 12.dp),
+                shape = clickableSurfaceShape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
+                colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                    containerColor = Color(0xFF1F2430),
+                    contentColor = Color.White,
+                    focusedContainerColor = Color(0xFFF5B942),
+                    focusedContentColor = Color.Black,
+                    disabledContainerColor = Color(0xFF141922),
+                    disabledContentColor = Color.White.copy(alpha = 0.3f),
+                ),
+            ) { Text("🔄 Обновить", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
+        }
 
         when {
             loading -> Text(
@@ -324,9 +352,24 @@ private suspend fun seasonsFromTorrents(
     AppLog.log("episodes", "«${item.title}»: раздач для эпизодов найдено ${found.size}")
     // Собираем сезоны из НЕСКОЛЬКИХ раздач: сезоны одного сериала часто лежат
     // отдельными раздачами («Титаны» S01–S04 в одной, S05 — в другой).
-    // Раньше возвращалась первая успешная — и 5-й сезон не появлялся вообще
+    // Выбор раздач: группируем по номеру сезона из НАЗВАНИЯ и берём ЛУЧШУЮ
+    // по сидам на каждый сезон — иначе топ-3 по сидам были только пачками
+    // S01–S04 и свежая раздача S05 никогда не попадала в выборку.
+    // Раздачи без метки сезона (полные пачки) — тоже до 2 лучших.
+    val torrentSeasonOf: (TorrentResult) -> Int? = { r ->
+        Regex("S(\\d{1,2})", RegexOption.IGNORE_CASE).find(r.name)?.groupValues?.get(1)?.toIntOrNull()
+            ?: Regex("(\\d{1,2})\\s*[сС]езон").find(r.name)?.groupValues?.get(1)?.toIntOrNull()
+    }
+    val perSeason = found.filter { torrentSeasonOf(it) != null }
+        .groupBy { torrentSeasonOf(it)!! }
+        .mapValues { (_, rs) -> rs.maxByOrNull { it.seeds }!! }
+        .values
+    val multipack = found.filter { torrentSeasonOf(it) == null }.sortedByDescending { it.seeds }.take(2)
+    val picked = (perSeason + multipack).sortedByDescending { it.seeds }
+    AppLog.log("episodes", "«${item.title}»: к загрузке выбраны раздачи: " +
+        picked.joinToString("; ") { "${it.name.take(50)} (S${torrentSeasonOf(it) ?: "?"}, ${it.seeds} сидов)" })
     val allSeasons = sortedMapOf<Int, MutableMap<Int, Episode>>()
-    for (r in found.sortedByDescending { it.seeds }.take(3)) {
+    for (r in picked) {
         val t = runCatching {
             TorrServeService.addMagnet(host, TorrentSearch.toMagnet(r), item.title, 45_000)
         }.getOrNull() ?: continue

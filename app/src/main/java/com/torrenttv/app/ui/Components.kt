@@ -71,6 +71,195 @@ object LocalStoreShared {
         }
 }
 
+/**
+ * Клавиатура как модалка снизу (как Gboard TV): затемнение + нижняя панель
+ * со строкой ввода и клавиатурой. Контент экрана остаётся видимым сверху.
+ * «Готово»/doneLabel закрывает (или вызывает действие хозяина — «Найти» и т.п.).
+ */
+@Composable
+fun KeyboardSheet(
+    value: String,
+    title: String = "Ввод",
+    doneLabel: String = "✓ Готово",
+    onDone: (() -> Unit)? = null,
+    onChar: (Char) -> Unit,
+    onBackspace: () -> Unit,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val kbFocus = remember { FocusRequester() }
+    androidx.activity.compose.BackHandler { onDismiss() }
+    Box(Modifier.fillMaxSize()) {
+        // Затемнение поверх контента; клик мышью — закрыть
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color(0x99000000))
+                .mouseClick { onDismiss() },
+        )
+        Column(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .background(Color(0xF5171C26), RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+                .padding(horizontal = 28.dp, vertical = 14.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(title, color = Color.White.copy(alpha = 0.55f), fontSize = 14.sp)
+                    Text(
+                        value.ifBlank { "…" },
+                        color = Color(0xFFF5B942),
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Spacer(Modifier.width(16.dp))
+                Surface(
+                    onClick = { (onDone ?: onDismiss).invoke() },
+                    shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color(0xFF1F2430),
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContentColor = Color.Black,
+                    ),
+                ) { Text(doneLabel, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 18.dp, vertical = 11.dp)) }
+            }
+            TvKeyboard(
+                onChar = onChar,
+                onBackspace = onBackspace,
+                onClear = onClear,
+                firstKeyFocus = kbFocus,
+            )
+        }
+    }
+}
+
+/**
+ * Универсальный чип-пикер фильтров (по образцу Кинопоиска): чипы в несколько
+ * рядов (FlowRow) вместо прокрутки одной строки, поиск-фильтр по названию
+ * и «Снять все». Вызывается прямо из каталогов кнопкой «⚙ Фильтры».
+ */
+@Composable
+fun FilterPicker(
+    title: String,
+    groups: List<Pair<String, List<com.torrenttv.app.data.Genre>>>,
+    excluded: Set<Int>,
+    onToggle: (com.torrenttv.app.data.Genre) -> Unit,
+    onClearAll: () -> Unit,
+    onClose: () -> Unit,
+) {
+    var filterOn by remember { mutableStateOf(false) }
+    var filter by remember { mutableStateOf("") }
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0E1116))
+            .padding(28.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                onClick = onClose,
+                shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = Color(0xFF1F2430),
+                    contentColor = Color.White,
+                    focusedContainerColor = Color(0xFFF5B942),
+                    focusedContentColor = Color.Black,
+                ),
+            ) { Text("← Готово", fontSize = 17.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) }
+            Spacer(Modifier.width(16.dp))
+            Text(
+                "$title · исключено: ${excluded.size}",
+                color = Color.White,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 10.dp)) {
+            Surface(
+                onClick = { filterOn = !filterOn; if (!filterOn) filter = "" },
+                shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = Color(0xFF1F2430),
+                    contentColor = Color.White,
+                    focusedContainerColor = Color(0xFFF5B942),
+                    focusedContentColor = Color.Black,
+                ),
+            ) { Text(if (filterOn) "✕ Скрыть поиск" else "🔎 Поиск", fontSize = 16.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) }
+            Spacer(Modifier.width(12.dp))
+            Surface(
+                onClick = onClearAll,
+                enabled = excluded.isNotEmpty(),
+                shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = Color(0xFF1F2430),
+                    contentColor = Color.White,
+                    focusedContainerColor = Color(0xFFF5B942),
+                    focusedContentColor = Color.Black,
+                    disabledContainerColor = Color(0xFF141922),
+                    disabledContentColor = Color.White.copy(alpha = 0.3f),
+                ),
+            ) { Text("🗑 Снять все", fontSize = 16.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) }
+            if (filterOn) {
+                Spacer(Modifier.width(16.dp))
+                Text(
+                    text = if (filter.isBlank()) "Введите часть названия…" else filter,
+                    color = if (filter.isBlank()) Color.White.copy(alpha = 0.35f) else Color(0xFFF5B942),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(top = 12.dp),
+        ) {
+            groups.forEach { (label, items) ->
+                val visible = if (filter.isBlank()) items
+                else items.filter { it.name.contains(filter, ignoreCase = true) }
+                if (visible.isEmpty()) return@forEach
+                Text(label, color = Color.White.copy(alpha = 0.7f), fontSize = 17.sp)
+                androidx.compose.foundation.layout.FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(top = 8.dp, bottom = 14.dp),
+                ) {
+                    visible.forEach { g ->
+                        CheckChip(g.name, g.id in excluded) { onToggle(g) }
+                    }
+                }
+            }
+            if (filter.isNotBlank() && groups.all { (_, items) ->
+                    items.none { it.name.contains(filter, ignoreCase = true) }
+                }
+            ) {
+                Text(
+                    "Ничего не найдено по «$filter»",
+                    color = Color.White.copy(alpha = 0.5f),
+                    fontSize = 17.sp,
+                )
+            }
+        }
+        if (filterOn) {
+            KeyboardSheet(
+                value = filter,
+                title = "Поиск по названию",
+                onChar = { ch -> filter += ch },
+                onBackspace = { if (filter.isNotEmpty()) filter = filter.dropLast(1) },
+                onClear = { filter = "" },
+                onDismiss = { filterOn = false },
+            )
+        }
+    }
+}
+
 /** Единая форма для всех состояний кликабельного Surface (tv-material 1.0.0 требует обёртку). */
 @Composable
 fun clickableSurfaceShape(shape: Shape): ClickableSurfaceShape =
