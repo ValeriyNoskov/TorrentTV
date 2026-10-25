@@ -1331,6 +1331,10 @@ private fun DevCodeScreen(onOk: () -> Unit, onClose: () -> Unit) {
             }
             // Экранная панель 0–9 + ⌫ — только при встроенном вводе
             if (!externalKb) {
+                // Фокус — сразу на «1»: без этого фокус непредсказуем и код
+                // «не набирается» (проверено на эмуляторе)
+                val padFocus = remember { FocusRequester() }
+                LaunchedEffect(Unit) { runCatching { padFocus.requestFocus() } }
                 val digits = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "OK")
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -1341,6 +1345,7 @@ private fun DevCodeScreen(onOk: () -> Unit, onClose: () -> Unit) {
                             for (d in row) {
                                 androidx.tv.material3.Surface(
                                     onClick = { press(d) },
+                                    modifier = if (d == "1") Modifier.focusRequester(padFocus) else Modifier,
                                     shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
                                     colors = ClickableSurfaceDefaults.colors(
                                         containerColor = Color(0xFF1F2430),
