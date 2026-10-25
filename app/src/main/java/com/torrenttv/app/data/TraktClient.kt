@@ -100,7 +100,22 @@ object TraktClient {
                 bestSlug = o.optJSONObject("ids")?.optString("slug", "") ?: ""
             }
         }
-        // Строгий порог: как у TMDB — не рискуем выдать чужой сериал
+        // Строгий порог: как у TMDB — не рискуем выдать чужой сериал.
+        // НО: Trakt ищет и по русским алиасам («Гангстерленд» → MobLand),
+        // при этом title результата — латиницей. Если точного совпадения нет,
+        // доверяем первому результату с совпавшим годом — иначе русский
+        // каталог вообще не матчится
+        if (bestScore < 100 && json.length() > 0) {
+            val first = json.optJSONObject(0)?.optJSONObject("show") ?: return null
+            val y = first.optInt("year", 0).toString()
+            if (year.isNotBlank() && y == year) {
+                com.torrenttv.app.data.AppLog.log(
+                    "trakt",
+                    "точного совпадения нет — принят первый результат по алиасу: ${first.optJSONObject("ids")?.optString("slug")}",
+                )
+                return first.optJSONObject("ids")?.optString("slug", "").takeUnless { it.isNullOrBlank() }
+            }
+        }
         return if (bestScore >= 100 && bestSlug.isNotBlank()) bestSlug else null
     }
 
