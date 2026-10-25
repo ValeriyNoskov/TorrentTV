@@ -70,6 +70,7 @@ object TmdbClient {
                 lastFailed = false
                 return runCatching { JSONObject(it) }.getOrNull()
             }
+            ApiUsage.tmdbRequest() // расход лимита — для счётчиков в настройках
             http.newCall(Request.Builder().url(url).build()).execute().use { resp ->
                 val body = if (resp.isSuccessful) resp.body!!.string() else null
                 if (body != null) {

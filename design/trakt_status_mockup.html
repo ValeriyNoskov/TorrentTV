@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>VNosKino — макет: строка Trakt на экране деталей</title>
+<style>
+  body { background:#0d0f14; color:#fff; font-family:-apple-system,'Segoe UI',Roboto,sans-serif;
+         display:flex; flex-direction:column; align-items:center; padding:40px 20px; gap:32px; }
+  h2 { color:#8a93a6; font-weight:600; font-size:14px; letter-spacing:.08em; text-transform:uppercase; margin:0; }
+  .card { background:#171a22; border-radius:20px; padding:32px; width:880px;
+          display:flex; gap:28px; box-shadow:0 20px 60px rgba(0,0,0,.5); }
+  .poster { width:190px; height:280px; border-radius:12px; flex-shrink:0;
+            background:linear-gradient(160deg,#2b3348,#1a2030);
+            display:flex; align-items:flex-end; justify-content:center;
+            color:#5a6377; font-size:13px; padding-bottom:12px; }
+  .info { display:flex; flex-direction:column; gap:12px; min-width:0; }
+  .title { font-size:28px; font-weight:700; }
+  .meta  { color:#8a93a6; font-size:15px; }
+  .badges { display:flex; gap:10px; }
+  .badge { background:#2b2f3a; border-radius:8px; padding:4px 10px; font-size:14px; font-weight:700; }
+  .imdb  { color:#f5c518; }
+  .trakt { font-size:16px; font-weight:600; padding-top:4px; }
+  .running { color:#7fb84f; }
+  .ended   { color:rgba(255,255,255,.6); }
+  .note { color:#8a93a6; font-size:14px; width:880px; line-height:1.6; }
+  .btn { background:#2f6fed; border-radius:8px; padding:10px 22px; font-weight:600; display:inline-block; width:fit-content; }
+  .btn.ghost { background:#262b36; }
+  .row { display:flex; gap:12px; margin-top:6px; }
+</style>
+</head>
+<body>
+
+<h2>Экран деталей · сериал идёт — новая строка от Trakt</h2>
+<div class="card">
+  <div class="poster">постер</div>
+  <div class="info">
+    <div class="title">Странный мир</div>
+    <div class="meta">2024 · Сериал · Фантастика, Приключения · 2 сезона</div>
+    <div class="badges">
+      <div class="badge imdb">IMDb 8.1</div>
+      <div class="badge">TMDB 7.9</div>
+    </div>
+    <div class="trakt running">📺 Идёт · следующая серия S02E08 — 12.11.2026</div>
+    <div class="row">
+      <div class="btn">▶ Смотреть</div>
+      <div class="btn ghost">☆ В избранное</div>
+    </div>
+  </div>
+</div>
+
+<h2>Экран деталей · сериал завершён</h2>
+<div class="card">
+  <div class="poster">постер</div>
+  <div class="info">
+    <div class="title">Во все тяжкие</div>
+    <div class="meta">2008 · Сериал · Драма, Криминал · 5 сезонов</div>
+    <div class="badges">
+      <div class="badge imdb">IMDb 9.5</div>
+      <div class="badge">TMDB 8.9</div>
+    </div>
+    <div class="trakt ended">📺 Завершён · последняя серия S05E16 — 29.09.2013</div>
+    <div class="row">
+      <div class="btn">▶ Смотреть</div>
+      <div class="btn ghost">☆ В избранное</div>
+    </div>
+  </div>
+</div>
+
+<p class="note">
+  Как это работает: TMDB заблокирован в РФ и ключ пустой, поэтому статус берёт
+  <b>Trakt</b> (запасной источник). Зелёная строка — сериал в эфире, серая — завершён.
+  Формат строки, цвета и место — ровно как у существующей функции (ROADMAP №10),
+  меняется только источник данных. Запросы кешируются, повторных обращений к сети
+  для той же карточки нет.
+</p>
+
+</body>
+</html>

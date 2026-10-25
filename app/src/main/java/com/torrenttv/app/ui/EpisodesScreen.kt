@@ -41,6 +41,7 @@ import com.torrenttv.app.data.MediaApi
 import kotlinx.coroutines.launch
 import com.torrenttv.app.data.Season
 import com.torrenttv.app.data.TorrServeService
+import com.torrenttv.app.data.TraktClient
 import com.torrenttv.app.data.TorrentSearch
 import com.torrenttv.app.data.TorrentResult
 import com.torrenttv.app.torrent.TorrentEngine
@@ -99,7 +100,7 @@ fun EpisodesScreen(
                 episodeRefreshScope.launch {
                     val (found, reason) = seasonsFromTorrents(item, store, context)
                     if (found.isNotEmpty()) {
-                        val merged = mergeSeasons(cached, found)
+                        val merged = enrichWithTrakt(item, mergeSeasons(cached, found))
                         val added = merged.sumOf { it.episodes.size } - cached.sumOf { it.episodes.size }
                         store.saveEpisodeCache(item, merged)
                         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
@@ -130,7 +131,15 @@ fun EpisodesScreen(
             failReason = reason
         }
         // Найденное запоминаем: и собранное из раздач, и КП-мету
-        if (seasons.isNotEmpty()) store.saveEpisodeCache(item, seasons)
+        if (seasons.isNotEmpty()) {
+            // Даты выхода серий из Trakt: КП дат не даёт, TMDB недоступен в РФ.
+            // Обогащаем до сохранения в кеш — при следующих открытиях даты уже там
+            val trakt = withContext(Dispatchers.IO) {
+                runCatching { TraktClient.seasons(item.title, item.year) }.getOrDefault(emptyList())
+            }
+            if (trakt.isNotEmpty()) seasons = enrichWithTrakt(item, seasons, trakt)
+            store.saveEpisodeCache(item, seasons)
+        }
         loading = false
         AppLog.log("episodes", "«${item.title}»: загружено сезонов ${seasons.size} (id=${item.id})")
         // КП-мета не знает про раздачи: у «Титанов» 5-й сезон выходит отдельной
@@ -142,7 +151,7 @@ fun EpisodesScreen(
             episodeRefreshScope.launch {
                 val (fromTorrents, reason) = seasonsFromTorrents(item, store, context)
                 if (fromTorrents.isNotEmpty()) {
-                    val merged = mergeSeasons(seasons, fromTorrents)
+                    val merged = enrichWithTrakt(item, mergeSeasons(seasons, fromTorrents))
                     val added = merged.sumOf { it.episodes.size } - seasons.sumOf { it.episodes.size }
                     if (added > 0) {
                         store.saveEpisodeCache(item, merged)
@@ -296,6 +305,22 @@ fun EpisodesScreen(
                                     overflow = TextOverflow.Ellipsis,
                                 )
                             }
+                            // Дата выхода из Trakt: серия ещё не вышла — зелёным,
+                            // вышедшая — приглушённо-серым (формат даты общий — дд.мм.гггг)
+                            if (ep.airDate.length >= 10) {
+                                val notAired = runCatching {
+                                    java.time.LocalDate.parse(ep.airDate)
+                                        .isAfter(java.time.LocalDate.now())
+                                }.getOrDefault(false)
+                                Text(
+                                    text = ep.airDate.substring(8, 10) + "." +
+                                        ep.airDate.substring(5, 7) + "." + ep.airDate.substring(0, 4),
+                                    color = if (notAired) Color(0xFF7FB84F) else Color(0xFF6B7488),
+                                    fontSize = 13.sp,
+                                    fontWeight = if (notAired) FontWeight.SemiBold else FontWeight.Normal,
+                                    modifier = Modifier.padding(end = 18.dp),
+                                )
+                            }
                             Text(
                                 text = if (hasSource) "▶ Смотреть" else "🔍 Найти",
                                 color = if (hasSource) Color(0xFF9CCC65) else Color(0xFF64B5F6),
@@ -314,6 +339,36 @@ fun EpisodesScreen(
         Button(onClick = onBack) { Text("← Назад") }
     }
 }
+
+/**
+ * Дополнить серии датами выхода из Trakt: у существующих серий заполняется
+ * пустая airDate (названия из КП/раздач не трогаем), недостающие серии
+ * (например, ещё не вышедшие — раздач на них нет) добавляются целиком.
+ */
+internal fun enrichWithTrakt(item: MediaItem, seasons: List<Season>, trakt: List<Season>): List<Season> {
+    if (trakt.isEmpty()) return seasons
+    val bySeason = trakt.associateBy { it.number }
+    return seasons.map { s ->
+        val t = bySeason[s.number] ?: return@map s
+        val tEps = t.episodes.associateBy { it.episode }
+        val merged = s.episodes.map { ep ->
+            val te = tEps[ep.episode]
+            if (te != null && ep.airDate.isBlank() && te.airDate.isNotBlank()) ep.copy(airDate = te.airDate) else ep
+        }.toMutableList()
+        for (te in t.episodes) if (merged.none { it.episode == te.episode }) merged.add(te)
+        Season(s.number, merged.sortedBy { it.episode })
+    }
+}
+
+/**
+ * Обогащение датами с сетевым вызовом Trakt (фоновый поток): ошибки глотаем —
+ * экран серий не должен ломаться, если Trakt недоступен.
+ */
+internal suspend fun enrichWithTrakt(item: MediaItem, seasons: List<Season>): List<Season> =
+    withContext(Dispatchers.IO) {
+        val trakt = runCatching { TraktClient.seasons(item.title, item.year) }.getOrDefault(emptyList())
+        if (trakt.isEmpty()) seasons else enrichWithTrakt(item, seasons, trakt)
+    }
 
 /**
  * Объединение кеша и дос-поиска: новые серии добавляются, старые (с их

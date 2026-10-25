@@ -5,6 +5,8 @@ data class Episode(
     val season: Int,
     val episode: Int,
     val title: String = "",
+    /** Дата выхода (yyyy-MM-dd), пусто — неизвестна/не выходила. Источник — Trakt. */
+    val airDate: String = "",
 ) {
     /** Метка вида S01E05 для интерфейса и запросов поиска. */
     val code: String get() = "S%02dE%02d".format(season, episode)

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -67,18 +68,32 @@ import kotlinx.coroutines.withContext
  */
 private const val COUNTRIES_PAGE = 12
 
-/** Разделы настроек: id, заголовок, краткое описание. */
-private val SECTIONS = listOf(
+/**
+ * Разделы настроек: id, заголовок, краткое описание.
+ * Пользовательские видны всем; разделы разработки спрятаны за пунктом
+ * «🛠 Для разработчика» (код 0301) — пользователю для просмотра не нужны.
+ */
+private val USER_SECTIONS = listOf(
     Triple("update", "⬆ Обновление", "Проверить и установить новую версию"),
     Triple("keywords", "🚫 Стоп-слова", "Слова-исключения для поиска раздач"),
     Triple("tv", "📡 ТВ-каналы", "Свой плейлист добавляется к встроенному списку"),
-    Triple("netcheck", "🩺 Проверка сети", "Какие источники доступны с этого устройства"),
-    Triple("logs", "📝 Логи", "Запись событий и выгрузка лога в Gist"),
     Triple("torrserve", "🚀 TorrServe", "Внешний движок торрентов — надёжнее внутреннего"),
     Triple("player", "📺 Плеер", "Встроенный или внешний плеер (VLC, MX Player)"),
     Triple("input", "⌨ Ввод", "Клавиатура: внешняя (системная) или встроенная"),
-    Triple("mdbase", "🎞 База фильмов", "Свой ключ каталогов — свои лимиты, не общие"),
 )
+
+/** Только для разработчика: диагностика, логи, ключи, расход лимитов. */
+private val DEV_SECTIONS = listOf(
+    Triple("netcheck", "🩺 Проверка сети", "Какие источники доступны с этого устройства"),
+    Triple("logs", "📝 Логи", "Запись событий и выгрузка лога в Gist"),
+    Triple("mdbase", "🎞 База фильмов", "Свой ключ каталогов — свои лимиты, не общие"),
+    Triple("usage", "📊 Запросы к API", "Расход лимитов за сегодня — ключи не показываются"),
+)
+
+private val SECTIONS = USER_SECTIONS + DEV_SECTIONS
+
+/** Код входа в режим разработчика (запрашивается при каждом открытии). */
+private const val DEV_CODE = "0301"
 
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
@@ -86,6 +101,12 @@ fun SettingsScreen(onBack: () -> Unit) {
     val store = remember { LocalStore(context) }
 
     var section by remember { mutableStateOf(store.lastSettingsSection()) }
+    // Режим разработчика: скрыт по умолчанию, открывается кодом 0301;
+    // сохранённый раздел из «скрытой» зоны сбрасываем на первый пользовательский
+    var devMode by remember { mutableStateOf(false) }
+    if (DEV_SECTIONS.any { it.first == section } && !devMode) {
+        section = USER_SECTIONS.first().first
+    }
 
     var excluded by remember { mutableStateOf(store.excludedGenreIds()) }
     var excludedCountries by remember { mutableStateOf(store.excludedCountryIds()) }
@@ -137,7 +158,25 @@ fun SettingsScreen(onBack: () -> Unit) {
         }
     }
 
-    val (sTitle, sDesc) = SECTIONS.first { it.first == section }.let { it.second to it.third }
+    // Пункты левого меню: пользовательские всегда, девелоперские — за кодом
+    val menuItems = remember(devMode) {
+        buildList {
+            addAll(USER_SECTIONS)
+            if (devMode) {
+                add(Triple("—devhead—", "— разработка —", ""))
+                addAll(DEV_SECTIONS)
+                add(Triple("devhide", "🙈 Скрыть разработчика", ""))
+            } else {
+                add(Triple("devtool", "🛠 Для разработчика", ""))
+            }
+        }
+    }
+
+    val (sTitle, sDesc) = (
+        SECTIONS.firstOrNull { it.first == section }
+            ?: menuItems.firstOrNull { !it.first.startsWith("—") && it.first != "devtool" && it.first != "devhide" }
+            ?: USER_SECTIONS.first()
+        ).let { it.second to it.third }
 
     Box(Modifier.fillMaxSize()) {
     Row(
@@ -147,10 +186,10 @@ fun SettingsScreen(onBack: () -> Unit) {
             .padding(20.dp),
     ) {
         // ---------- Разделы (слева): компактно, всё видно без прокрутки ----------
-        // Фокус-якоря: 0 = «← Назад», 1..n = разделы, n+1 = «Выход».
+        // Фокус-якоря: 0 = «← Назад», 1..n = пункты меню, n+1 = «Выход».
         // LEFT из правой панели возвращает к АКТИВНОМУ разделу, а не в начало.
-        val itemCount = SECTIONS.size + 2
-        val sectionReqs = remember { List(itemCount) { FocusRequester() } }
+        val itemCount = menuItems.size + 2
+        val sectionReqs = remember(itemCount) { List(itemCount) { FocusRequester() } }
         // Куда попадает фокус по RIGHT из разделов — первый контрол правой панели
         val contentFocus = remember { FocusRequester() }
         var activeSection by remember { mutableStateOf(1) }
@@ -160,8 +199,8 @@ fun SettingsScreen(onBack: () -> Unit) {
                 .onFocusChanged { if (it.hasFocus) activeSection = idx }
         }
         // Стартовый фокус — на пункте активного раздела, а не на первом сверху
-        LaunchedEffect(Unit) {
-            val idx = SECTIONS.indexOfFirst { it.first == section } + 1
+        LaunchedEffect(menuItems) {
+            val idx = menuItems.indexOfFirst { it.first == section } + 1
             if (idx > 0) {
                 activeSection = idx
                 runCatching { sectionReqs[idx].requestFocus() }
@@ -186,15 +225,38 @@ fun SettingsScreen(onBack: () -> Unit) {
                 },        ) {
             SectionItem("← Назад", false, sectionMod(0)) { onBack() }
             Spacer(Modifier.height(8.dp))
-            for ((i, item) in SECTIONS.withIndex()) {
+            for ((i, item) in menuItems.withIndex()) {
                 val (id, title, _) = item
-                SectionItem(title, section == id, sectionMod(i + 1)) {
-                    section = id
-                    store.setLastSettingsSection(id)
-                    subscreen = null
+                when {
+                    // Заголовок блока «— разработка —»: некликабельная метка
+                    id == "—devhead—" -> Text(
+                        title,
+                        color = Color(0xFFF5B942).copy(alpha = 0.7f),
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(start = 14.dp, top = 8.dp, bottom = 2.dp),
+                    )
+                    // «🛠 Для разработчика»: открывает ввод кода, разделом не становится
+                    id == "devtool" -> SectionItem(title, false, sectionMod(i + 1)) {
+                        com.torrenttv.app.data.AppLog.log("ui", "нажал: «Для разработчика» — запрос кода")
+                        subscreen = "devcode"
+                    }
+                    // «🙈 Скрыть разработчика»: спрятать блок обратно
+                    id == "devhide" -> SectionItem(title, false, sectionMod(i + 1)) {
+                        devMode = false
+                        if (DEV_SECTIONS.any { it.first == section }) {
+                            section = USER_SECTIONS.first().first
+                            store.setLastSettingsSection(section)
+                        }
+                        subscreen = null
+                    }
+                    else -> SectionItem(title, section == id, sectionMod(i + 1)) {
+                        section = id
+                        store.setLastSettingsSection(id)
+                        subscreen = null
+                    }
                 }
             }
-            SectionItem("⛔ Выход", false, sectionMod(SECTIONS.size + 1)) {
+            SectionItem("⛔ Выход", false, sectionMod(menuItems.size + 1)) {
                 (context as? android.app.Activity)?.finishAffinity()
             }
         }
@@ -513,6 +575,64 @@ fun SettingsScreen(onBack: () -> Unit) {
                         SettingsNote("Свой ключ бесплатен: КП — kinopoiskapiunofficial.tech, TMDB — themoviedb.org.")
                     }
 
+                    "usage" -> {
+                        // Счётчики сетевых запросов за сегодня; ключи не показываем,
+                        // только сколько израсходовано каждым
+                        val snap = remember { com.torrenttv.app.data.ApiUsage.snapshot() }
+                        if (snap.kp.isEmpty() && snap.trakt == 0 && snap.tmdb == 0) {
+                            val noteFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+                            Text(
+                                "Счётчик появится после открытия каталога или карточки.",
+                                color = Color.White.copy(alpha = 0.55f),
+                                fontSize = 16.sp,
+                                modifier = Modifier
+                                    .focusRequester(noteFocus)
+                                    .padding(top = 4.dp),
+                            )
+                            LaunchedEffect(Unit) {
+                                runCatching { noteFocus.requestFocus() }
+                            }
+                        } else {
+                            var focused by remember { mutableStateOf(false) }
+                            Column(
+                                Modifier
+                                    .focusRequester(contentFocus)
+                                    .onFocusChanged { focused = it.hasFocus }
+                                    .background(
+                                        if (focused) Color(0xFF31435A) else Color.Transparent,
+                                        RoundedCornerShape(10.dp),
+                                    )
+                                    .padding(14.dp),
+                            ) {
+                                snap.kp.forEachIndexed { i, n ->
+                                    Text(
+                                        "КП №${i + 1} = $n" + if (n >= 450) " ⚠ близко к лимиту" else "",
+                                        color = if (n >= 450) Color(0xFFF5B942) else Color.White,
+                                        fontSize = 17.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                }
+                                Text(
+                                    "Trakt = ${snap.trakt}",
+                                    color = if (snap.trakt >= 900) Color(0xFFF5B942) else Color.White,
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    "TMDB = ${snap.tmdb}",
+                                    color = Color.White.copy(alpha = 0.6f),
+                                    fontSize = 17.sp,
+                                )
+                                Text(
+                                    "Из кеша (лимит не тратится) = ${snap.cacheHits}",
+                                    color = Color(0xFF9CCC65),
+                                    fontSize = 15.sp,
+                                )
+                            }
+                            SettingsNote("Сброс — раз в сутки. КП — каталоги и поиск, Trakt — серии.")
+                        }
+                    }
+
                     "netcheck" -> {
                         SettingsRow(
                             title = "🩺 Запустить проверку",
@@ -555,6 +675,17 @@ fun SettingsScreen(onBack: () -> Unit) {
         BackHandler { subscreen = null }
         when (sub) {
             "netcheck" -> NetCheckScreen(onClose = { subscreen = null })
+
+            // Ввод кода разработчика: 4 цифры с пульта, верно — показать блок
+            "devcode" -> DevCodeScreen(
+                onOk = {
+                    devMode = true
+                    section = DEV_SECTIONS.first().first
+                    subscreen = null
+                    com.torrenttv.app.data.AppLog.log("ui", "код принят — режим разработчика включён")
+                },
+                onClose = { subscreen = null },
+            )
 
             "genres" -> FilterPicker(
                 title = "Скрытые жанры",
@@ -1110,3 +1241,107 @@ private fun KeywordChip(word: String, onRemove: () -> Unit) {
     }
 }
 
+
+/**
+ * Ввод кода разработчика (DEV_CODE): 4 цифры с пульта или клавиатуры.
+ * Верно — onOk (блок «разработка» появляется в меню), иначе «Неверный код»
+ * и очистка. Код запрашивается при каждом открытии — не запоминаем.
+ */
+@Composable
+private fun DevCodeScreen(onOk: () -> Unit, onClose: () -> Unit) {
+    var code by remember { mutableStateOf("") }
+    var wrong by remember { mutableStateOf(false) }
+    BackHandler { onClose() }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0E1116))
+            // Цифры с пульта (0–9, NUMPAD) и ⌫; Enter не нужен — код ровно 4 цифры
+            .onPreviewKeyEvent { e ->
+                if (e.type != androidx.compose.ui.input.key.KeyEventType.KeyUp) return@onPreviewKeyEvent false
+                val digit = when (e.key) {
+                    androidx.compose.ui.input.key.Key.Zero -> 0
+                    androidx.compose.ui.input.key.Key.One -> 1
+                    androidx.compose.ui.input.key.Key.Two -> 2
+                    androidx.compose.ui.input.key.Key.Three -> 3
+                    androidx.compose.ui.input.key.Key.Four -> 4
+                    androidx.compose.ui.input.key.Key.Five -> 5
+                    androidx.compose.ui.input.key.Key.Six -> 6
+                    androidx.compose.ui.input.key.Key.Seven -> 7
+                    androidx.compose.ui.input.key.Key.Eight -> 8
+                    androidx.compose.ui.input.key.Key.Nine -> 9
+                    androidx.compose.ui.input.key.Key.NumPad0 -> 0
+                    androidx.compose.ui.input.key.Key.NumPad1 -> 1
+                    androidx.compose.ui.input.key.Key.NumPad2 -> 2
+                    androidx.compose.ui.input.key.Key.NumPad3 -> 3
+                    androidx.compose.ui.input.key.Key.NumPad4 -> 4
+                    androidx.compose.ui.input.key.Key.NumPad5 -> 5
+                    androidx.compose.ui.input.key.Key.NumPad6 -> 6
+                    androidx.compose.ui.input.key.Key.NumPad7 -> 7
+                    androidx.compose.ui.input.key.Key.NumPad8 -> 8
+                    androidx.compose.ui.input.key.Key.NumPad9 -> 9
+                    else -> -1
+                }
+                when {
+                    digit >= 0 && code.length < 4 -> {
+                        wrong = false
+                        code += digit
+                        if (code.length == 4) {
+                            if (code == DEV_CODE) onOk()
+                            else {
+                                wrong = true
+                                code = ""
+                            }
+                        }
+                        true
+                    }
+                    e.key == androidx.compose.ui.input.key.Key.Backspace -> {
+                        wrong = false
+                        code = code.dropLast(1)
+                        true
+                    }
+                    else -> false
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("🔒 Код доступа", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "Введите 4 цифры с пульта",
+                color = Color.White.copy(alpha = 0.55f),
+                fontSize = 16.sp,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 24.dp)) {
+                repeat(4) { i ->
+                    Box(
+                        Modifier
+                            .size(width = 64.dp, height = 76.dp)
+                            .background(
+                                if (i == code.length) Color(0xFF31435A) else Color(0xFF1F2430),
+                                RoundedCornerShape(10.dp),
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            if (i < code.length) "●" else "",
+                            color = Color.White,
+                            fontSize = 30.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+            }
+            if (wrong) {
+                Text(
+                    "Неверный код",
+                    color = Color(0xFFE57373),
+                    fontSize = 15.sp,
+                    modifier = Modifier.padding(top = 16.dp),
+                )
+            }
+            Button(onClick = onClose, modifier = Modifier.padding(top = 28.dp)) { Text("← Отмена") }
+        }
+    }
+}

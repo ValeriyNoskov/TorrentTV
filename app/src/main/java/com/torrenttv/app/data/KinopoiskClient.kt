@@ -36,6 +36,7 @@ object KinopoiskClient {
     fun attachCache(dir: java.io.File) {
         if (cacheDir != null) return
         cacheDir = dir
+        ApiUsage.attach(dir)
         runCatching {
             val f = java.io.File(dir, "kp_cache.json")
             if (f.exists()) {
@@ -67,7 +68,10 @@ object KinopoiskClient {
 
     private fun cacheFresh(url: String): String? {
         val v = cache[url] ?: return null
-        return if (System.currentTimeMillis() - v.first < TTL_MS) v.second else null
+        return if (System.currentTimeMillis() - v.first < TTL_MS) {
+            ApiUsage.cacheHit() // сеть не тратилась — для статистики в настройках
+            v.second
+        } else null
     }
 
     private fun cacheStale(url: String): String? = cache[url]?.second
@@ -185,6 +189,7 @@ object KinopoiskClient {
 
     /** Один сетевой вызов; возвращает тело или null. Кэширует успех. */
     private fun fetch(url: String, attempt: Int = 0): String? {
+        ApiUsage.kpRequest(keyIndex) // расход лимита ключа — для счётчиков в настройках
         val resp = try {
             http.newCall(
                 Request.Builder()

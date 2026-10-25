@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>VNosKino — макет: «Запросы к API» в настройках</title>
+<style>
+  body { background:#0d0f14; color:#fff; font-family:-apple-system,'Segoe UI',Roboto,sans-serif;
+         display:flex; flex-direction:column; align-items:center; padding:40px 20px; gap:12px; }
+  h2 { color:#8a93a6; font-weight:600; font-size:14px; letter-spacing:.08em; text-transform:uppercase; margin:0 0 8px; }
+  .wrap { display:flex; gap:24px; }
+  .side { width:250px; background:#0E1116; border-radius:16px; padding:16px; display:flex; flex-direction:column; gap:6px; }
+  .si { border-radius:10px; padding:10px 14px; font-size:15px; color:#fff; }
+  .si.sel { background:#31435A; }
+  .panel { width:640px; background:#0E1116; border-radius:16px; padding:24px; }
+  .pt { font-size:24px; font-weight:700; }
+  .pd { color:rgba(255,255,255,.55); font-size:16px; margin-bottom:18px; }
+  .card { background:#31435A; border-radius:10px; padding:16px 18px; display:flex; flex-direction:column; gap:8px; }
+  .row { display:flex; justify-content:space-between; font-size:17px; font-weight:600; }
+  .warn { color:#F5B942; }
+  .cache { color:#9CCC65; font-size:15px; font-weight:400; }
+  .tmdb { color:rgba(255,255,255,.6); font-weight:400; }
+  .note { color:rgba(255,255,255,.55); font-size:15px; line-height:1.55; margin-top:16px; }
+</style>
+</head>
+<body>
+
+<h2>Настройки · раздел «Запросы к API»</h2>
+<div class="wrap">
+  <div class="side">
+    <div class="si">⬆ Обновление</div>
+    <div class="si">🚫 Стоп-слова</div>
+    <div class="si">📡 ТВ-каналы</div>
+    <div class="si">🩺 Проверка сети</div>
+    <div class="si">📝 Логи</div>
+    <div class="si">🚀 TorrServe</div>
+    <div class="si">📺 Плеер</div>
+    <div class="si">⌨ Ввод</div>
+    <div class="si">🎞 База фильмов</div>
+    <div class="si sel">📊 Запросы к API</div>
+    <div class="si">⛔ Выход</div>
+  </div>
+  <div class="panel">
+    <div class="pt">📊 Запросы к API</div>
+    <div class="pd">Расход лимитов за сегодня — ключи не показываются</div>
+    <div class="card">
+      <div class="row"><span>КП №1</span><span class="warn">462 ⚠ близко к лимиту</span></div>
+      <div class="row"><span>КП №2</span><span>17</span></div>
+      <div class="row"><span>Trakt</span><span>38</span></div>
+      <div class="row"><span class="tmdb">TMDB</span><span class="tmdb">0</span></div>
+      <div class="cache">Из кеша (лимит не тратится) = 1 240</div>
+    </div>
+    <div class="note">
+      Счётчик за 2026-10-25, сброс — в сутки (как лимиты КП: 500 на каждый ключ).<br>
+      Где запрашиваем: КП — каталоги, поиск, карточки, сезоны; Trakt — серии и даты
+      выхода (лимит 1000/час).
+    </div>
+  </div>
+</div>
+
+<p class="note">
+  Логика: считаются только <b>реальные сетевые запросы</b>, съедающие лимит. Ответы из
+  24-часового кеша — отдельной зелёной строкой. Когда ключ КП близок к лимиту (&gt;450),
+  строка желтеет с «⚠» — видно, что скоро авто-переключение на следующий ключ.
+  Сами ключи нигде не отображаются — только порядковые номера.
+</p>
+
+</body>
+</html>

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>VNosKino — макет: серии с датами выхода (Trakt)</title>
+<style>
+  body { background:#0d0f14; color:#fff; font-family:-apple-system,'Segoe UI',Roboto,sans-serif;
+         display:flex; flex-direction:column; align-items:center; padding:40px 20px; gap:12px; }
+  h2 { color:#8a93a6; font-weight:600; font-size:14px; letter-spacing:.08em; text-transform:uppercase; margin:0 0 8px; }
+  .screen { background:#0E1116; border-radius:20px; padding:32px; width:960px; height:560px;
+            box-shadow:0 20px 60px rgba(0,0,0,.5); display:flex; flex-direction:column; }
+  .head { display:flex; align-items:center; gap:14px; }
+  .sub { color:#8a93a6; font-size:15px; }
+  .ttl { font-size:30px; font-weight:700; flex:1; }
+  .refresh { background:#1F2430; border-radius:10px; padding:9px 14px; font-size:15px; }
+  .chips { display:flex; gap:8px; margin-top:14px; }
+  .chip { background:#1F2430; color:#fff; border-radius:20px; padding:8px 14px; font-size:14px; font-weight:600; }
+  .chip.sel { background:#31435A; color:#dbe7ff; }
+  .list { margin-top:10px; flex:1; overflow:hidden; display:flex; flex-direction:column; gap:6px; }
+  .ep { background:#1F2430; border-radius:10px; padding:12px 18px; display:flex; align-items:center; gap:0; font-size:16px; }
+  .ep.focus { background:#31435A; outline:2px solid #64a0e8; }
+  .code { font-weight:700; width:80px; font-size:15px; }
+  .check { color:#9CCC65; font-weight:700; width:26px; }
+  .name { flex:1; }
+  .future .name { color:#aebdd6; }
+  .date { color:#5f8ec7; font-size:13.5px; width:110px; text-align:right; margin-right:18px; }
+  .date.future { color:#7fb84f; font-weight:600; }
+  .date.past { color:#6b7488; }
+  .action { font-size:14px; font-weight:600; }
+  .play { color:#9CCC65; }
+  .find { color:#64B5F6; }
+  .back { margin-top:12px; background:#2f6fed; border-radius:8px; padding:9px 20px; font-weight:600; width:fit-content; }
+  .note { color:#8a93a6; font-size:14px; width:960px; line-height:1.6; }
+  .legend { display:flex; gap:24px; color:#8a93a6; font-size:13px; width:960px; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; }
+</style>
+</head>
+<body>
+
+<h2>Экран «Эпизоды» · даты выхода из Trakt</h2>
+<div class="screen">
+  <div class="head">
+    <div class="sub">🎬 Эпизоды</div>
+    <div class="ttl">Титаны</div>
+    <div class="refresh">🔄 Обновить</div>
+  </div>
+  <div class="chips">
+    <div class="chip">Сезон 1</div>
+    <div class="chip sel">Сезон 4</div>
+  </div>
+  <div class="list">
+    <div class="ep">
+      <div class="code">S04E01</div><div class="check">✓</div>
+      <div class="name">Лекс Лютор</div>
+      <div class="date past">09.08.2026</div><div class="action play">▶ Смотреть</div>
+    </div>
+    <div class="ep focus">
+      <div class="code">S04E02</div><div class="check"></div>
+      <div class="name">Мать принимает решения</div>
+      <div class="date past">16.08.2026</div><div class="action play">▶ Смотреть</div>
+    </div>
+    <div class="ep">
+      <div class="code">S04E03</div><div class="check"></div>
+      <div class="name">Кровавая луна</div>
+      <div class="date past">23.08.2026</div><div class="action find">🔍 Найти</div>
+    </div>
+    <div class="ep future">
+      <div class="code">S04E04</div><div class="check"></div>
+      <div class="name">Финал: часть 1</div>
+      <div class="date future">08.11.2026</div><div class="action find">🔍 Найти</div>
+    </div>
+    <div class="ep future">
+      <div class="code">S04E05</div><div class="check"></div>
+      <div class="name">Финал: часть 2</div>
+      <div class="date future">15.11.2026</div><div class="action find">🔍 Найти</div>
+    </div>
+  </div>
+  <div class="back">← Назад</div>
+</div>
+
+<div class="legend">
+  <span><span class="dot" style="background:#6b7488"></span>вышла — серым</span>
+  <span><span class="dot" style="background:#7fb84f"></span>ещё не вышла — зелёным</span>
+  <span><span class="dot" style="background:#9CCC65"></span>✓ — просмотрено</span>
+  <span><span class="dot" style="background:#64B5F6"></span>🔍 — раздача не привязана</span>
+</div>
+
+<p class="note">
+  Что меняется по сравнению с текущим экраном: справа в каждой строке появляется
+  <b>дата выхода серии</b> (источник — Trakt, работает из РФ без VPN).
+  Будущие серии выделены зелёной датой — сразу видно, когда ждать продолжение.
+  Серии, которых ещё нет в раздачах, тоже появляются в списке (даты из Trakt),
+  напротив них «🔍 Найти» как обычно. Названия и галочки просмотра не меняются.
+</p>
+
+</body>
+</html>

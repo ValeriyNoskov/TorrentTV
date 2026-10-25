@@ -398,7 +398,7 @@ class LocalStore(context: Context) {
         for (s in seasons.sortedBy { it.number }) {
             val eps = JSONArray()
             for (e in s.episodes.sortedBy { it.episode }) {
-                eps.put(JSONObject().put("s", e.season).put("e", e.episode).put("t", e.title))
+                eps.put(JSONObject().put("s", e.season).put("e", e.episode).put("t", e.title).put("d", e.airDate))
             }
             arr.put(JSONObject().put("n", s.number).put("e", eps))
         }
@@ -447,7 +447,12 @@ class LocalStore(context: Context) {
                     number = sObj.getInt("n"),
                     episodes = (0 until epsArr.length()).map { j ->
                         val e = epsArr.getJSONObject(j)
-                        Episode(season = e.getInt("s"), episode = e.getInt("e"), title = e.optString("t"))
+                        Episode(
+                            season = e.getInt("s"),
+                            episode = e.getInt("e"),
+                            title = e.optString("t"),
+                            airDate = e.optString("d"),
+                        )
                     },
                 )
             }.sortedBy { it.number }

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>VNosKino — макет: настройки для пользователя + режим разработчика</title>
+<style>
+  body { background:#0d0f14; color:#fff; font-family:-apple-system,'Segoe UI',Roboto,sans-serif;
+         display:flex; flex-direction:column; align-items:center; padding:40px 20px; gap:16px; }
+  h2 { color:#8a93a6; font-weight:600; font-size:14px; letter-spacing:.08em; text-transform:uppercase; margin:0 0 4px; }
+  .wrap { display:flex; gap:24px; flex-wrap:wrap; justify-content:center; }
+  .screen { background:#0E1116; border-radius:16px; padding:20px; width:300px; display:flex; flex-direction:column; gap:6px; }
+  .cap { width:300px; text-align:center; color:#8a93a6; font-size:13px; margin-bottom:6px; }
+  .si { border-radius:10px; padding:10px 14px; font-size:15px; }
+  .si.sel { background:#31435A; }
+  .si.dev-hidden { opacity:.35; border:1px dashed #3a4152; }
+  .si.dev { border:1px dashed #7a5b2a; color:#F5B942; }
+  .si.exit { margin-top:8px; }
+  .panel { width:560px; background:#0E1116; border-radius:16px; padding:24px; }
+  .pt { font-size:24px; font-weight:700; }
+  .pd { color:rgba(255,255,255,.55); font-size:16px; margin-bottom:18px; }
+  .keys { display:flex; gap:10px; justify-content:center; margin:18px 0; }
+  .k { width:64px; height:76px; border-radius:10px; background:#1F2430; display:flex; align-items:center; justify-content:center;
+       font-size:34px; font-weight:700; }
+  .k.cur { background:#31435A; outline:2px solid #64a0e8; }
+  .hint { text-align:center; color:rgba(255,255,255,.5); font-size:15px; }
+  .err { text-align:center; color:#e57373; font-size:15px; margin-top:10px; display:none; }
+  .note { color:#8a93a6; font-size:14px; width:900px; line-height:1.6; }
+  .dev-sec { color:#F5B942; font-size:12px; letter-spacing:.06em; text-transform:uppercase; margin:8px 0 2px; }
+</style>
+</head>
+<body>
+
+<h2>1 · Обычный пользователь: только то, что нужно для просмотра</h2>
+<div class="wrap">
+  <div>
+    <div class="screen">
+      <div class="si">⬆ Обновление</div>
+      <div class="si">🚫 Стоп-слова</div>
+      <div class="si">📡 ТВ-каналы</div>
+      <div class="si">🚀 TorrServe</div>
+      <div class="si">📺 Плеер</div>
+      <div class="si">⌨ Ввод</div>
+      <div class="si">🛠 Для разработчика</div>
+      <div class="si exit">⛔ Выход</div>
+    </div>
+    <div class="cap">Разделы слева · 8 пунктов вместо 11</div>
+  </div>
+  <div class="panel">
+    <div class="pt">🚀 TorrServe</div>
+    <div class="pd">Внешний движок торрентов — надёжнее внутреннего</div>
+    <p style="color:rgba(255,255,255,.75);font-size:15px;line-height:1.7">
+      Панель справа — как сейчас: настройки выбранного раздела.<br><br>
+      Ушли из глаз пользователя: «Проверка сети», «Логи», «База фильмов»
+      (ключи), «Запросы к API» — всё это переехало за код разработчика.
+    </p>
+  </div>
+</div>
+
+<h2 style="margin-top:36px">2 · Нажал «🛠 Для разработчика» → ввод кода (0301)</h2>
+<div class="wrap">
+  <div class="screen" style="justify-content:center;align-items:center;height:280px">
+    <div style="font-size:20px;font-weight:700;margin-bottom:4px">🔒 Код доступа</div>
+    <div class="hint">Введите 4 цифры с пульта</div>
+    <div class="keys">
+      <div class="k cur"></div><div class="k">0</div><div class="k">3</div><div class="k">0</div>
+    </div>
+    <div class="err">Неверный код</div>
+    <div class="hint" style="font-size:13px">Цифры с пульта или клавиатуры, ⌫ — стереть</div>
+  </div>
+  <div class="panel">
+    <div class="pt">Как работает</div>
+    <p style="color:rgba(255,255,255,.75);font-size:15px;line-height:1.8">
+      • Ввод с пульта: цифры 0–9, код <b>0301</b>.<br>
+      • Верно → разделы разработчика появляются в списке (в этой сессии настроек).<br>
+      • Неверно → «Неверный код», поле очищается.<br>
+      • Закрыл настройки → режим разработчика снова скрыт.<br>
+      • Выход из кода — кнопка «Скрыть разработчика» в самом разделе.
+    </p>
+  </div>
+</div>
+
+<h2 style="margin-top:36px">3 · Режим разработчика включён</h2>
+<div class="wrap">
+  <div>
+    <div class="screen">
+      <div class="si">⬆ Обновление</div>
+      <div class="si">🚫 Стоп-слова</div>
+      <div class="si">📡 ТВ-каналы</div>
+      <div class="si">🚀 TorrServe</div>
+      <div class="si">📺 Плеер</div>
+      <div class="si">⌨ Ввод</div>
+      <div class="dev-sec">— разработка —</div>
+      <div class="si dev">🩺 Проверка сети</div>
+      <div class="si dev">📝 Логи</div>
+      <div class="si dev">🎞 База фильмов</div>
+      <div class="si dev">📊 Запросы к API</div>
+      <div class="si dev">🙈 Скрыть разработчика</div>
+      <div class="si exit">⛔ Выход</div>
+    </div>
+    <div class="cap">Жёлтым — разделы только для разработчика</div>
+  </div>
+  <div class="panel">
+    <div class="pt">📊 Запросы к API</div>
+    <div class="pd">Расход лимитов за сегодня — ключи не показываются</div>
+    <p style="color:rgba(255,255,255,.75);font-size:15px;line-height:1.7">
+      Содержимое разделов разработчика не меняется — просто теперь они
+      доступны. После «🙈 Скрыть разработчика» (или перезапуска настроек)
+      список снова сжимается до пользовательских 8 пунктов.
+    </p>
+  </div>
+</div>
+
+</body>
+</html>
