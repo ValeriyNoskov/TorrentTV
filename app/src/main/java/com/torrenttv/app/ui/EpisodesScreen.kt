@@ -93,6 +93,19 @@ fun EpisodesScreen(
                     ?: cached.first().number
             }
             AppLog.log("episodes", "«${item.title}»: из кеша ${cached.sumOf { it.episodes.size }} серий")
+            // Кеш мог быть сохранён до появления дат (старая версия):
+            // дат нет — тихо дотягиваем из Trakt и обновляем кеш
+            if (cached.sumOf { s -> s.episodes.count { it.airDate.isNotBlank() } } == 0) {
+                val trakt = withContext(Dispatchers.IO) {
+                    runCatching { TraktClient.seasons(item.title, item.year, item.country) }.getOrDefault(emptyList())
+                }
+                if (trakt.isNotEmpty()) {
+                    val merged = enrichWithTrakt(item, cached, trakt)
+                    store.saveEpisodeCache(item, merged)
+                    seasons = merged
+                    AppLog.log("episodes", "«${item.title}»: даты серий дотянуты из Trakt")
+                }
+            }
             // Дос-досылка: серии выходят периодически — тихо ищем раз в 12 ч,
             // добавляем ТОЛЬКО недостающие, названия старых не трогаем
             if (refreshTick > 0 || System.currentTimeMillis() - store.episodeCacheTime(item) > 12 * 3_600_000L) {
@@ -135,13 +148,17 @@ fun EpisodesScreen(
             // Даты выхода серий из Trakt: КП дат не даёт, TMDB недоступен в РФ.
             // Обогащаем до сохранения в кеш — при следующих открытиях даты уже там
             val trakt = withContext(Dispatchers.IO) {
-                runCatching { TraktClient.seasons(item.title, item.year) }.getOrDefault(emptyList())
+                runCatching { TraktClient.seasons(item.title, item.year, item.country) }.getOrDefault(emptyList())
             }
             if (trakt.isNotEmpty()) seasons = enrichWithTrakt(item, seasons, trakt)
             store.saveEpisodeCache(item, seasons)
         }
         loading = false
-        AppLog.log("episodes", "«${item.title}»: загружено сезонов ${seasons.size} (id=${item.id})")
+        val dates = seasons.sumOf { s -> s.episodes.count { it.airDate.isNotBlank() } }
+        AppLog.log(
+            "episodes",
+            "«${item.title}»: загружено сезонов ${seasons.size} ${seasons.map { "S${it.number}(${it.episodes.size})" }}, серий с датами $dates (id=${item.id})",
+        )
         // КП-мета не знает про раздачи: у «Титанов» 5-й сезон выходит отдельной
         // раздачей, а КП отдаёт только 1–4. Раньше раздачи смотрели ТОЛЬКО когда
         // КП молчал — и при наличии сезона 1 «пятёрка» не появлялась вовсе.
@@ -322,7 +339,7 @@ fun EpisodesScreen(
                                 )
                             }
                             Text(
-                                text = if (hasSource) "▶ Смотреть" else "🔍 Найти",
+                                text = if (hasSource) "▶︎ Смотреть" else "🔍 Найти",
                                 color = if (hasSource) Color(0xFF9CCC65) else Color(0xFF64B5F6),
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.SemiBold,
@@ -370,7 +387,7 @@ internal fun enrichWithTrakt(item: MediaItem, seasons: List<Season>, trakt: List
  */
 internal suspend fun enrichWithTrakt(item: MediaItem, seasons: List<Season>): List<Season> =
     withContext(Dispatchers.IO) {
-        val trakt = runCatching { TraktClient.seasons(item.title, item.year) }.getOrDefault(emptyList())
+        val trakt = runCatching { TraktClient.seasons(item.title, item.year, item.country) }.getOrDefault(emptyList())
         if (trakt.isEmpty()) seasons else enrichWithTrakt(item, seasons, trakt)
     }
 

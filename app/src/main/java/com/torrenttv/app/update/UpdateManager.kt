@@ -187,6 +187,7 @@ object UpdateManager {
                     val apkFile = File(context.cacheDir, "update-${info.version}.apk")
                     val body = response.body!!
                     val total = body.contentLength()
+                    com.torrenttv.app.data.AppLog.log("update", "скачивание v${info.version}: ${if (total > 0) "${total / 1024 / 1024} МБ" else "размер неизвестен"}")
                     body.byteStream().use { input ->
                         apkFile.outputStream().use { output ->
                             // Прогресс в процентах: без него «Скачивание…»
@@ -203,11 +204,14 @@ object UpdateManager {
                                     if (pct != lastPct) {
                                         lastPct = pct
                                         mainHandler.post { onProgress("Скачивание v${info.version}… $pct%") }
+                                        // В лог — каждые 10%: по нему видно темп и где встало
+                                        if (pct % 10 == 0) com.torrenttv.app.data.AppLog.log("update", "скачивание v${info.version}: $pct%")
                                     }
                                 }
                             }
                         }
                     }
+                    com.torrenttv.app.data.AppLog.log("update", "скачивание v${info.version}: готово, запуск установки")
                     mainHandler.post { onProgress("Установка v${info.version}…") }
                     installApk(context, apkFile)
                 }

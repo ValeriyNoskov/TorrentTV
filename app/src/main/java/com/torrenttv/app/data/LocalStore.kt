@@ -522,6 +522,97 @@ class LocalStore(context: Context) {
         prefs.edit().putString("excl_countries", ids.joinToString(",")).apply()
     }
 
+    // ---------- Фильтры каталога «как в Зоне»: списки с галочками ----------
+
+    /** Выбранные жанры (id, включение). Пусто — без фильтра по жанру. */
+    fun filterGenreIds(): Set<Int> = intSetPref("filter_genres")
+
+    fun setFilterGenreIds(v: Set<Int>) = putIntSetPref("filter_genres", v)
+
+    /** Выбранные страны (id, включение). */
+    fun filterCountryIds(): Set<Int> = intSetPref("filter_countries")
+
+    fun setFilterCountryIds(v: Set<Int>) = putIntSetPref("filter_countries", v)
+
+    /** Отдельные выбранные годы (включение любого из них). */
+    fun filterYearIds(): Set<Int> = intSetPref("filter_years")
+
+    fun setFilterYearIds(v: Set<Int>) = putIntSetPref("filter_years", v)
+
+    /** Пресет годов: "" | "2020+" | "2010-2019" | "2000-2009" | "1990s". */
+    fun filterYearPreset(): String = prefs.getString("filter_year_preset", "").orEmpty()
+
+    fun setFilterYearPreset(v: String) {
+        prefs.edit().putString("filter_year_preset", v).apply()
+    }
+
+    /** Мин. рейтинг КП: 0 — любой, иначе 7 / 8. */
+    fun filterMinRating(): Int = prefs.getInt("filter_min_rating", 0)
+
+    fun setFilterMinRating(v: Int) {
+        prefs.edit().putInt("filter_min_rating", v).apply()
+    }
+
+    /** Тип карточки: "" — все, иначе "movie" | "tv". */
+    fun filterType(): String = prefs.getString("filter_type", "").orEmpty()
+
+    fun setFilterType(v: String) {
+        prefs.edit().putString("filter_type", v).apply()
+    }
+
+    private fun intSetPref(key: String): Set<Int> =
+        prefs.getString(key, "")?.split(',')?.filter { it.isNotBlank() }
+            ?.mapNotNull { it.toIntOrNull() }?.toSet() ?: emptySet()
+
+    private fun putIntSetPref(key: String, v: Set<Int>) {
+        prefs.edit().putString(key, v.joinToString(",")).apply()
+    }
+
+    /**
+     * Прохождение карточки через фильтры «включением»: выбрал жанры/страны/
+     * годы — показываются только совпадения. Пустые наборы не фильтруют.
+     */
+    fun passesFilters(item: MediaItem): Boolean {
+        val g = filterGenreIds()
+        if (g.isNotEmpty() && item.genreIds.none { it in g }) return false
+        val c = filterCountryIds()
+        if (c.isNotEmpty() && item.countryIds.none { it in c }) return false
+        val years = filterYearIds()
+        val preset = filterYearPreset()
+        if (years.isNotEmpty() || preset.isNotEmpty()) {
+            val y = item.year.toIntOrNull() ?: return false
+            val yearOk = (y in years) || when (preset) {
+                "2020+" -> y >= 2020
+                "2010-2019" -> y in 2010..2019
+                "2000-2009" -> y in 2000..2009
+                "1990s" -> y in 1990..1999
+                else -> false
+            }
+            if (!yearOk) return false
+        }
+        val minR = filterMinRating()
+        if (minR > 0 && item.rating < minR) return false
+        val t = filterType()
+        if (t.isNotBlank() && item.type != t) return false
+        return true
+    }
+
+    /** Есть ли хоть один активный фильтр (для счётчика на кнопках). */
+    fun hasActiveFilters(): Boolean =
+        filterGenreIds().isNotEmpty() || filterCountryIds().isNotEmpty() ||
+            filterYearIds().isNotEmpty() || filterYearPreset().isNotEmpty() ||
+            filterMinRating() > 0 || filterType().isNotBlank()
+
+    /** Сброс всех фильтров «включением» (кнопка «очистить всё»). */
+    fun clearAllFilters() {
+        setFilterGenreIds(emptySet())
+        setFilterCountryIds(emptySet())
+        setFilterYearIds(emptySet())
+        setFilterYearPreset("")
+        setFilterMinRating(0)
+        setFilterType("")
+    }
+
     /** Пропускать ли карточку с учётом настроек фильтрации. */
     fun isAllowed(item: MediaItem): Boolean {
         val excluded = excludedGenreIds()

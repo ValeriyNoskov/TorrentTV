@@ -70,16 +70,27 @@ object TraktClient {
      * Статус сериала в том же формате, что TmdbClient.tvStatus, —
      * чтобы экран деталей не различал источники.
      */
-    fun tvStatus(title: String, year: String): TmdbClient.TvStatus? {
+    fun tvStatus(title: String, year: String, country: String = ""): TmdbClient.TvStatus? {
         if (title.isBlank()) return null
-        val slug = findShow(title, year) ?: return null
+        val slug = findShow(title, year, country) ?: return null
         return statusBySlug(slug)
     }
 
-    /** Поиск сериала по названию (+год) — проверка совпадения как в TmdbClient.tvStatus. */
-    private fun findShow(title: String, year: String): String? {
-        val json = arr("/search/show?query=" + URLEncoder.encode(title, "UTF-8")) ?: return null
+    /** Поиск сериала по названию (+год, +страна) — проверка совпадения как в TmdbClient.tvStatus. */
+    private fun findShow(title: String, year: String, country: String = ""): String? {
+        // Подвязка: тайтл, найденный однажды, кешируется локально — дальше
+        // без поисковых запросов к Trakt (лимит 1000/ч общий на Client ID)
+        val cacheKey = "${title.lowercase().trim()}|$year"
+        slugCache[cacheKey]?.let {
+            com.torrenttv.app.data.AppLog.log("trakt", "«$title»: подвязка из кеша → $it")
+            return it
+        }
+        // extended=full — нужен country кандидатов прямо в выдаче поиска:
+        // «Титаны» есть и как шоу ТНТ (ru, 2024), и как сериал Netflix (us, 2018)
+        val json = arr("/search/show?query=" + URLEncoder.encode(title, "UTF-8") + "&extended=full")
+            ?: return null
         val want = TitleMatch.normalize(title)
+        val wantCountry = countryCode(country)
         var bestSlug = ""
         var bestScore = 0
         for (i in 0 until minOf(json.length(), 5)) {
@@ -95,6 +106,9 @@ object TraktClient {
             }
             val candYear = o.optInt("year", 0).toString()
             if (year.isNotBlank() && candYear == year) score += 40
+            // Страна: русская карточка → русское шоу, американская → американский сериал
+            val candCountry = o.optString("country", "")
+            if (wantCountry.isNotBlank() && candCountry == wantCountry) score += 30
             if (score > bestScore) {
                 bestScore = score
                 bestSlug = o.optJSONObject("ids")?.optString("slug", "") ?: ""
@@ -103,20 +117,64 @@ object TraktClient {
         // Строгий порог: как у TMDB — не рискуем выдать чужой сериал.
         // НО: Trakt ищет и по русским алиасам («Гангстерленд» → MobLand),
         // при этом title результата — латиницей. Если точного совпадения нет,
-        // доверяем первому результату с совпавшим годом — иначе русский
-        // каталог вообще не матчится
+        // доверяем первому результату с совпавшим годом (или страной, если
+        // год карточки неизвестен) — иначе русский каталог вообще не матчится
         if (bestScore < 100 && json.length() > 0) {
-            val first = json.optJSONObject(0)?.optJSONObject("show") ?: return null
-            val y = first.optInt("year", 0).toString()
-            if (year.isNotBlank() && y == year) {
-                com.torrenttv.app.data.AppLog.log(
-                    "trakt",
-                    "точного совпадения нет — принят первый результат по алиасу: ${first.optJSONObject("ids")?.optString("slug")}",
-                )
-                return first.optJSONObject("ids")?.optString("slug", "").takeUnless { it.isNullOrBlank() }
+            val first = json.optJSONObject(0)?.optJSONObject("show") ?: return null.also {
+                com.torrenttv.app.data.AppLog.log("trakt", "«$title» (год $year): поиск пуст — сериала нет")
             }
+            val y = first.optInt("year", 0).toString()
+            val c = first.optString("country", "")
+            val yearOk = year.isNotBlank() && y == year
+            val countryOk = year.isBlank() && wantCountry.isNotBlank() && c == wantCountry
+            if (yearOk || countryOk) {
+                val slug = first.optJSONObject("ids")?.optString("slug", "").takeUnless { it.isNullOrBlank() }
+                if (slug != null) {
+                    com.torrenttv.app.data.AppLog.log(
+                        "trakt",
+                        "«$title»: точного совпадения нет — принят первый результат по алиасу: $slug " +
+                            (if (yearOk) "(год $y совпал)" else "(страна $c совпала)"),
+                    )
+                    slugCache[cacheKey] = slug
+                }
+                return slug
+            }
+            com.torrenttv.app.data.AppLog.log(
+                "trakt",
+                "«$title»: алиас не принят — год/страна не совпали (ищем $year/$wantCountry, нашли $y/$c)",
+            )
         }
-        return if (bestScore >= 100 && bestSlug.isNotBlank()) bestSlug else null
+        if (bestScore >= 100 && bestSlug.isNotBlank()) {
+            slugCache[cacheKey] = bestSlug
+            return bestSlug
+        }
+        if (bestScore < 100) {
+            com.torrenttv.app.data.AppLog.log("trakt", "«$title» (год $year): не найден, лучший score $bestScore")
+        }
+        return null
+    }
+
+    /** Подвязка тайтл → slug в памяти процесса (живёт с приложением). */
+    private val slugCache = mutableMapOf<String, String>()
+
+    /** «Россия»/«СССР» → ru, «США» → us и т.д. — для сверки с Trakt country (2 буквы). */
+    private fun countryCode(c: String): String {
+        val s = c.lowercase()
+        return when {
+            s.isBlank() -> ""
+            "росси" in s || "ссср" in s -> "ru"
+            "сша" in s || "америк" in s -> "us"
+            "британ" in s || "англ" in s -> "gb"
+            "франц" in s -> "fr"
+            "герман" in s -> "de"
+            "япон" in s -> "jp"
+            "корей" in s -> "kr"
+            "испан" in s -> "es"
+            "итал" in s -> "it"
+            "канад" in s -> "ca"
+            "австрал" in s -> "au"
+            else -> ""
+        }
     }
 
     private fun statusBySlug(slug: String): TmdbClient.TvStatus? {
@@ -126,7 +184,7 @@ object TraktClient {
         val running = st == "returning series" || st == "in production" || st == "planned"
 
         // Сезоны с эпизодами: ищем ближайшую будущую и последнюю вышедшую серию
-        val seasons = arr("/shows/" + Uri.encode(slug) + "/seasons?extended=episodes")
+        val seasons = arr("/shows/" + Uri.encode(slug) + "/seasons?extended=full,episodes")
         val now = System.currentTimeMillis()
         var nextSeason = 0; var nextEpisode = 0; var nextAirMs = Long.MAX_VALUE
         var lastSeason = 0; var lastEpisode = 0; var lastAirMs = 0L
@@ -176,11 +234,13 @@ object TraktClient {
      * Trakt отдаёт и названия, и first_aired по каждой серии.
      * Совпадение сериала проверяем по названию и году (как в tvStatus).
      */
-    fun seasons(title: String, year: String): List<Season> {
+    fun seasons(title: String, year: String, country: String = ""): List<Season> {
         if (title.isBlank()) return emptyList()
-        val slug = findShow(title, year) ?: return emptyList()
-        val sarr = arr("/shows/" + Uri.encode(slug) + "/seasons?extended=episodes") ?: return emptyList()
-        return (0 until sarr.length()).mapNotNull { i ->
+        val slug = findShow(title, year, country) ?: return emptyList()
+        // full обязателен: без него Trakt НЕ присылает first_aired у серий
+        // (проверено на «Титанах»: episodes → 0 дат, full,episodes → все даты)
+        val sarr = arr("/shows/" + Uri.encode(slug) + "/seasons?extended=full,episodes") ?: return emptyList()
+        val result = (0 until sarr.length()).mapNotNull { i ->
             val s = sarr.optJSONObject(i) ?: return@mapNotNull null
             val num = s.optInt("number", -1)
             if (num <= 0) return@mapNotNull null // сезон 0 — спецэпизоды, не показываем
@@ -199,5 +259,55 @@ object TraktClient {
             }
             if (eps.isEmpty()) null else Season(number = num, episodes = eps.sortedBy { it.episode })
         }.sortedBy { it.number }
+        // Диагностика: сколько сезонов пришло и сколько серий с датами —
+        // по этому логу видно, сработал ли full (без него дат 0)
+        val withDates = result.sumOf { s -> s.episodes.count { it.airDate.isNotBlank() } }
+        com.torrenttv.app.data.AppLog.log(
+            "trakt",
+            "«$title» ($slug): сезонов ${result.size} ${result.map { "S${it.number}(${it.episodes.size})" }}, серий с датами $withDates",
+        )
+        return result
+    }
+
+    /**
+     * Постер с Trakt (media.trakt.tv — доступен из РФ, в отличие от TMDB).
+     * isTv: true — сериал, false — фильм. null — постера нет.
+     */
+    fun posterUrl(title: String, year: String, isTv: Boolean, country: String = ""): String? {
+        if (title.isBlank()) return null
+        val slug = if (isTv) {
+            findShow(title, year, country)
+        } else {
+            // Фильм: поиск → slug первого результата с совпавшим годом
+            val json = arr("/search/movie?query=" + Uri.encode(title)) ?: return null
+            var found: String? = null
+            for (i in 0 until json.length()) {
+                val m = json.optJSONObject(i)?.optJSONObject("movie") ?: continue
+                if (year.isBlank() || m.optInt("year", 0).toString() == year) {
+                    found = m.optJSONObject("ids")?.optString("slug")
+                    break
+                }
+            }
+            found
+        } ?: run {
+            com.torrenttv.app.data.AppLog.log("trakt", "«$title»: постер — объект не найден")
+            return null
+        }
+        val images = obj("/" + (if (isTv) "shows" else "movies") + "/" + Uri.encode(slug) + "?extended=images")
+            ?.optJSONObject("images")?.optJSONArray("poster") ?: return null.also {
+            com.torrenttv.app.data.AppLog.log("trakt", "«$title» ($slug): постера нет")
+        }
+        if (images.length() == 0) return null.also {
+            com.torrenttv.app.data.AppLog.log("trakt", "«$title» ($slug): постера нет")
+        }
+        // medium → full: полноразмерный постер для карточки
+        val url = images.optJSONObject(0)?.optString("url", "")
+            ?.replace("/medium/", "/full/")
+            ?.takeUnless { it.isBlank() }
+        com.torrenttv.app.data.AppLog.log(
+            "trakt",
+            if (url != null) "«$title» ($slug): постер найден" else "«$title» ($slug): постер битый",
+        )
+        return url
     }
 }

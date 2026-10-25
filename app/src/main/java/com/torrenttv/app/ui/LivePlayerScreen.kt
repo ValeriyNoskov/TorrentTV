@@ -261,7 +261,7 @@ fun LivePlayerScreen(
                         }
                     }) { Text("↻ Повторить") }
                     Spacer(Modifier.width(10.dp))
-                    androidx.tv.material3.Button(onClick = { step(1) }) { Text("⏭ Следующий канал") }
+                    androidx.tv.material3.Button(onClick = { step(1) }) { Text("⏭︎ Следующий канал") }
                 }
             }
         }
@@ -344,7 +344,7 @@ fun LivePlayerScreen(
             }
         }
 
-        // Центр: полупрозрачные ⏮/⏸/⏭ — переключение каналов, пауза
+        // Центр: полупрозрачные ⏮︎/▮▮/⏭︎ — переключение каналов, пауза
         if (showPanel) {
             Row(
                 modifier = Modifier.align(Alignment.Center),
@@ -360,7 +360,7 @@ fun LivePlayerScreen(
                         focusedContainerColor = Color(0xFFE8ECF4),
                         focusedContentColor = Color(0xFF0E1116),
                     ),
-                ) { Text("⏮", fontSize = 30.sp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 15.dp)) }
+                ) { Text("⏮︎", fontSize = 30.sp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 15.dp)) }
                 androidx.tv.material3.Surface(
                     onClick = {
                         if (player.isPlaying) player.pause() else player.play()
@@ -376,7 +376,7 @@ fun LivePlayerScreen(
                     ),
                 ) {
                     Text(
-                        if (playing) "⏸" else "▶",
+                        if (playing) "▮▮" else "▶︎",
                         fontSize = 34.sp,
                         modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp),
                     )
@@ -390,7 +390,7 @@ fun LivePlayerScreen(
                         focusedContainerColor = Color(0xFFE8ECF4),
                         focusedContentColor = Color(0xFF0E1116),
                     ),
-                ) { Text("⏭", fontSize = 30.sp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 15.dp)) }
+                ) { Text("⏭︎", fontSize = 30.sp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 15.dp)) }
             }
         }
 
@@ -427,7 +427,7 @@ fun LivePlayerScreen(
                     }
                 }
                 GItem(
-                    if (store.isTvFavorite(current.url)) "★ Убрать из избранного" else "☆ В избранное",
+                    if (store.isTvFavorite(current.url)) "★︎ Убрать из избранного" else "☆ В избранное",
                 ) {
                     val added = store.toggleTvFavorite(current.url)
                     AppLog.log("tv", if (added) "в избранное: «${current.name}»" else "из избранного: «${current.name}»")

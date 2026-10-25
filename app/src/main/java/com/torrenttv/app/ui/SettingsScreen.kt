@@ -231,7 +231,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                     // Заголовок блока «— разработка —»: некликабельная метка
                     id == "—devhead—" -> Text(
                         title,
-                        color = Color(0xFFF5B942).copy(alpha = 0.7f),
+                        color = Color(0xFFA9D7F5).copy(alpha = 0.7f),
                         fontSize = 12.sp,
                         modifier = Modifier.padding(start = 14.dp, top = 8.dp, bottom = 2.dp),
                     )
@@ -607,14 +607,14 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 snap.kp.forEachIndexed { i, n ->
                                     Text(
                                         "КП №${i + 1} = $n" + if (n >= 450) " ⚠ близко к лимиту" else "",
-                                        color = if (n >= 450) Color(0xFFF5B942) else Color.White,
+                                        color = if (n >= 450) Color(0xFFA9D7F5) else Color.White,
                                         fontSize = 17.sp,
                                         fontWeight = FontWeight.SemiBold,
                                     )
                                 }
                                 Text(
                                     "Trakt = ${snap.trakt}",
-                                    color = if (snap.trakt >= 900) Color(0xFFF5B942) else Color.White,
+                                    color = if (snap.trakt >= 900) Color(0xFFA9D7F5) else Color.White,
                                     fontSize = 17.sp,
                                     fontWeight = FontWeight.SemiBold,
                                 )
@@ -779,9 +779,9 @@ private fun SectionItem(
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color(0xFF161C26),
             contentColor = Color.White,
-            focusedContainerColor = if (selected) Color(0xFFF5B942) else Color(0xFF2A3648),
+            focusedContainerColor = if (selected) Color(0xFFA9D7F5) else Color(0xFF2A3648),
             focusedContentColor = if (selected) Color(0xFF0E1116) else Color.White,
-            pressedContainerColor = Color(0xFFE0A82E),
+            pressedContainerColor = Color(0xFF7FBDE8),
             pressedContentColor = Color(0xFF0E1116),
             disabledContainerColor = Color(0xFF161C26),
             disabledContentColor = Color.White,
@@ -816,9 +816,9 @@ private fun SettingsRow(
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color(0xFF161C26),
             contentColor = Color.White,
-            focusedContainerColor = if (danger) Color(0xFFB0483C) else Color(0xFFF5B942),
+            focusedContainerColor = if (danger) Color(0xFFB0483C) else Color(0xFFA9D7F5),
             focusedContentColor = Color(0xFF0E1116),
-            pressedContainerColor = if (danger) Color(0xFF93392F) else Color(0xFFE0A82E),
+            pressedContainerColor = if (danger) Color(0xFF93392F) else Color(0xFF7FBDE8),
             pressedContentColor = Color(0xFF0E1116),
             disabledContainerColor = Color(0xFF161C26),
             disabledContentColor = Color.White,
@@ -887,7 +887,7 @@ private fun EditScreen(
         Text(title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Text(
             text = value.ifBlank { "Введите значение…" },
-            color = if (value.isBlank()) Color.White.copy(alpha = 0.35f) else Color(0xFFF5B942),
+            color = if (value.isBlank()) Color.White.copy(alpha = 0.35f) else Color(0xFFA9D7F5),
             fontSize = 18.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 3,
@@ -909,11 +909,11 @@ private fun EditScreen(
                 onValueChange = onChange,
                 singleLine = false,
                 textStyle = androidx.compose.ui.text.TextStyle(
-                    color = Color(0xFFF5B942),
+                    color = Color(0xFFA9D7F5),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.SemiBold,
                 ),
-                cursorBrush = androidx.compose.ui.graphics.SolidColor(Color(0xFFF5B942)),
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(Color(0xFFA9D7F5)),
                 modifier = Modifier
                     .focusRequester(kbFocus)
                     .fillMaxWidth()
@@ -1142,7 +1142,7 @@ private fun NetCheckScreen(onClose: () -> Unit) {
             ) { Text(if (uploading) "⏳ Отправляю…" else "📤 Выгрузить лог в Gist") }
             if (uploadState.isNotBlank()) {
                 Spacer(Modifier.width(16.dp))
-                Text(uploadState, color = Color(0xFFF5B942), fontSize = 17.sp)
+                Text(uploadState, color = Color(0xFFA9D7F5), fontSize = 17.sp)
             }
         }
         if (uploadUrl.isNotBlank()) {
@@ -1221,11 +1221,11 @@ private fun KeywordChip(word: String, onRemove: () -> Unit) {
         modifier = Modifier.padding(4.dp).mouseClick { onRemove() },
         shape = clickableSurfaceShape(RoundedCornerShape(20.dp)),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color(0xFFF5B942),
+            containerColor = Color(0xFFA9D7F5),
             contentColor = Color(0xFF0E1116),
-            focusedContainerColor = Color(0xFFFFD07A),
+            focusedContainerColor = Color(0xFFCDE9FA),
             focusedContentColor = Color(0xFF0E1116),
-            pressedContainerColor = Color(0xFFE0A82E),
+            pressedContainerColor = Color(0xFF7FBDE8),
             pressedContentColor = Color(0xFF0E1116),
             disabledContainerColor = Color(0xFF1F2430),
             disabledContentColor = Color.White,

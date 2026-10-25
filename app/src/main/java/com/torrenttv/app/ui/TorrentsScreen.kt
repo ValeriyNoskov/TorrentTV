@@ -409,7 +409,7 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
             if (voiceStatus.isNotBlank()) {
                 Text(
                     voiceStatus,
-                    color = Color(0xFFFFD54F),
+                    color = Color(0xFFBFE3F7),
                     fontSize = 13.sp,
                     modifier = Modifier.padding(horizontal = 36.dp, vertical = 2.dp),
                 )
@@ -432,7 +432,7 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
                                 fontSize = 22.sp,
                                 fontWeight = FontWeight.SemiBold,
                             ),
-                            cursorBrush = androidx.compose.ui.graphics.SolidColor(Color(0xFFF5B942)),
+                            cursorBrush = androidx.compose.ui.graphics.SolidColor(Color(0xFFA9D7F5)),
                             modifier = Modifier
                                 .focusRequester(kbFieldFocus)
                                 .width(620.dp)
@@ -453,7 +453,7 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
                         )
                         Spacer(Modifier.width(12.dp))
                         ActionPill(
-                            text = "Найти ▶",
+                            text = "Найти ▶︎",
                             active = true,
                             modifier = Modifier.focusRequester(findFocus),
                         ) { runSearch() }
@@ -496,7 +496,7 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
                         if (!searchMode && !endReached) append(" · листайте — подгрузится ещё")
                     }
                 },
-                color = if (loadError.isNotEmpty()) Color(0xFFF5B942) else Color.White.copy(alpha = 0.5f),
+                color = if (loadError.isNotEmpty()) Color(0xFFA9D7F5) else Color.White.copy(alpha = 0.5f),
                 fontSize = 13.sp,
                 modifier = Modifier.padding(horizontal = 36.dp, vertical = 2.dp),
             )
@@ -587,9 +587,9 @@ private fun ActionPill(
         modifier = modifier,
         shape = clickableSurfaceShape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
         colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
-            containerColor = if (active) Color(0xFF3A2E14) else Color(0xFF1F2430),
-            contentColor = if (active) Color(0xFFF5B942) else Color.White,
-            focusedContainerColor = Color(0xFFF5B942),
+            containerColor = if (active) Color(0xFF1E3A4D) else Color(0xFF1F2430),
+            contentColor = if (active) Color(0xFFA9D7F5) else Color.White,
+            focusedContainerColor = Color(0xFFA9D7F5),
             focusedContentColor = Color(0xFF0E1116),
         ),
     ) {
@@ -606,7 +606,7 @@ private fun ChipX(text: String, onRemove: () -> Unit) {
         colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
             containerColor = Color(0xFF262C3A),
             contentColor = Color(0xFFC6CFDD),
-            focusedContainerColor = Color(0xFFF5B942),
+            focusedContainerColor = Color(0xFFA9D7F5),
             focusedContentColor = Color(0xFF0E1116),
         ),
     ) {
@@ -737,9 +737,9 @@ private fun MultiChip(label: String, selected: Boolean, onClick: () -> Unit) {
         onClick = onClick,
         shape = clickableSurfaceShape(androidx.compose.foundation.shape.RoundedCornerShape(9.dp)),
         colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) Color(0xFF3A2E14) else Color(0xFF1F2430),
-            contentColor = if (selected) Color(0xFFF5B942) else Color.White.copy(alpha = 0.85f),
-            focusedContainerColor = Color(0xFFF5B942),
+            containerColor = if (selected) Color(0xFF1E3A4D) else Color(0xFF1F2430),
+            contentColor = if (selected) Color(0xFFA9D7F5) else Color.White.copy(alpha = 0.85f),
+            focusedContainerColor = Color(0xFFA9D7F5),
             focusedContentColor = Color(0xFF0E1116),
         ),
     ) {

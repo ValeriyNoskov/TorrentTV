@@ -75,7 +75,7 @@ fun TorrentResultsScreen(
             .background(Color(0xFF0E1116))
             .padding(28.dp),
     ) {
-        Text("🧲 Раздачи: $query", color = Color(0xFFF5B942), fontSize = 15.sp)
+        Text("🧲 Раздачи: $query", color = Color(0xFFA9D7F5), fontSize = 15.sp)
         Text(
             item.title,
             color = Color.White,
@@ -104,7 +104,7 @@ fun TorrentResultsScreen(
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = Color(0xFF161C26),
                         contentColor = Color.White,
-                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContainerColor = Color(0xFFA9D7F5),
                         focusedContentColor = Color(0xFF0E1116),
                     ),
                 ) {
@@ -126,8 +126,8 @@ fun TorrentResultsScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 if (i == 0) {
                                     Text(
-                                        "★ ЛУЧШАЯ  ",
-                                        color = Color(0xFFF5B942),
+                                        "★︎ ЛУЧШАЯ  ",
+                                        color = Color(0xFFA9D7F5),
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
                                     )
@@ -245,7 +245,7 @@ fun TorrentFilesScreen(
             .background(Color(0xFF0E1116))
             .padding(28.dp),
     ) {
-        Text("🧲 Раздача", color = Color(0xFFF5B942), fontSize = 15.sp)
+        Text("🧲 Раздача", color = Color(0xFFA9D7F5), fontSize = 15.sp)
         Text(
             item.title,
             color = Color.White,
@@ -262,7 +262,7 @@ fun TorrentFilesScreen(
         Spacer(Modifier.height(14.dp))
 
         if (loading) {
-            Text(status, color = Color(0xFFFFD54F), fontSize = 15.sp)
+            Text(status, color = Color(0xFFBFE3F7), fontSize = 15.sp)
             Text(
                 "Состав раздачи берётся у пиров — обычно 10–30 секунд",
                 color = Color.White.copy(alpha = 0.45f),
@@ -272,7 +272,7 @@ fun TorrentFilesScreen(
         } else if (files.isEmpty()) {
             Text(
                 if (status.startsWith("Метаданные")) status else "Видеофайлов в раздаче не найдено",
-                color = Color(0xFFFFD54F),
+                color = Color(0xFFBFE3F7),
                 fontSize = 15.sp,
             )
             Spacer(Modifier.height(12.dp))
@@ -301,9 +301,9 @@ fun TorrentFilesScreen(
                             onClick = { selSeason = s },
                             shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(20.dp)),
                             colors = ClickableSurfaceDefaults.colors(
-                                containerColor = if (selSeason == s) Color(0xFFF5B942) else Color(0xFF161C26),
+                                containerColor = if (selSeason == s) Color(0xFFA9D7F5) else Color(0xFF161C26),
                                 contentColor = if (selSeason == s) Color(0xFF0E1116) else Color.White,
-                                focusedContainerColor = Color(0xFFF5B942),
+                                focusedContainerColor = Color(0xFFA9D7F5),
                                 focusedContentColor = Color(0xFF0E1116),
                             ),
                         ) {
@@ -336,7 +336,7 @@ fun TorrentFilesScreen(
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color(0xFF161C26),
                             contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContainerColor = Color(0xFFA9D7F5),
                             focusedContentColor = Color(0xFF0E1116),
                         ),
                     ) {
@@ -345,8 +345,8 @@ fun TorrentFilesScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                if (watched) "✓" else "▶",
-                                color = if (watched) Color(0xFF6BE26B) else Color(0xFFF5B942),
+                                if (watched) "✓" else "▶︎",
+                                color = if (watched) Color(0xFF6BE26B) else Color(0xFFA9D7F5),
                                 fontSize = 14.sp,
                                 modifier = Modifier.width(24.dp),
                             )

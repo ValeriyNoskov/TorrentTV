@@ -1,6 +1,7 @@
 package com.torrenttv.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.width
@@ -23,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
+import androidx.compose.foundation.shape.RoundedCornerShape
 import com.torrenttv.app.data.Genre
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
@@ -47,21 +49,28 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: ()
         "shelves" to "📚 Полки",
         "posted" to "📥 Поступившие",
         "year" to "🆕 Новинки",
-        "rating" to "⭐ По рейтингу",
+        "rating" to "★︎ По рейтингу",
     )
     var sort by remember { mutableStateOf(store.lastCatalogSort(mode)) }
     var genres by remember { mutableStateOf<List<Genre>>(emptyList()) }
     // Жанр запоминается: выход из карточки не сбрасывает выбор (как в «Торрентах»)
     var selected by remember { mutableStateOf<Genre?>(null) }
-    // ⚙ Фильтры прямо в каталоге (как у Кинопоиска): скрытые жанры + страны
-    var showFilters by remember { mutableStateOf(false) }
     var movieGenresAll by remember { mutableStateOf<List<Genre>>(emptyList()) }
     var tvGenresAll by remember { mutableStateOf<List<Genre>>(emptyList()) }
     var countriesAll by remember { mutableStateOf<List<Genre>>(emptyList()) }
-    var excludedG by remember { mutableStateOf(store.excludedGenreIds().toSet()) }
-    var excludedC by remember { mutableStateOf(store.excludedCountryIds().toSet()) }
-    LaunchedEffect(showFilters) {
-        if (showFilters && movieGenresAll.isEmpty()) {
+    // Фильтры «как в Зоне» (включение): жанры, тип, страны, годы, рейтинг.
+    // Живут в LocalStore — переживают выход из каталога и перезапуск.
+    var fGenres by remember { mutableStateOf(store.filterGenreIds()) }
+    var fType by remember { mutableStateOf(store.filterType()) }
+    var fCountries by remember { mutableStateOf(store.filterCountryIds()) }
+    var fYears by remember { mutableStateOf(store.filterYearIds()) }
+    var fYearPreset by remember { mutableStateOf(store.filterYearPreset()) }
+    var fMinRating by remember { mutableStateOf(store.filterMinRating()) }
+    // Какая модалка фильтра открыта: "genre" | "type" | "country" | "year" | "rating" | null
+    var openFilter by remember { mutableStateOf<String?>(null) }
+    // Справочники жанров/стран — для списков и имён бейджей
+    LaunchedEffect(Unit) {
+        if (movieGenresAll.isEmpty()) {
             withContext(Dispatchers.IO) {
                 movieGenresAll = runCatching { MediaApi.movieGenres() }.getOrDefault(emptyList())
                 tvGenresAll = runCatching { MediaApi.tvGenres() }.getOrDefault(emptyList())
@@ -69,39 +78,21 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: ()
             }
         }
     }
-    if (showFilters) {
-        FilterPicker(
-            title = "Скрыть из каталогов",
-            groups = listOf("Жанры фильмов:" to movieGenresAll, "Жанры сериалов:" to tvGenresAll, "Страны:" to countriesAll),
-            excluded = excludedG + excludedC,
-            onToggle = { g ->
-                if (g.id in excludedG || g.id in excludedC) {
-                    // снять: id может быть и жанром, и страной — чистим оба набора
-                    excludedG = excludedG - g.id
-                    excludedC = excludedC - g.id
-                } else {
-                    // жанры и страны могут пересекаться по id у КП — относим к жанрам,
-                    // если id есть в их списках, иначе к странам
-                    if (movieGenresAll.any { it.id == g.id } || tvGenresAll.any { it.id == g.id }) {
-                        excludedG = excludedG + g.id
-                        store.setExcludedGenreIds(excludedG)
-                        return@FilterPicker
-                    }
-                    excludedC = excludedC + g.id
-                }
-                store.setExcludedGenreIds(excludedG)
-                store.setExcludedCountryIds(excludedC)
-            },
-            onClearAll = {
-                excludedG = emptySet()
-                excludedC = emptySet()
-                store.setExcludedGenreIds(excludedG)
-                store.setExcludedCountryIds(excludedC)
-            },
-            onClose = { showFilters = false },
-        )
-        return
+
+    fun nameById(lists: List<List<Genre>>, id: Int): String =
+        lists.firstOrNull { l -> l.any { it.id == id } }?.firstOrNull { it.id == id }?.name ?: "#$id"
+
+    fun yearLabel(): String {
+        val preset = when (fYearPreset) {
+            "2020+" -> "2020+"; "2010-2019" -> "2010–2019"
+            "2000-2009" -> "2000–2009"; "1990s" -> "90-е"
+            else -> ""
+        }
+        val ys = fYears.sortedDescending()
+        val yearsTxt = if (ys.size > 3) "${ys.take(3).joinToString(", ")}…" else ys.joinToString(", ")
+        return listOf(preset, yearsTxt).filter { it.isNotBlank() }.joinToString(", ")
     }
+
 
     LaunchedEffect(mode) {
         genres = withContext(Dispatchers.IO) {
@@ -116,6 +107,7 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: ()
         if (selected == null && savedId != 0) selected = genres.firstOrNull { it.id == savedId }
     }
 
+    Box {
     LazyColumn(
         Modifier
             .fillMaxSize()
@@ -134,13 +126,16 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: ()
             item {
                 Text(
                     text = "⚠ Метаданные не настроены. Получите бесплатный ключ на kinopoiskapiunofficial.tech и укажите kpApiKey= в gradle.properties.",
-                    color = Color(0xFFFFD54F),
+                    color = Color(0xFFBFE3F7),
                     fontSize = 14.sp,
                     modifier = Modifier.padding(horizontal = 32.dp),
                 )
             }
         }
         item {
+            // Кнопки фильтров «как в Зоне»: Жанр · Тип · Страна · Год · Рейтинг.
+            // Каждая открывает свою модалку со списком с галочками.
+            val activeN = listOf(fGenres.size, fCountries.size, fYears.size + if (fYearPreset.isNotBlank()) 1 else 0, if (fType.isBlank()) 0 else 1, if (fMinRating > 0) 1 else 0).sum()
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // 🔍 Поиск — на каждой вкладке (просьба владельца)
                 androidx.tv.material3.Surface(
@@ -149,28 +144,124 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: ()
                     colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
                         containerColor = Color(0xFF1F2430),
                         contentColor = Color.White,
-                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContainerColor = Color(0xFFA9D7F5),
                         focusedContentColor = Color.Black,
                     ),
                 ) { Text("🔍", fontSize = 16.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) }
                 Spacer(Modifier.width(8.dp))
-                // ⚙ Фильтры — с счётчиком скрытого (как у Кинопоиска)
-                val hiddenN = excludedG.size + excludedC.size
-                androidx.tv.material3.Surface(
-                    onClick = { showFilters = true },
-                    shape = clickableSurfaceShape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
-                    colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
-                        containerColor = Color(0xFF1F2430),
-                        contentColor = Color.White,
-                        focusedContainerColor = Color(0xFFF5B942),
-                        focusedContentColor = Color.Black,
-                    ),
-                ) {
+                listOf(
+                    "genre" to listOf("🎭 Жанр", fGenres.size),
+                    "type" to listOf("🎬 Тип", if (fType.isBlank()) 0 else 1),
+                    "country" to listOf("🌍 Страна", fCountries.size),
+                    "year" to listOf("📅 Год", fYears.size + if (fYearPreset.isNotBlank()) 1 else 0),
+                    "rating" to listOf("⭐ Рейтинг", if (fMinRating > 0) 1 else 0),
+                ).forEachIndexed { idx, (key, pair) ->
+                    val label = pair[0] as String
+                    val n = pair[1] as Int
+                    if (idx > 0) Spacer(Modifier.width(6.dp))
+                    androidx.tv.material3.Surface(
+                        onClick = { openFilter = key },
+                        shape = clickableSurfaceShape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
+                        colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF1F2430),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFA9D7F5),
+                            focusedContentColor = Color.Black,
+                        ),
+                        modifier = Modifier.mouseClick { openFilter = key },
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                        ) {
+                            Text(label, fontSize = 15.sp)
+                            if (n > 0) {
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    n.toString(),
+                                    color = Color(0xFF0E1116),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier
+                                        .background(Color(0xFFA9D7F5), RoundedCornerShape(7.dp))
+                                        .padding(horizontal = 6.dp, vertical = 1.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+                if (activeN > 0) {
+                    Spacer(Modifier.width(10.dp))
                     Text(
-                        if (hiddenN > 0) "⚙ Фильтры · $hiddenN" else "⚙ Фильтры",
-                        fontSize = 15.sp,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                        "включено фильтров: $activeN",
+                        color = Color(0xFF8A94A6),
+                        fontSize = 13.sp,
                     )
+                }
+            }
+            // Строка включённых фильтров: бейджи с ✕ — клик снимает группу
+            if (activeN > 0) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 6.dp),
+                ) {
+                    val badges = buildList {
+                        if (fGenres.isNotEmpty()) {
+                            add("жанр: " + fGenres.sorted().joinToString(", ") { nameById(listOf(movieGenresAll, tvGenresAll), it) })
+                        }
+                        if (fType.isNotBlank()) add("тип: " + if (fType == "movie") "Фильмы" else "Сериалы")
+                        if (fCountries.isNotEmpty()) {
+                            add("страна: " + fCountries.sorted().joinToString(", ") { nameById(listOf(countriesAll), it) })
+                        }
+                        val yl = yearLabel()
+                        if (yl.isNotBlank()) add("год: $yl")
+                        if (fMinRating > 0) add("рейтинг: от $fMinRating")
+                    }
+                    badges.forEach { b ->
+                        androidx.tv.material3.Surface(
+                            onClick = { openFilter = b.substringBefore(':') },
+                            shape = clickableSurfaceShape(androidx.compose.foundation.shape.RoundedCornerShape(999.dp)),
+                            colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                                containerColor = Color(0xFF1E3A4D),
+                                contentColor = Color(0xFFA9D7F5),
+                                focusedContainerColor = Color(0xFFA9D7F5),
+                                focusedContentColor = Color(0xFF0E1116),
+                            ),
+                            modifier = Modifier.mouseClick { openFilter = b.substringBefore(':') },
+                        ) {
+                            Text(
+                                "$b  ✕",
+                                fontSize = 12.5.sp,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            )
+                        }
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    androidx.tv.material3.Surface(
+                        onClick = {
+                            store.clearAllFilters()
+                            fGenres = emptySet(); fType = ""; fCountries = emptySet()
+                            fYears = emptySet(); fYearPreset = ""; fMinRating = 0
+                        },
+                        shape = clickableSurfaceShape(androidx.compose.foundation.shape.RoundedCornerShape(999.dp)),
+                        colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF1F2430),
+                            contentColor = Color(0xFF8A94A6),
+                            focusedContainerColor = Color(0xFFA9D7F5),
+                            focusedContentColor = Color(0xFF0E1116),
+                        ),
+                        modifier = Modifier.mouseClick {
+                            store.clearAllFilters()
+                            fGenres = emptySet(); fType = ""; fCountries = emptySet()
+                            fYears = emptySet(); fYearPreset = ""; fMinRating = 0
+                        },
+                    ) {
+                        Text(
+                            "очистить всё",
+                            fontSize = 12.5.sp,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        )
+                    }
                 }
             }
             Spacer(Modifier.height(6.dp))
@@ -210,7 +301,7 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: ()
                     },
                     onOpen = onOpenDetails,
                     keyTag = "${sort}-${selected?.id ?: 0}",
-                    filterFn = { store.isAllowed(it) },
+                    filterFn = { store.isAllowed(it) && store.passesFilters(it) },
                 )
             }
         }
@@ -225,7 +316,7 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: ()
                         },
                         onOpen = onOpenDetails,
                         keyTag = g.id,
-                        filterFn = { store.isAllowed(it) },
+                        filterFn = { store.isAllowed(it) && store.passesFilters(it) },
                     )
                 }
             }
@@ -237,7 +328,7 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: ()
                         if (mode == "movies") MediaApi.newMovies(page) else MediaApi.newTv(page)
                     },
                     onOpen = onOpenDetails,
-                    filterFn = { store.isAllowed(it) },
+                    filterFn = { store.isAllowed(it) && store.passesFilters(it) },
                 )
             }
             item {
@@ -251,7 +342,7 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: ()
                         }
                     },
                     onOpen = onOpenDetails,
-                    filterFn = { store.isAllowed(it) },
+                    filterFn = { store.isAllowed(it) && store.passesFilters(it) },
                 )
             }
             item {
@@ -261,7 +352,7 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: ()
                         if (mode == "movies") MediaApi.russianMovies(page) else MediaApi.russianTv(page)
                     },
                     onOpen = onOpenDetails,
-                    filterFn = { store.isAllowed(it) },
+                    filterFn = { store.isAllowed(it) && store.passesFilters(it) },
                 )
             }
             item {
@@ -271,10 +362,99 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: ()
                         if (mode == "movies") MediaApi.foreignMovies(page) else MediaApi.foreignTv(page)
                     },
                     onOpen = onOpenDetails,
-                    filterFn = { store.isAllowed(it) },
+                    filterFn = { store.isAllowed(it) && store.passesFilters(it) },
                 )
             }
         }
         item { Spacer(Modifier.height(24.dp)) }
+    }
+
+    // Модалка фильтра рисуется ПОВЕРХ каталога, а не через ранний return:
+    // return размонтировал полки — при закрытии они пересоздавались и
+    // постраничная загрузка начиналась заново (вечная «Загрузка…»).
+    openFilter?.let { which ->
+        val opts: List<FilterOption> = when (which) {
+            "genre" -> {
+                val all = movieGenresAll + tvGenresAll
+                all.distinctBy { it.id }
+                    .sortedBy { it.name }
+                    .map { FilterOption("g:${it.id}", it.name, it.id in fGenres) }
+            }
+            "type" -> listOf(
+                FilterOption("t:", "Все", fType.isBlank()),
+                FilterOption("t:movie", "Фильмы", fType == "movie"),
+                FilterOption("t:tv", "Сериалы", fType == "tv"),
+            )
+            "country" -> countriesAll
+                .sortedBy { it.name }
+                .map { FilterOption("c:${it.id}", it.name, it.id in fCountries) }
+            "year" -> {
+                val presets = listOf(
+                    "2020+" to "2020+", "2010-2019" to "2010–2019",
+                    "2000-2009" to "2000–2009", "1990s" to "90-е",
+                )
+                presets.map { (id, label) -> FilterOption("p:$id", label, fYearPreset == id) } +
+                    (2026 downTo 1990).map { y ->
+                        FilterOption("y:$y", y.toString(), y in fYears)
+                    }
+            }
+            else -> listOf(
+                FilterOption("r:0", "Любой", fMinRating == 0),
+                FilterOption("r:7", "от 7", fMinRating == 7),
+                FilterOption("r:8", "от 8", fMinRating == 8),
+            )
+        }
+        FilterListDialog(
+            title = when (which) {
+                "genre" -> "Жанр"; "type" -> "Тип"; "country" -> "Страна"
+                "year" -> "Год"; else -> "Рейтинг"
+            },
+            options = opts,
+            onToggle = { opt ->
+                val id = opt.id.substringAfter(':')
+                when (which) {
+                    "genre" -> {
+                        val gid = id.toIntOrNull() ?: return@FilterListDialog
+                        fGenres = if (gid in fGenres) fGenres - gid else fGenres + gid
+                        store.setFilterGenreIds(fGenres)
+                    }
+                    "type" -> {
+                        fType = if (fType == id) "" else id
+                        store.setFilterType(fType)
+                    }
+                    "country" -> {
+                        val cid = id.toIntOrNull() ?: return@FilterListDialog
+                        fCountries = if (cid in fCountries) fCountries - cid else fCountries + cid
+                        store.setFilterCountryIds(fCountries)
+                    }
+                    "year" -> {
+                        if (opt.id.startsWith("p:")) {
+                            fYearPreset = if (fYearPreset == id) "" else id
+                            store.setFilterYearPreset(fYearPreset)
+                        } else {
+                            val y = id.toIntOrNull() ?: return@FilterListDialog
+                            fYears = if (y in fYears) fYears - y else fYears + y
+                            store.setFilterYearIds(fYears)
+                        }
+                    }
+                    else -> {
+                        val r = id.toIntOrNull() ?: return@FilterListDialog
+                        fMinRating = if (fMinRating == r) 0 else r
+                        store.setFilterMinRating(fMinRating)
+                    }
+                }
+            },
+            onReset = {
+                when (which) {
+                    "genre" -> { fGenres = emptySet(); store.setFilterGenreIds(fGenres) }
+                    "type" -> { fType = ""; store.setFilterType("") }
+                    "country" -> { fCountries = emptySet(); store.setFilterCountryIds(fCountries) }
+                    "year" -> { fYears = emptySet(); fYearPreset = ""; store.setFilterYearIds(fYears); store.setFilterYearPreset("") }
+                    else -> { fMinRating = 0; store.setFilterMinRating(0) }
+                }
+            },
+            onClose = { openFilter = null },
+        )
+    }
     }
 }

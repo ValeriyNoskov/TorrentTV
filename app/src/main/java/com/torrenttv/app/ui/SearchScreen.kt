@@ -320,7 +320,7 @@ fun SearchScreen(
             Spacer(Modifier.width(16.dp))
             Text(
                 text = if (query.isBlank()) "Введите название…" else query,
-                color = if (query.isBlank()) Color.White.copy(alpha = 0.4f) else Color(0xFFF5B942),
+                color = if (query.isBlank()) Color.White.copy(alpha = 0.4f) else Color(0xFFA9D7F5),
                 fontSize = 26.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f),
@@ -340,7 +340,7 @@ fun SearchScreen(
             Text("🤖 $searchNote", color = Color(0xFF8AB4F8), fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
         }
         if (status.isNotBlank()) {
-            Text(status, color = Color(0xFFFFD54F), fontSize = 14.sp, modifier = Modifier.padding(top = 6.dp))
+            Text(status, color = Color(0xFFBFE3F7), fontSize = 14.sp, modifier = Modifier.padding(top = 6.dp))
         }
 
         // ---------- Последние поиски: чипы, клик — сразу искать ----------
@@ -372,7 +372,7 @@ fun SearchScreen(
                         colors = androidx.tv.material3.ButtonDefaults.colors(
                             containerColor = Color(0xFF1F2430),
                             contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContainerColor = Color(0xFFA9D7F5),
                             focusedContentColor = Color(0xFF0E1116),
                         ),
                     ) { Text("🔍 $q", fontSize = 15.sp) }
@@ -430,7 +430,7 @@ fun SearchScreen(
                         shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color(0xFF1F2430),
-                            focusedContainerColor = Color(0xFF3A2E14),
+                            focusedContainerColor = Color(0xFF1E3A4D),
                         ),
                     ) {
                         Column(Modifier.padding(10.dp)) {
@@ -477,7 +477,7 @@ fun SearchScreen(
         } else if (failed) {
             Text(
                 "Не удалось получить данные — источник фильмов недоступен или исчерпан лимит API.",
-                color = Color(0xFFFFD54F),
+                color = Color(0xFFBFE3F7),
                 fontSize = 15.sp,
                 modifier = Modifier.padding(top = 10.dp),
             )
@@ -512,7 +512,7 @@ fun SearchScreen(
                         shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color(0xFF1F2430),
-                            focusedContainerColor = Color(0xFF3A2E14),
+                            focusedContainerColor = Color(0xFF1E3A4D),
                         ),
                     ) {
                         Column(Modifier.padding(10.dp)) {
@@ -534,8 +534,8 @@ fun SearchScreen(
                             )
                             val mins = v.durationSec / 60
                             Text(
-                                "▶ $mins мин · Rutube",
-                                color = Color(0xFFF5B942),
+                                "▶︎ $mins мин · Rutube",
+                                color = Color(0xFFA9D7F5),
                                 fontSize = 12.sp,
                                 modifier = Modifier.padding(top = 4.dp),
                             )
@@ -561,7 +561,7 @@ fun SearchScreen(
                         fontSize = 22.sp,
                         fontWeight = FontWeight.SemiBold,
                     ),
-                    cursorBrush = androidx.compose.ui.graphics.SolidColor(Color(0xFFF5B942)),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(Color(0xFFA9D7F5)),
                     modifier = Modifier
                         .focusRequester(kbFieldFocus)
                         .fillMaxWidth()

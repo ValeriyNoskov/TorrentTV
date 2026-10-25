@@ -90,6 +90,20 @@ fun DetailsScreen(
             val en = withContext(Dispatchers.IO) { MediaApi.enrich(itemState, store) }
             if (en.posterUrl.isNotBlank()) itemState = en
         }
+        // КП не дал постер — ищем на Trakt (media.trakt.tv доступен из РФ)
+        if (itemState.posterUrl.isBlank()) {
+            val traktPoster = withContext(Dispatchers.IO) {
+                runCatching {
+                    com.torrenttv.app.data.TraktClient.posterUrl(
+                        itemState.title, itemState.year, itemState.type == "tv", itemState.country,
+                    )
+                }.getOrNull()
+            }
+            if (!traktPoster.isNullOrBlank()) {
+                itemState = itemState.copy(posterUrl = traktPoster)
+                com.torrenttv.app.data.AppLog.log("details", "«${itemState.title}»: постер взят с Trakt")
+            }
+        }
     }
     val watchFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     LaunchedEffect(Unit) {
@@ -221,7 +235,7 @@ fun DetailsScreen(
                             .padding(horizontal = 10.dp, vertical = 4.dp),
                     ) {
                         Text(
-                            "★ ${"%.1f".format(kpShown)} КП",
+                            "★︎ ${"%.1f".format(kpShown)} КП",
                             color = Color(0xFF0E1116),
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
@@ -250,7 +264,11 @@ fun DetailsScreen(
                 var tvStatus by remember(item.id) { mutableStateOf<TmdbClient.TvStatus?>(null) }
                 LaunchedEffect(item.id) {
                     val st = withContext(Dispatchers.IO) {
+                        // TMDB недоступен в РФ — фолбэк на Trakt (тот же формат статуса)
                         runCatching { TmdbClient.tvStatus(item.title, item.year) }.getOrNull()
+                            ?: runCatching {
+                                com.torrenttv.app.data.TraktClient.tvStatus(item.title, item.year, item.country)
+                            }.getOrNull()
                     }
                     tvStatus = st
                 }
@@ -292,7 +310,7 @@ fun DetailsScreen(
                     onClick = {
                         com.torrenttv.app.data.AppLog.log(
                             "ui",
-                            "нажал: «▶ Смотреть» «${item.title}» (${if (magnet) "торрент-карточка" else "умный подбор"})",
+                            "нажал: «▶︎ Смотреть» «${item.title}» (${if (magnet) "торрент-карточка" else "умный подбор"})",
                         )
                         if (magnet) {
                             store.saveProgress(item, positionSec = 0, durationSec = 0)
@@ -302,16 +320,16 @@ fun DetailsScreen(
                         }
                     },
                     modifier = Modifier.focusRequester(watchFocus),
-                ) { Text("▶ Смотреть") }
+                ) { Text("▶︎ Смотреть") }
                 Button(onClick = {
                     fav = store.toggleFavorite(item)
                     com.torrenttv.app.data.AppLog.log(
                         "ui",
                         "нажал: «${if (fav) "В избранном" else "В избранное"}» «${item.title}»",
                     )
-                }) { Text(if (fav) "★ В избранном" else "☆ В избранное") }
+                }) { Text(if (fav) "★︎ В избранном" else "☆ В избранное") }
                 MiniButton("🔍 Раздача") { onManualSearch() }
-                // ▶ Трейлер — ищем на Rutube и играем встроенным плеером
+                // ▶︎ Трейлер — ищем на Rutube и играем встроенным плеером
                 MiniButton("🎬 Трейлер") {
                     com.torrenttv.app.data.AppLog.log(
                         "ui",
@@ -388,6 +406,19 @@ fun DetailsScreen(
                         seasons = cached
                         if (selSeason == null) selSeason = store.lastSeason(item).takeIf { n -> n != 0 && cached.any { it.number == n } }
                             ?: cached.first().number
+                        // Кеш мог быть сохранён до появления дат (старая версия):
+                        // дат нет — тихо дотягиваем из Trakt и обновляем кеш
+                        val cachedDates = cached.sumOf { s -> s.episodes.count { it.airDate.isNotBlank() } }
+                        if (cachedDates == 0) {
+                            val trakt = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                runCatching { com.torrenttv.app.data.TraktClient.seasons(item.title, item.year, item.country) }.getOrDefault(emptyList())
+                            }
+                            if (trakt.isNotEmpty()) {
+                                val merged = enrichWithTrakt(item, cached, trakt)
+                                store.saveEpisodeCache(item, merged)
+                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { seasons = merged }
+                            }
+                        }
                     }
                     // 2) Автообновление при открытии: дос-поиск раздач, если
                     //    с прошлого — больше 30 минут (иначе закрытие/открытие
@@ -398,12 +429,21 @@ fun DetailsScreen(
                         episodeRefreshScope.launch {
                             val (found, reason) = seasonsFromTorrents(item, store, context)
                             if (found.isNotEmpty()) {
-                                val merged = mergeSeasons(cached, found)
+                                // Даты выхода из Trakt — как на экране «Эпизоды»:
+                                // КП дат не даёт, TMDB недоступен в РФ
+                                val trakt = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    runCatching { com.torrenttv.app.data.TraktClient.seasons(item.title, item.year, item.country) }.getOrDefault(emptyList())
+                                }
+                                val merged = enrichWithTrakt(item, mergeSeasons(cached, found), trakt)
                                 store.saveEpisodeCache(item, merged)
                                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                                     seasons = merged
                                     if (selSeason == null) selSeason = merged.firstOrNull()?.number
-                                    com.torrenttv.app.data.AppLog.log("episodes", "«${item.title}»: секция серий обновлена (${merged.sumOf { it.episodes.size }} серий)")
+                                    val dates = merged.sumOf { s -> s.episodes.count { ep -> ep.airDate.isNotBlank() } }
+                                    com.torrenttv.app.data.AppLog.log(
+                                        "episodes",
+                                        "«${item.title}»: секция серий обновлена: сезонов ${merged.size} ${merged.map { "S${it.number}(${it.episodes.size})" }}, серий с датами $dates",
+                                    )
                                 }
                             } else if (cached.isEmpty()) {
                                 // Кеша нет и раздачи пусты — метаданные из КП
@@ -476,34 +516,76 @@ fun DetailsScreen(
                 }
                 val curSeason = seasons.firstOrNull { it.number == (selSeason ?: seasons.first().number) }
                 if (curSeason != null) {
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.padding(top = 8.dp),
+                    // Вертикальный список серий (макет design/details_episodes_list.html,
+                    // подтверждён владельцем): код+название, дата выхода, одна кнопка —
+                    // «▶︎ Смотреть» (раздача есть) или «🧲 Раздача» (ведёт на поиск).
+                    // Обычный Column: секция живёт внутри общего verticalScroll карточки
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
                     ) {
-                        itemsIndexed(curSeason.episodes) { _, ep ->
+                        for (ep in curSeason.episodes) {
                             val hasSource = store.getMagnet(item, ep.sourceSuffix) != null
+                            val today = java.time.LocalDate.now()
+                            val future = ep.airDate.isNotBlank() && runCatching {
+                                java.time.LocalDate.parse(ep.airDate).isAfter(today)
+                            }.getOrDefault(false)
+                            val dateText = ep.airDate.takeIf { it.isNotBlank() }?.let {
+                                val p = it.split('-') // yyyy-MM-dd → dd.MM.yyyy
+                                if (future) "выйдет ${p[2]}.${p[1]}" else "${p[2]}.${p[1]}.${p[0]}"
+                            }
                             Surface(
-                                onClick = {
-                                    if (hasSource) onPlayEpisode(ep) else onEpisodes(ep.season)
-                                },
+                                onClick = { if (hasSource) onPlayEpisode(ep) else onEpisodes(ep.season) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .mouseClick { if (hasSource) onPlayEpisode(ep) else onEpisodes(ep.season) },
                                 shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
                                 colors = ClickableSurfaceDefaults.colors(
-                                    containerColor = if (hasSource) Color(0xFF2E4A26) else Color(0xFF1F2430),
+                                    containerColor = Color(0xFF1F2430),
                                     contentColor = Color.White,
-                                    focusedContainerColor = Color(0xB3FFFFFF),
-                                    focusedContentColor = Color.Black,
+                                    focusedContainerColor = Color(0xFF31435A),
+                                    focusedContentColor = Color.White,
+                                    pressedContainerColor = Color(0xFF273548),
+                                    pressedContentColor = Color.White,
                                 ),
                             ) {
-                                Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                                Row(
+                                    Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
                                     Text(
                                         ep.code,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.width(76.dp),
                                     )
+                                    if (ep.title.isNotBlank()) {
+                                        Text(
+                                            ep.title,
+                                            fontSize = 14.sp,
+                                            maxLines = 1,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                    } else {
+                                        Spacer(Modifier.weight(1f))
+                                    }
+                                    if (dateText != null) {
+                                        Text(
+                                            dateText,
+                                            color = if (future) Color(0xFF7FB84F) else Color(0xFF6B7488),
+                                            fontSize = 13.sp,
+                                            modifier = Modifier.padding(horizontal = 10.dp),
+                                        )
+                                    }
                                     Text(
-                                        if (hasSource) "есть раздача" else "найти раздачу",
-                                        color = if (hasSource) Color(0xFF9CCC65) else Color.White.copy(alpha = 0.45f),
-                                        fontSize = 12.sp,
+                                        if (hasSource) "▶︎ Смотреть" else "🧲 Раздача",
+                                        color = if (hasSource) Color(0xFF9CCC65) else Color.White,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.padding(start = 6.dp),
                                     )
                                 }
                             }

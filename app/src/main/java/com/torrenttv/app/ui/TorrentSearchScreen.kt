@@ -158,7 +158,7 @@ fun TorrentSearchScreen(
             .background(Color(0xFF0E1116))
             .padding(32.dp),
     ) {
-        Text(if (autoStart) "🚀 Просмотр" else "🔍 Автопоиск", color = Color(0xFFF5B942), fontSize = 16.sp)
+        Text(if (autoStart) "🚀 Просмотр" else "🔍 Автопоиск", color = Color(0xFFA9D7F5), fontSize = 16.sp)
         Text(
             if (episode != null) "${item.title} · ${episode.code}"
             else item.title,
@@ -220,7 +220,7 @@ fun TorrentSearchScreen(
                             Spacer(Modifier.width(16.dp))
                             Text(
                                 text = r.sizeLabel(),
-                                color = Color(0xFFF5B942),
+                                color = Color(0xFFA9D7F5),
                                 fontSize = 14.sp,
                             )
                             if (r.resolution.isNotBlank()) {
@@ -269,7 +269,7 @@ private fun QualityChip(label: String, selected: Boolean, onClick: () -> Unit) {
         modifier = Modifier.mouseClick(onClick),
         shape = clickableSurfaceShape(RoundedCornerShape(20.dp)),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) Color(0xFFF5B942) else Color(0xFF1F2430),
+            containerColor = if (selected) Color(0xFFA9D7F5) else Color(0xFF1F2430),
             contentColor = if (selected) Color(0xFF0E1116) else Color.White,
             focusedContainerColor = Color(0xFF31435A),
             focusedContentColor = Color.White,

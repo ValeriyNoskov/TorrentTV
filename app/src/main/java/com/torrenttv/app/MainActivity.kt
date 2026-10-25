@@ -468,7 +468,7 @@ private fun App() {
             ) {
                 androidx.tv.material3.Text(
                     text = "🆕 Что нового в ${BuildConfig.VERSION_NAME}",
-                    color = Color(0xFFF5B942),
+                    color = Color(0xFFA9D7F5),
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
                 )

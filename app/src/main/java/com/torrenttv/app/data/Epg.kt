@@ -80,14 +80,30 @@ object Epg {
     // ---------- Загрузка и разбор ----------
 
     private fun downloadAndParse(wanted: Set<String>): Map<String, MutableList<Program>> {
-        val conn = (URL(SOURCE).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 20_000
-            readTimeout = 60_000
-            setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android TV)")
+        // Ручное следование редиректам: HttpURLConnection не ходит за
+        // кросс-доменными 301 (teleguide.info → 81.p.giex.ru) — без этого
+        // получаем HTML-заглушку и на ТВ остаётся старая программа
+        var conn: HttpURLConnection? = null
+        var url = SOURCE
+        repeat(3) {
+            val c = (URL(url).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 20_000
+                readTimeout = 60_000
+                instanceFollowRedirects = false
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android TV)")
+            }
+            c.connect()
+            val loc = if (c.responseCode in 300..399) c.getHeaderField("Location") else null
+            if (loc.isNullOrBlank()) {
+                conn = c
+                return@repeat
+            }
+            url = URL(URL(url), loc).toString()
+            c.disconnect()
         }
-        conn.connect()
-        if (conn.responseCode !in 200..299) error("HTTP ${conn.responseCode}")
-        val raw: InputStream = conn.inputStream
+        val c = conn ?: error("HTTP: не дошли до файла за 3 перехода")
+        if (c.responseCode !in 200..299) error("HTTP ${c.responseCode}")
+        val raw: InputStream = c.inputStream
         val stream = if (SOURCE.endsWith(".gz")) GZIPInputStream(raw, 64 * 1024) else raw
 
         val now = System.currentTimeMillis()
@@ -137,7 +153,7 @@ object Epg {
             event = parser.next()
         }
         stream.close()
-        conn.disconnect()
+        c.disconnect()
         out.values.forEach { list -> list.sortBy { it.start } }
         return out
     }

@@ -77,7 +77,7 @@ fun HomeScreen(
                 item {
                     Text(
                         text = "⚠ Метаданные не настроены — задайте ключ базы фильмов в настройках.",
-                        color = Color(0xFFFFD54F),
+                        color = Color(0xFFBFE3F7),
                         fontSize = 14.sp,
                         modifier = Modifier.padding(horizontal = 32.dp),
                     )
@@ -128,7 +128,7 @@ fun HomeScreen(
                                 Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
                                     Text(
                                         "● ${ch.group}",
-                                        color = Color(0xFFF5B942),
+                                        color = Color(0xFFA9D7F5),
                                         fontSize = 10.sp,
                                         maxLines = 1,
                                     )
@@ -243,7 +243,7 @@ fun HomeScreen(
                             fontWeight = FontWeight.SemiBold,
                         )
                         if (updateStatus.isNotBlank()) {
-                            Text(updateStatus, color = Color(0xFFFFD54F), fontSize = 13.sp)
+                            Text(updateStatus, color = Color(0xFFBFE3F7), fontSize = 13.sp)
                         }
                     }
                     Button(

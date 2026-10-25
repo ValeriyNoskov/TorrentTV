@@ -1,6 +1,7 @@
 package com.torrenttv.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -13,10 +14,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -125,7 +129,7 @@ fun KeyboardSheet(
                     Text(title, color = Color.White.copy(alpha = 0.55f), fontSize = 14.sp)
                     Text(
                         value.ifBlank { "…" },
-                        color = Color(0xFFF5B942),
+                        color = Color(0xFFA9D7F5),
                         fontSize = 22.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
@@ -139,7 +143,7 @@ fun KeyboardSheet(
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = Color(0xFF1F2430),
                         contentColor = Color.White,
-                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContainerColor = Color(0xFFA9D7F5),
                         focusedContentColor = Color.Black,
                     ),
                 ) { Text(doneLabel, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 18.dp, vertical = 11.dp)) }
@@ -156,7 +160,7 @@ fun KeyboardSheet(
                             colors = ClickableSurfaceDefaults.colors(
                                 containerColor = Color(0xFF242B3A),
                                 contentColor = Color(0xFFE8ECF4),
-                                focusedContainerColor = Color(0xFFF5B942),
+                                focusedContainerColor = Color(0xFFA9D7F5),
                                 focusedContentColor = Color.Black,
                             ),
                         ) {
@@ -178,6 +182,201 @@ fun KeyboardSheet(
                 firstKeyFocus = kbFocus,
             )
         }
+    }
+}
+
+/**
+ * Пункт списка фильтра: id может быть составным («y:2025», «p:2020+», «r:7»).
+ */
+data class FilterOption(val id: String, val label: String, val checked: Boolean)
+
+/**
+ * Модалка фильтра «как в Зоне»: поиск сверху (в фокусе при открытии),
+ * ниже вертикальный список с галочками — ↑↓ листает, ОК ставит/снимает
+ * галочку. Курсор не «прыгает» по странице. singleSelect — радио-режим
+ * (Тип/Рейтинг): новая галочка снимает предыдущую.
+ */
+@Composable
+fun FilterListDialog(
+    title: String,
+    options: List<FilterOption>,
+    onToggle: (FilterOption) -> Unit,
+    onReset: () -> Unit,
+    onClose: () -> Unit,
+) {
+    var query by remember { mutableStateOf("") }
+    var keyboard by remember { mutableStateOf(false) }
+    val listFocus = remember { FocusRequester() }
+
+    androidx.activity.compose.BackHandler { onClose() }
+
+    // Затемнение поверх каталога; сам каталог виден по краям
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0x99000000))
+            .mouseClick { onClose() },
+    ) {
+        Column(
+            Modifier
+                .align(Alignment.Center)
+                .width(460.dp)
+                .background(Color(0xFF141922), RoundedCornerShape(16.dp))
+                .border(1.dp, Color(0xFF2A3648), RoundedCornerShape(16.dp)),
+        ) {
+            Text(
+                title,
+                color = Color.White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 20.dp, top = 14.dp),
+            )
+            // Поиск: всегда первое поле; ОК — клавиатурная шторка
+            Surface(
+                onClick = { keyboard = true },
+                shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = Color(0xFF1F2430),
+                    contentColor = Color(0xFF8A94A6),
+                    focusedContainerColor = Color(0xFFA9D7F5),
+                    focusedContentColor = Color(0xFF0E1116),
+                ),
+                modifier = Modifier
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                    .fillMaxWidth()
+                    // mouseClick — чтобы Surface кликался тапом мыши в эмуляторе
+                    .mouseClick { keyboard = true },
+            ) {
+                Text(
+                    if (query.isBlank()) "🔍 Найти фильтр…" else "🔍 $query",
+                    fontSize = 15.sp,
+                    maxLines = 1,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                )
+            }
+            // Список с галочками, сжатый поиском по подстроке
+            val shown = if (query.isBlank()) options else options.filter {
+                it.label.contains(query.trim(), ignoreCase = true)
+            }
+            LazyColumn(
+                Modifier
+                    .padding(horizontal = 10.dp)
+                    .height(340.dp),
+            ) {
+                items(shown, key = { it.id }) { opt ->
+                    androidx.tv.material3.Surface(
+                        onClick = { onToggle(opt) },
+                        shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color.Transparent,
+                            contentColor = Color(0xFFC6CFDD),
+                            focusedContainerColor = Color(0xFFA9D7F5),
+                            focusedContentColor = Color(0xFF0E1116),
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .mouseClick { onToggle(opt) },
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                        ) {
+                            // Квадрат-галочка: тёмный фон с голубой ✓, если включено
+                            Box(
+                                Modifier
+                                    .padding(end = 12.dp)
+                                    .size(20.dp)
+                                    .background(
+                                        if (opt.checked) Color(0xFF0E1116) else Color.Transparent,
+                                        RoundedCornerShape(5.dp),
+                                    )
+                                    .border(
+                                        2.dp,
+                                        if (opt.checked) Color(0xFF0E1116) else Color(0xFF55617A),
+                                        RoundedCornerShape(5.dp),
+                                    ),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (opt.checked) {
+                                    Text(
+                                        "✓",
+                                        color = Color(0xFFA9D7F5),
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Black,
+                                    )
+                                }
+                            }
+                            Text(
+                                opt.label,
+                                fontSize = 15.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            ) {
+                val chosen = options.count { it.checked }
+                Surface(
+                    onClick = onClose,
+                    shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color(0xFFA9D7F5),
+                        contentColor = Color(0xFF0E1116),
+                        focusedContainerColor = Color(0xFFBFE3F7),
+                        focusedContentColor = Color(0xFF0E1116),
+                    ),
+                    modifier = Modifier.mouseClick { onClose() },
+                ) {
+                    Text(
+                        "✓ Применить",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Surface(
+                    onClick = onReset,
+                    shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color(0xFF1F2430),
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFA9D7F5),
+                        focusedContentColor = Color(0xFF0E1116),
+                    ),
+                    modifier = Modifier.mouseClick { onReset() },
+                ) {
+                    Text(
+                        "Сбросить",
+                        fontSize = 15.sp,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+                Text(
+                    if (chosen > 0) "Выбрано: $chosen" else title,
+                    color = Color(0xFF8A94A6),
+                    fontSize = 13.sp,
+                )
+            }
+        }
+    }
+
+    if (keyboard) {
+        KeyboardSheet(
+            value = query,
+            title = "Поиск фильтра",
+            onDone = { keyboard = false },
+            onChar = { query += it },
+            onBackspace = { query = query.dropLast(1) },
+            onClear = { query = "" },
+            onDismiss = { keyboard = false },
+        )
     }
 }
 
@@ -210,7 +409,7 @@ fun FilterPicker(
                 colors = ClickableSurfaceDefaults.colors(
                     containerColor = Color(0xFF1F2430),
                     contentColor = Color.White,
-                    focusedContainerColor = Color(0xFFF5B942),
+                    focusedContainerColor = Color(0xFFA9D7F5),
                     focusedContentColor = Color.Black,
                 ),
             ) { Text("← Готово", fontSize = 17.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) }
@@ -229,7 +428,7 @@ fun FilterPicker(
                 colors = ClickableSurfaceDefaults.colors(
                     containerColor = Color(0xFF1F2430),
                     contentColor = Color.White,
-                    focusedContainerColor = Color(0xFFF5B942),
+                    focusedContainerColor = Color(0xFFA9D7F5),
                     focusedContentColor = Color.Black,
                 ),
             ) { Text(if (filterOn) "✕ Скрыть поиск" else "🔎 Поиск", fontSize = 16.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) }
@@ -241,7 +440,7 @@ fun FilterPicker(
                 colors = ClickableSurfaceDefaults.colors(
                     containerColor = Color(0xFF1F2430),
                     contentColor = Color.White,
-                    focusedContainerColor = Color(0xFFF5B942),
+                    focusedContainerColor = Color(0xFFA9D7F5),
                     focusedContentColor = Color.Black,
                     disabledContainerColor = Color(0xFF141922),
                     disabledContentColor = Color.White.copy(alpha = 0.3f),
@@ -251,7 +450,7 @@ fun FilterPicker(
                 Spacer(Modifier.width(16.dp))
                 Text(
                     text = if (filter.isBlank()) "Введите часть названия…" else filter,
-                    color = if (filter.isBlank()) Color.White.copy(alpha = 0.35f) else Color(0xFFF5B942),
+                    color = if (filter.isBlank()) Color.White.copy(alpha = 0.35f) else Color(0xFFA9D7F5),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -402,11 +601,11 @@ fun HeroBanner(item: MediaItem, onOpenDetails: (MediaItem) -> Unit) {
                 )
                 Text(
                     text = buildString {
-                        if (item.rating > 0.0) append("★ ${"%.1f".format(item.rating)}  ·  ")
+                        if (item.rating > 0.0) append("★︎ ${"%.1f".format(item.rating)}  ·  ")
                         if (item.year.isNotBlank()) append("${item.year}  ·  ")
                         append(item.typeLabel)
                     },
-                    color = Color(0xFFF5B942),
+                    color = Color(0xFFA9D7F5),
                     fontSize = 17.sp,
                     modifier = Modifier.padding(top = 6.dp, bottom = 16.dp),
                 )
@@ -415,18 +614,18 @@ fun HeroBanner(item: MediaItem, onOpenDetails: (MediaItem) -> Unit) {
                     modifier = Modifier.mouseClick { onOpenDetails(item) },
                     shape = clickableSurfaceShape(RoundedCornerShape(8.dp)),
                     colors = ClickableSurfaceDefaults.colors(
-                        containerColor = Color(0xFFF5B942),
+                        containerColor = Color(0xFFA9D7F5),
                         contentColor = Color(0xFF04141C),
-                        focusedContainerColor = Color(0xFFFFD07A),
+                        focusedContainerColor = Color(0xFFCDE9FA),
                         focusedContentColor = Color(0xFF04141C),
-                        pressedContainerColor = Color(0xFFE0A82E),
+                        pressedContainerColor = Color(0xFF7FBDE8),
                         pressedContentColor = Color(0xFF04141C),
-                        disabledContainerColor = Color(0xFFF5B942),
+                        disabledContainerColor = Color(0xFFA9D7F5),
                         disabledContentColor = Color(0xFF04141C),
                     ),
                 ) {
                     Text(
-                        text = "▶  Подробнее",
+                        text = "▶︎  Подробнее",
                         color = Color(0xFF04141C),
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
@@ -490,14 +689,14 @@ fun PosterCard(item: MediaItem, onClick: () -> Unit) {
                 // Заметный бейдж рейтинга поверх постера
                 if (item.rating > 0.0) {
                     Text(
-                        text = "★ ${"%.1f".format(item.rating)}",
+                        text = "★︎ ${"%.1f".format(item.rating)}",
                         color = Color(0xFF0E1116),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier
                             .align(Alignment.TopStart)
                             .padding(8.dp)
-                            .background(Color(0xFFF5B942), RoundedCornerShape(8.dp))
+                            .background(Color(0xFFA9D7F5), RoundedCornerShape(8.dp))
                             .padding(horizontal = 8.dp, vertical = 3.dp),
                     )
                 }
@@ -528,7 +727,7 @@ fun PosterCard(item: MediaItem, onClick: () -> Unit) {
             if (item.year.isNotBlank() || item.rating > 0.0) {
                 Text(
                     text = buildString {
-                        if (item.rating > 0.0) append("★ ${"%.1f".format(item.rating)}")
+                        if (item.rating > 0.0) append("★︎ ${"%.1f".format(item.rating)}")
                         if (item.year.isNotBlank()) {
                             if (isNotEmpty()) append(" · ")
                             append(item.year)
@@ -608,7 +807,7 @@ fun ContinueRow(
                                     modifier = Modifier
                                         .align(Alignment.TopStart)
                                         .padding(6.dp)
-                                        .background(Color(0xFFF5B942), RoundedCornerShape(6.dp))
+                                        .background(Color(0xFFA9D7F5), RoundedCornerShape(6.dp))
                                         .padding(horizontal = 6.dp, vertical = 2.dp),
                                 )
                             }
@@ -625,7 +824,7 @@ fun ContinueRow(
                                 Modifier
                                     .fillMaxWidth(frac)
                                     .fillMaxHeight()
-                                    .background(Color(0xFFF5B942), RoundedCornerShape(3.dp)),
+                                    .background(Color(0xFFA9D7F5), RoundedCornerShape(3.dp)),
                             )
                         }
                         Text(
@@ -669,7 +868,7 @@ fun ContinueRow(
             ) {
                 Text(
                     "Убрать из просмотра?",
-                    color = Color(0xFFF5B942),
+                    color = Color(0xFFA9D7F5),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -715,9 +914,9 @@ fun MediaRow(    title: String,
                     containerColor = Color.Transparent,
                     contentColor = Color.White,
                     focusedContainerColor = Color(0xFF2A3648),
-                    focusedContentColor = Color(0xFFF5B942),
+                    focusedContentColor = Color(0xFFA9D7F5),
                     pressedContainerColor = Color(0xFF223047),
-                    pressedContentColor = Color(0xFFF5B942),
+                    pressedContentColor = Color(0xFFA9D7F5),
                 ),
             ) {
                 Text(
@@ -845,9 +1044,9 @@ fun PagedMediaRow(
                     containerColor = Color.Transparent,
                     contentColor = Color.White,
                     focusedContainerColor = Color(0xFF2A3648),
-                    focusedContentColor = Color(0xFFF5B942),
+                    focusedContentColor = Color(0xFFA9D7F5),
                     pressedContainerColor = Color(0xFF223047),
-                    pressedContentColor = Color(0xFFF5B942),
+                    pressedContentColor = Color(0xFFA9D7F5),
                 ),
             ) {
                 Text(
@@ -870,7 +1069,7 @@ fun PagedMediaRow(
             if (failed) {
                 Text(
                     text = "Не удалось загрузить: источник недоступен или исчерпан лимит API.\nПроверьте сеть в настройках и повторите.",
-                    color = Color(0xFFFFD54F),
+                    color = Color(0xFFBFE3F7),
                     fontSize = 15.sp,
                     modifier = Modifier.padding(horizontal = 32.dp),
                 )
@@ -989,7 +1188,7 @@ fun SideNav(active: Screen, onTab: (Screen) -> Unit, restoreFocusTick: Int = 0) 
         if (expanded) {
             Text(
                 text = "ВНосКино",
-                color = Color(0xFFF5B942),
+                color = Color(0xFFA9D7F5),
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -998,7 +1197,7 @@ fun SideNav(active: Screen, onTab: (Screen) -> Unit, restoreFocusTick: Int = 0) 
         } else {
             Text(
                 text = "ВНК",
-                color = Color(0xFFF5B942),
+                color = Color(0xFFA9D7F5),
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 10.dp),
@@ -1006,7 +1205,7 @@ fun SideNav(active: Screen, onTab: (Screen) -> Unit, restoreFocusTick: Int = 0) 
         }
         SideBarButton("🏠", "Главная", Screen.Home, active, onTab, expanded,
             focusRequester = activeFocus.takeIf { active == Screen.Home }) { expanded = it }
-        SideBarButton("▶", "Продолжить", Screen.Continue, active, onTab, expanded,
+        SideBarButton("▶︎", "Продолжить", Screen.Continue, active, onTab, expanded,
             focusRequester = activeFocus.takeIf { active == Screen.Continue }) { expanded = it }
         SideBarButton("⭐", "Избранное", Screen.Favorites, active, onTab, expanded,
             focusRequester = activeFocus.takeIf { active == Screen.Favorites }) { expanded = it }
@@ -1055,11 +1254,11 @@ fun SideBarButton(
             .onFocusChanged { onFocusInBar(it.hasFocus) },
         shape = clickableSurfaceShape(RoundedCornerShape(12.dp)),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (isActive) Color(0xFFF5B942) else Color.Transparent,
+            containerColor = if (isActive) Color(0xFFA9D7F5) else Color.Transparent,
             contentColor = if (isActive) Color(0xFF0E1116) else Color.White,
-            focusedContainerColor = Color(0xFFFFD07A),
+            focusedContainerColor = Color(0xFFCDE9FA),
             focusedContentColor = Color(0xFF0E1116),
-            pressedContainerColor = Color(0xFFE0A82E),
+            pressedContainerColor = Color(0xFF7FBDE8),
             pressedContentColor = Color(0xFF0E1116),
         ),
     ) {
@@ -1158,7 +1357,7 @@ fun SideBarExitButton(expanded: Boolean = true, onFocusInBar: (Boolean) -> Unit 
                 ) {
                     Text(
                         "Выйти из приложения?",
-                        color = Color(0xFFF5B942),
+                        color = Color(0xFFA9D7F5),
                         fontSize = 17.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -1199,7 +1398,7 @@ fun ContinueScreen(onOpenDetails: (MediaItem) -> Unit) {
             .background(Color(0xFF0E1116)),
     ) {
         Text(
-            text = "▶ Продолжить просмотр",
+            text = "▶︎ Продолжить просмотр",
             color = Color.White,
             fontSize = 26.sp,
             fontWeight = FontWeight.Bold,
@@ -1238,7 +1437,7 @@ fun ContinueScreen(onOpenDetails: (MediaItem) -> Unit) {
                                             (e.positionSec.toFloat() / e.durationSec).coerceIn(0f, 1f),
                                         )
                                         .height(4.dp)
-                                        .background(Color(0xFFF5B942)),
+                                        .background(Color(0xFFA9D7F5)),
                                 )
                             }
                             Text(
@@ -1290,7 +1489,7 @@ fun FavoritesScreen(onOpenDetails: (MediaItem) -> Unit) {
             modifier = Modifier.padding(horizontal = 32.dp, vertical = 14.dp),
         ) {
             Text(
-                text = "⭐ Избранное",
+                text = "★︎ Избранное",
                 color = Color.White,
                 fontSize = 26.sp,
                 fontWeight = FontWeight.Bold,
@@ -1337,9 +1536,9 @@ private fun FilterChipTv(label: String, selected: Boolean, onClick: () -> Unit) 
         onClick = onClick,
         shape = clickableSurfaceShape(RoundedCornerShape(20.dp)),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) Color(0xFFF5B942) else Color(0xFF1F2430),
+            containerColor = if (selected) Color(0xFFA9D7F5) else Color(0xFF1F2430),
             contentColor = if (selected) Color(0xFF0E1116) else Color.White.copy(alpha = 0.8f),
-            focusedContainerColor = if (selected) Color(0xFFFFD07A) else Color(0xFF31435A),
+            focusedContainerColor = if (selected) Color(0xFFCDE9FA) else Color(0xFF31435A),
             focusedContentColor = if (selected) Color(0xFF0E1116) else Color.White,
         ),
     ) {
@@ -1363,11 +1562,11 @@ fun CheckChip(label: String, checked: Boolean, onToggle: () -> Unit) {
         modifier = Modifier.padding(4.dp).mouseClick { onToggle() },
         shape = clickableSurfaceShape(RoundedCornerShape(20.dp)),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (checked) Color(0xFFF5B942) else Color(0xFF1F2430),
+            containerColor = if (checked) Color(0xFFA9D7F5) else Color(0xFF1F2430),
             contentColor = if (checked) Color(0xFF0E1116) else Color.White.copy(alpha = 0.75f),
-            focusedContainerColor = Color(0xFFFFD07A),
+            focusedContainerColor = Color(0xFFCDE9FA),
             focusedContentColor = Color(0xFF0E1116),
-            pressedContainerColor = Color(0xFFE0A82E),
+            pressedContainerColor = Color(0xFF7FBDE8),
             pressedContentColor = Color(0xFF0E1116),
             disabledContainerColor = Color(0xFF1F2430),
             disabledContentColor = Color.White,
@@ -1388,11 +1587,11 @@ private fun GenreChip(label: String, isSelected: Boolean, onClick: () -> Unit) {
         modifier = Modifier.padding(4.dp).mouseClick { onClick() },
         shape = clickableSurfaceShape(RoundedCornerShape(20.dp)),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (isSelected) Color(0xFFF5B942) else Color(0xFF1F2430),
+            containerColor = if (isSelected) Color(0xFFA9D7F5) else Color(0xFF1F2430),
             contentColor = if (isSelected) Color(0xFF0E1116) else Color.White,
-            focusedContainerColor = Color(0xFFFFD07A),
+            focusedContainerColor = Color(0xFFCDE9FA),
             focusedContentColor = Color(0xFF0E1116),
-            pressedContainerColor = Color(0xFFE0A82E),
+            pressedContainerColor = Color(0xFF7FBDE8),
             pressedContentColor = Color(0xFF0E1116),
             disabledContainerColor = Color(0xFF1F2430),
             disabledContentColor = Color.White,
@@ -1441,6 +1640,6 @@ fun releaseBadges(name: String): List<Pair<String, androidx.compose.ui.graphics.
 /** Цвет по количеству сидов: ≥50 — зелёный, ≥5 — жёлтый, меньше — красный. */
 fun seedColor(seeds: Int): androidx.compose.ui.graphics.Color = when {
     seeds >= 50 -> androidx.compose.ui.graphics.Color(0xFF7EE2A8)
-    seeds >= 5 -> androidx.compose.ui.graphics.Color(0xFFFFD54F)
+    seeds >= 5 -> androidx.compose.ui.graphics.Color(0xFFBFE3F7)
     else -> androidx.compose.ui.graphics.Color(0xFFE57373)
 }

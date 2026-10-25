@@ -34,6 +34,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -508,19 +509,22 @@ fun PlayerScreen(
                 Text(netInfo, color = Color.White.copy(alpha = 0.6f), fontSize = 15.sp)
             }
 
-            if (bufferedPct > 0 && bufferedPct < 100) {
+            if (bufferedPct < 100) {
                 Spacer(Modifier.height(16.dp))
-                // Прогресс-бар (D-pad friendly, без Material-зависимостей)
+                // Прогресс-бар сразу при старте (минимум 2%): раньше до первых
+                // кусков показывался только текст — выглядело «пусто»
                 Box(
                     Modifier
                         .fillMaxWidth(0.6f)
                         .height(10.dp)
-                        .background(Color(0xFF1F2430)),
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(Color(0xFF2A3240)),
                 ) {
                     Box(
                         Modifier
-                            .fillMaxWidth(bufferedPct / 100f)
+                            .fillMaxWidth((bufferedPct / 100f).coerceIn(0.02f, 1f))
                             .height(10.dp)
+                            .clip(RoundedCornerShape(5.dp))
                             .background(Color(0xFFE8ECF4)),
                     )
                 }
@@ -603,7 +607,7 @@ private fun VideoPlayer(
     // Конец видео: обработчик снаружи (автозакрытие фильма / следующая серия)
     var showSkip by remember { mutableStateOf(false) } // «Пропустить титры» доступна
 
-    var seekInfo by remember { mutableStateOf("") }    // «⏩ +10 сек» при перемотке пультом
+    var seekInfo by remember { mutableStateOf("") }    // «⏩︎ +10 сек» при перемотке пультом
     // Разметка пропуска (SkipDB/IntroDB) грузится в PlayerScreen — тут только тик:
     // заставка/пересказ прыгают при входе в отрезок, титры/анонс — кнопкой
     var autoSkipped by remember(episode) { mutableStateOf(setOf<String>()) }
@@ -625,7 +629,7 @@ private fun VideoPlayer(
                     autoSkipped = autoSkipped + seg.kind
                     player.seekTo(seg.endMs)
                     player.play()
-                    seekInfo = if (seg.kind == "intro") "⏭ Заставка пропущена" else "⏭ Пересказ пропущен"
+                    seekInfo = if (seg.kind == "intro") "⏭︎ Заставка пропущена" else "⏭︎ Пересказ пропущен"
                     com.torrenttv.app.data.AppLog.log(
                         "player", "${seg.kind} пропущен по базе: ${item.title}",
                     )
@@ -887,7 +891,7 @@ private fun VideoPlayer(
                 val delta = if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) 10_000L else -10_000L
                 val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
                 player.seekTo((player.currentPosition + delta).coerceIn(0L, dur))
-                seekInfo = if (delta > 0) "⏩ +10 сек" else "⏪ −10 сек"
+                seekInfo = if (delta > 0) "⏩︎ +10 сек" else "⏪︎ −10 сек"
                 panelTick++
                 true
             }
@@ -903,7 +907,7 @@ private fun VideoPlayer(
         }
         KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
             if (player.isPlaying) player.pause() else player.play()
-            seekInfo = if (player.isPlaying) "▶ Продолжаем" else "⏸ Пауза"
+            seekInfo = if (player.isPlaying) "▶︎ Продолжаем" else "▮▮ Пауза"
             panelTick++
             true
         }
@@ -913,8 +917,8 @@ private fun VideoPlayer(
         KeyEvent.KEYCODE_MEDIA_PAUSE -> {
             player.pause(); panelTick++; true
         }
-        KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { player.seekTo(player.currentPosition + 30_000L); seekInfo = "⏩ +30 сек"; panelTick++; true }
-        KeyEvent.KEYCODE_MEDIA_REWIND -> { player.seekTo((player.currentPosition - 30_000L).coerceAtLeast(0)); seekInfo = "⏪ −30 сек"; panelTick++; true }
+        KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { player.seekTo(player.currentPosition + 30_000L); seekInfo = "⏩︎ +30 сек"; panelTick++; true }
+        KeyEvent.KEYCODE_MEDIA_REWIND -> { player.seekTo((player.currentPosition - 30_000L).coerceAtLeast(0)); seekInfo = "⏪︎ −30 сек"; panelTick++; true }
         KeyEvent.KEYCODE_MENU -> { showTrackMenu = !showTrackMenu; true }
         // BACK при открытой панели прячет панель, при скрытой — выход из плеера
         // (меню дорожек не трогаем: его закрывает свой BackHandler в оверлее)
@@ -1046,16 +1050,16 @@ private fun VideoPlayer(
                     onClick = {
                         val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
                         player.seekTo((player.currentPosition - 10_000L).coerceIn(0L, dur))
-                        seekInfo = "⏪ −10 сек"; panelTick++
+                        seekInfo = "⏪︎ −10 сек"; panelTick++
                     },
                     shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(16.dp)),
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = Color(0x99151B26),
                         contentColor = Color.White,
-                        focusedContainerColor = Color(0xB3FFFFFF),
+                        focusedContainerColor = Color(0xFFE8ECF4),
                         focusedContentColor = Color.Black,
                     ),
-                ) { Text("⏪", fontSize = 30.sp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 15.dp)) }
+                ) { Text("⏪︎", fontSize = 30.sp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 15.dp)) }
                 androidx.tv.material3.Surface(
                     onClick = {
                         if (player.isPlaying) player.pause() else player.play()
@@ -1066,12 +1070,12 @@ private fun VideoPlayer(
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = Color(0x99151B26),
                         contentColor = Color.White,
-                        focusedContainerColor = Color(0xB3FFFFFF),
+                        focusedContainerColor = Color(0xFFE8ECF4),
                         focusedContentColor = Color.Black,
                     ),
                 ) {
                     Text(
-                        if (player.isPlaying) "⏸" else "▶",
+                        if (player.isPlaying) "▮▮" else "▶︎",
                         fontSize = 34.sp,
                         modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp),
                     )
@@ -1080,16 +1084,16 @@ private fun VideoPlayer(
                     onClick = {
                         val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
                         player.seekTo((player.currentPosition + 10_000L).coerceIn(0L, dur))
-                        seekInfo = "⏩ +10 сек"; panelTick++
+                        seekInfo = "⏩︎ +10 сек"; panelTick++
                     },
                     shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(16.dp)),
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = Color(0x99151B26),
                         contentColor = Color.White,
-                        focusedContainerColor = Color(0xB3FFFFFF),
+                        focusedContainerColor = Color(0xFFE8ECF4),
                         focusedContentColor = Color.Black,
                     ),
-                ) { Text("⏩", fontSize = 30.sp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 15.dp)) }
+                ) { Text("⏩︎", fontSize = 30.sp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 15.dp)) }
             }
         }
 
@@ -1121,7 +1125,7 @@ private fun VideoPlayer(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 androidx.tv.material3.Text(
-                    "⏭ Следующая серия через $nextCountdown…",
+                    "⏭︎ Следующая серия через $nextCountdown…",
                     color = Color.White,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -1133,7 +1137,7 @@ private fun VideoPlayer(
                         modifier = Modifier.focusRequester(cancelFocus),
                     ) { Text("✕ Отмена") }
                     Spacer(Modifier.width(12.dp))
-                    Button(onClick = { nextCountdown = 0 }) { Text("▶ Сейчас") }
+                    Button(onClick = { nextCountdown = 0 }) { Text("▶︎ Сейчас") }
                 }
             }
         }
@@ -1181,7 +1185,7 @@ private fun VideoPlayer(
             )
         }
 
-        // «⏭ Пропустить» по разметке баз (титры/анонс) — точные границы
+        // «⏭︎ Пропустить» по разметке баз (титры/анонс) — точные границы
         val segSkip = segButton
         if (segSkip != null) {
             Button(
@@ -1204,17 +1208,17 @@ private fun VideoPlayer(
                 colors = androidx.tv.material3.ButtonDefaults.colors(
                     containerColor = Color(0xCC1F2430),
                     contentColor = Color.White,
-                    focusedContainerColor = Color(0xB3FFFFFF),
+                    focusedContainerColor = Color(0xFFE8ECF4),
                     focusedContentColor = Color.Black,
                 ),
             ) {
                 Text(
-                    if (segSkip.kind == "preview") "⏭ Пропустить анонс" else "⏭ Пропустить титры",
+                    if (segSkip.kind == "preview") "⏭︎ Пропустить анонс" else "⏭︎ Пропустить титры",
                     fontSize = 15.sp,
                 )
             }
         }
-        // «⏭ Пропустить титры» — в последние 3 минуты (поверх панели, без разметки)
+        // «⏭︎ Пропустить титры» — в последние 3 минуты (поверх панели, без разметки)
         if (showSkip && segSkip == null) {
             val skipFocus = remember { androidx.compose.ui.focus.FocusRequester() }
             LaunchedEffect(showSkip, showPanel, showGear, showFiles) {
@@ -1237,12 +1241,12 @@ private fun VideoPlayer(
                 colors = androidx.tv.material3.ButtonDefaults.colors(
                     containerColor = Color(0xCC1F2430),
                     contentColor = Color.White,
-                    focusedContainerColor = Color(0xB3FFFFFF),
+                    focusedContainerColor = Color(0xFFE8ECF4),
                     focusedContentColor = Color.Black,
                 ),
             ) {
                 Text(
-                    if (episode != null) "⏭ Пропустить титры → следующая серия" else "⏭ Пропустить титры",
+                    if (episode != null) "⏭︎ Пропустить титры → следующая серия" else "⏭︎ Пропустить титры",
                     fontSize = 15.sp,
                 )
             }
@@ -1386,7 +1390,7 @@ private fun VideoPlayer(
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color(0xFF1F2430),
                             contentColor = Color.White,
-                            focusedContainerColor = Color(0xB3FFFFFF),
+                            focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
                         ),
                     ) { Text("⏱", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
@@ -1404,7 +1408,7 @@ private fun VideoPlayer(
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color(0xFF1F2430),
                             contentColor = Color(0xB3FFFFFF),
-                            focusedContainerColor = Color(0xB3FFFFFF),
+                            focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
                         ),
                     ) { Text("${speeds[speedIdx]}×", fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
@@ -1416,7 +1420,7 @@ private fun VideoPlayer(
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color(0xFF1F2430),
                             contentColor = Color.White,
-                            focusedContainerColor = Color(0xB3FFFFFF),
+                            focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
                         ),
                     ) { Text("♪ Аудио", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
@@ -1428,7 +1432,7 @@ private fun VideoPlayer(
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color(0xFF1F2430),
                             contentColor = Color.White,
-                            focusedContainerColor = Color(0xB3FFFFFF),
+                            focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
                         ),
                     ) { Text("💬 Субтитры", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
@@ -1446,7 +1450,7 @@ private fun VideoPlayer(
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color(0xFF1F2430),
                             contentColor = Color.White,
-                            focusedContainerColor = Color(0xB3FFFFFF),
+                            focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
                         ),
                     ) { Text("⛶ ${scales[scaleIdx].first}", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
@@ -1462,7 +1466,7 @@ private fun VideoPlayer(
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color(0xFF1F2430),
                             contentColor = Color.White,
-                            focusedContainerColor = Color(0xB3FFFFFF),
+                            focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
                         ),
                     ) { Text("🔒", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
@@ -1474,7 +1478,7 @@ private fun VideoPlayer(
                             colors = ClickableSurfaceDefaults.colors(
                                 containerColor = Color(0xFF1F2430),
                                 contentColor = Color.White,
-                                focusedContainerColor = Color(0xB3FFFFFF),
+                                focusedContainerColor = Color(0xFFE8ECF4),
                                 focusedContentColor = Color.Black,
                             ),
                         ) { Text(if (showFiles) "✕ Серии" else "☰ Серии (${files.size})", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
@@ -1486,7 +1490,7 @@ private fun VideoPlayer(
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color(0xFF1F2430),
                             contentColor = Color.White,
-                            focusedContainerColor = Color(0xB3FFFFFF),
+                            focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
                         ),
                     ) { Text(if (showGear) "✕" else "⚙", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) }
@@ -1519,12 +1523,12 @@ private fun VideoPlayer(
                         colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
                             containerColor = if (current) Color(0xFF3A5A2E) else Color(0xFF1F2430),
                             contentColor = Color.White,
-                            focusedContainerColor = Color(0xB3FFFFFF),
+                            focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
                         ),
                     ) {
                         androidx.tv.material3.Text(
-                            (if (current) "▶ " else "") + name.substringAfterLast('/'),
+                            (if (current) "▶︎ " else "") + name.substringAfterLast('/'),
                             fontSize = 14.sp,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                         )
@@ -1567,7 +1571,7 @@ private fun VideoPlayer(
                     colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
                         containerColor = Color.Transparent,
                         contentColor = Color.White,
-                        focusedContainerColor = Color(0xB3FFFFFF),
+                        focusedContainerColor = Color(0xFFE8ECF4),
                         focusedContentColor = Color.Black,
                     ),
                 ) { Text("🧲 Качество (другая раздача)", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
@@ -1583,7 +1587,7 @@ private fun VideoPlayer(
                     colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
                         containerColor = Color.Transparent,
                         contentColor = Color.White,
-                        focusedContainerColor = Color(0xB3FFFFFF),
+                        focusedContainerColor = Color(0xFFE8ECF4),
                         focusedContentColor = Color.Black,
                     ),
                 ) { Text("🔍 Поиск", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
@@ -1595,7 +1599,7 @@ private fun VideoPlayer(
                     colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
                         containerColor = Color.Transparent,
                         contentColor = Color.White,
-                        focusedContainerColor = Color(0xB3FFFFFF),
+                        focusedContainerColor = Color(0xFFE8ECF4),
                         focusedContentColor = Color.Black,
                     ),
                 ) { Text("🎧 Аудио-режим", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
@@ -1650,7 +1654,7 @@ private fun VideoPlayer(
                     colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
                         containerColor = Color.Transparent,
                         contentColor = Color.White,
-                        focusedContainerColor = Color(0xB3FFFFFF),
+                        focusedContainerColor = Color(0xFFE8ECF4),
                         focusedContentColor = Color.Black,
                     ),
                 ) { Text("⤴ Внешний плеер", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
@@ -1676,7 +1680,7 @@ private fun VideoPlayer(
                     colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
                         containerColor = Color.Transparent,
                         contentColor = Color.White,
-                        focusedContainerColor = Color(0xB3FFFFFF),
+                        focusedContainerColor = Color(0xFFE8ECF4),
                         focusedContentColor = Color.Black,
                     ),
                 ) {

@@ -115,7 +115,7 @@ fun TvScreen(onPlay: (IptvChannel, List<IptvChannel>) -> Unit) {
     val shownChannels = remember(channels, group, favs) {
         when (group) {
             "Все" -> channels
-            "★ Избранные" -> channels.filter { favs.contains(it.url) }
+            "★︎ Избранные" -> channels.filter { favs.contains(it.url) }
             else -> channels.filter { it.group == group }
         }
     }
@@ -172,10 +172,10 @@ fun TvScreen(onPlay: (IptvChannel, List<IptvChannel>) -> Unit) {
                 }
                 item {
                     TvPill(
-                        text = (if (group == "★ Избранные") "✓ ★ Избранные" else "★ Избранные") +
+                        text = (if (group == "★︎ Избранные") "✓ ★ Избранные" else "★︎ Избранные") +
                             if (favs.isNotEmpty()) " · ${favs.size}" else "",
-                        active = group == "★ Избранные",
-                    ) { group = "★ Избранные" }
+                        active = group == "★︎ Избранные",
+                    ) { group = "★︎ Избранные" }
                 }
                 items(groups) { (name, count) ->
                     TvPill(
@@ -188,7 +188,7 @@ fun TvScreen(onPlay: (IptvChannel, List<IptvChannel>) -> Unit) {
             if (error.isNotBlank()) {
                 Text(
                     "⚠ $error",
-                    color = Color(0xFFF5B942),
+                    color = Color(0xFFA9D7F5),
                     fontSize = 14.sp,
                     modifier = Modifier.padding(horizontal = 36.dp, vertical = 6.dp),
                 )
@@ -227,9 +227,9 @@ private fun TvPill(text: String, active: Boolean = false, onClick: () -> Unit) {
         onClick = onClick,
         shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
         colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
-            containerColor = if (active) Color(0xFF3A2E14) else Color(0xFF1F2430),
-            contentColor = if (active) Color(0xFFF5B942) else Color.White.copy(alpha = 0.85f),
-            focusedContainerColor = Color(0xFFF5B942),
+            containerColor = if (active) Color(0xFF1E3A4D) else Color(0xFF1F2430),
+            contentColor = if (active) Color(0xFFA9D7F5) else Color.White.copy(alpha = 0.85f),
+            focusedContainerColor = Color(0xFFA9D7F5),
             focusedContentColor = Color(0xFF0E1116),
         ),
     ) {
@@ -270,6 +270,8 @@ private fun ChannelTile(
                 // Логотип канала. Внешние хосты логотипов (imgur, wikimedia…)
                 // часто мертвы или пусты в плейлисте — тогда под картинкой
                 // видна плашка с инициалами: чёрных квадратов больше нет.
+                // Инициалы рисуем только пока логотип не загрузился: PNG с
+                // прозрачным фоном просвечивает, и буквы «перекрывали» логотип.
                 Box(
                     Modifier
                         .height(30.dp)
@@ -278,26 +280,31 @@ private fun ChannelTile(
                         .padding(3.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        initials(channel.name),
-                        color = Color(0xFFF5B942),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                    )
+                    var logoLoaded by remember(channel.logo) { mutableStateOf(false) }
                     if (channel.logo.isNotBlank()) {
                         AsyncImage(
                             model = channel.logo,
                             contentDescription = null,
                             contentScale = ContentScale.Fit,
+                            onSuccess = { logoLoaded = true },
+                            onError = { logoLoaded = false },
                             modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                    if (!logoLoaded) {
+                        Text(
+                            initials(channel.name),
+                            color = Color(0xFFA9D7F5),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
                         )
                     }
                 }
                 Spacer(Modifier.width(8.dp))
                 Text(
                     "● ${channel.group}" + if (channel.quality.isNotBlank()) " · ${channel.quality}" else "",
-                    color = Color(0xFFF5B942),
+                    color = Color(0xFFA9D7F5),
                     fontSize = 11.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -308,9 +315,9 @@ private fun ChannelTile(
                     onClick = onToggleFav,
                     shape = clickableSurfaceShape(RoundedCornerShape(8.dp)),
                     colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
-                        containerColor = if (isFav) Color(0xFF3A2E14) else Color(0xFF232936),
-                        contentColor = if (isFav) Color(0xFFF5B942) else Color.White.copy(alpha = 0.6f),
-                        focusedContainerColor = Color(0xFFF5B942),
+                        containerColor = if (isFav) Color(0xFF1E3A4D) else Color(0xFF232936),
+                        contentColor = if (isFav) Color(0xFFA9D7F5) else Color.White.copy(alpha = 0.6f),
+                        focusedContainerColor = Color(0xFFA9D7F5),
                         focusedContentColor = Color(0xFF0E1116),
                     ),
                 ) {
@@ -353,7 +360,7 @@ private fun ChannelTile(
                             Modifier
                                 .fillMaxWidth(passed.toFloat() / total)
                                 .height(3.dp)
-                                .background(Color(0xFFF5B942), RoundedCornerShape(2.dp)),
+                                .background(Color(0xFFA9D7F5), RoundedCornerShape(2.dp)),
                         )
                     }
                 } else {

@@ -182,7 +182,7 @@ fun OnlinePlayerScreen(
     var playing by remember { mutableStateOf(true) }
     val playBtnFocus = remember { FocusRequester() }
     var maxQuality by remember { mutableStateOf<Int?>(null) } // null = авто
-    var seekInfo by remember { mutableStateOf("") }           // «⏩ +10 сек» при перемотке пультом
+    var seekInfo by remember { mutableStateOf("") }           // «⏩︎ +10 сек» при перемотке пультом
     // «Взведён» выход: первый BACK показывает «ещё раз — выход», второй за 3 сек — закрывает
     var backArmedAt by remember { mutableStateOf(0L) }
     // ---------- Состояние: буферизация и ошибки (чёрный экран ≠ «зависло») ----------
@@ -236,7 +236,7 @@ fun OnlinePlayerScreen(
     LaunchedEffect(showPanel) {
         if (showPanel) {
             // Задержка: PlayerView (AndroidView) запрашивает native-фокус в
-            // factory и перебивает фокус-запрос — ставим ▶ после него
+            // factory и перебивает фокус-запрос — ставим ▶︎ после него
             kotlinx.coroutines.delay(200)
             runCatching { playBtnFocus.requestFocus() }
         }
@@ -317,7 +317,7 @@ fun OnlinePlayerScreen(
                     // Продолжаем с сохранённого места (если смотрели раньше)
                     if (resumeSec > 30) {
                         seekTo(resumeSec * 1000L)
-                        seekInfo = "▶ Продолжаем с %d:%02d".format(resumeSec / 60, resumeSec % 60)
+                        seekInfo = "▶︎ Продолжаем с %d:%02d".format(resumeSec / 60, resumeSec % 60)
                     }
                     playWhenReady = true
                 }
@@ -606,7 +606,7 @@ fun OnlinePlayerScreen(
                 val delta = if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) 10_000L else -10_000L
                 val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
                 player.seekTo((player.currentPosition + delta).coerceIn(0L, dur))
-                seekInfo = if (delta > 0) "⏩ +10 сек" else "⏪ −10 сек"
+                seekInfo = if (delta > 0) "⏩︎ +10 сек" else "⏪︎ −10 сек"
                 panelTick++
                 true
             }
@@ -615,13 +615,13 @@ fun OnlinePlayerScreen(
             // OK — пауза/продолжить (как в YouTube TV)
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
                 if (player.isPlaying) player.pause() else player.play()
-                seekInfo = if (player.isPlaying) "▶ Продолжаем" else "⏸ Пауза"
+                seekInfo = if (player.isPlaying) "▶︎ Продолжаем" else "▮▮ Пауза"
                 panelTick++; true
             }
             KeyEvent.KEYCODE_MEDIA_PLAY -> { player.play(); panelTick++; true }
             KeyEvent.KEYCODE_MEDIA_PAUSE -> { player.pause(); panelTick++; true }
-            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { player.seekTo(player.currentPosition + 30_000L); seekInfo = "⏩ +30 сек"; panelTick++; true }
-            KeyEvent.KEYCODE_MEDIA_REWIND -> { player.seekTo((player.currentPosition - 30_000L).coerceAtLeast(0)); seekInfo = "⏪ −30 сек"; panelTick++; true }
+            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { player.seekTo(player.currentPosition + 30_000L); seekInfo = "⏩︎ +30 сек"; panelTick++; true }
+            KeyEvent.KEYCODE_MEDIA_REWIND -> { player.seekTo((player.currentPosition - 30_000L).coerceAtLeast(0)); seekInfo = "⏪︎ −30 сек"; panelTick++; true }
             KeyEvent.KEYCODE_MENU -> { showTrackMenu = !showTrackMenu; true }
             // BACK: панель скрыта — СНАЧАЛА показываем панель (защита от
             // случайного нажатия: выход только вторым BACK при видимой панели).
@@ -835,7 +835,7 @@ fun OnlinePlayerScreen(
             }
         }
 
-        // Центр: полупрозрачные ⏪/⏸/⏩ при показе панели (как в PlayerScreen)
+        // Центр: полупрозрачные ⏪︎/▮▮/⏩︎ при показе панели (как в PlayerScreen)
         if (showPanel && !audioMode && nextCountdown == null) {
             Row(
                 modifier = Modifier.align(Alignment.Center),
@@ -849,15 +849,15 @@ fun OnlinePlayerScreen(
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color(0x99151B26),
                             contentColor = Color.White,
-                            focusedContainerColor = Color(0xB3FFFFFF),
+                            focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
                         ),
                     ) { Text(label, fontSize = 30.sp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 15.dp)) }
                 }
-                CenterBtn("⏪") {
+                CenterBtn("⏪︎") {
                     val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
                     player.seekTo((player.currentPosition - 10_000L).coerceIn(0L, dur))
-                    seekInfo = "⏪ −10 сек"; panelTick++
+                    seekInfo = "⏪︎ −10 сек"; panelTick++
                 }
                 androidx.tv.material3.Surface(
                     onClick = {
@@ -870,20 +870,20 @@ fun OnlinePlayerScreen(
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = Color(0x99151B26),
                         contentColor = Color.White,
-                        focusedContainerColor = Color(0xB3FFFFFF),
+                        focusedContainerColor = Color(0xFFE8ECF4),
                         focusedContentColor = Color.Black,
                     ),
                 ) {
                     Text(
-                        if (playing) "⏸" else "▶",
+                        if (playing) "▮▮" else "▶︎",
                         fontSize = 34.sp,
                         modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp),
                     )
                 }
-                CenterBtn("⏩") {
+                CenterBtn("⏩︎") {
                     val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
                     player.seekTo((player.currentPosition + 10_000L).coerceIn(0L, dur))
-                    seekInfo = "⏩ +10 сек"; panelTick++
+                    seekInfo = "⏩︎ +10 сек"; panelTick++
                 }
             }
         }
@@ -1087,7 +1087,7 @@ fun OnlinePlayerScreen(
                     androidx.tv.material3.Surface(
                         onClick = {
                             player.seekTo(90_000L)
-                            seekInfo = "⏭ Интро пропущено"
+                            seekInfo = "⏭︎ Интро пропущено"
                             panelTick++
                         },
                         shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
@@ -1097,7 +1097,7 @@ fun OnlinePlayerScreen(
                             focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color(0xFF0E1116),
                         ),
-                    ) { Text("⏭ Пропустить интро", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) }
+                    ) { Text("⏭︎ Пропустить интро", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) }
                 }
             }
             Column(
@@ -1253,7 +1253,7 @@ fun OnlinePlayerScreen(
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color.Transparent,
                             contentColor = Color.White,
-                            focusedContainerColor = Color(0xB3FFFFFF),
+                            focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
                         ),
                     ) { Text(label, fontSize = 15.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) }
@@ -1315,7 +1315,7 @@ fun OnlinePlayerScreen(
                                 focusedContainerColor = Color(0xFF7FB84F),
                                 focusedContentColor = Color(0xFF0E1116),
                             ),
-                        ) { Text("▶ Следующая", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)) }
+                        ) { Text("▶︎ Следующая", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)) }
                         Spacer(Modifier.width(8.dp))
                         androidx.tv.material3.Surface(
                             onClick = { nextCountdown = null },
@@ -1394,7 +1394,7 @@ fun OnlinePlayerScreen(
                         ),
                     ) {
                         androidx.tv.material3.Text(
-                            (if (watched) "✓ " else "") + (if (current) "▶ " else "") +
+                            (if (watched) "✓ " else "") + (if (current) "▶︎ " else "") +
                                 episodeBadgeOf(name) + name.substringAfterLast('/'),
                             fontSize = 14.sp,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -1467,7 +1467,7 @@ fun OnlinePlayerScreen(
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color(0x99151B26),
                             contentColor = Color.White,
-                            focusedContainerColor = Color(0xB3FFFFFF),
+                            focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
                         ),
                     ) { Text("🧲 Другая раздача", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) }

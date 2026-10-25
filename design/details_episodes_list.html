@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>ВНосКино — серии в карточке (вертикально)</title>
+<style>
+  body { margin:0; background:#0E1116; color:#fff; font-family:-apple-system,'Segoe UI',Arial,sans-serif; padding:32px; }
+  h2 { font-size:20px; font-weight:600; margin:0 0 6px; display:flex; align-items:center; gap:10px; }
+  .upd { background:#1F2430; font-size:14px; padding:8px 12px; border-radius:10px; }
+  .chips { display:flex; gap:8px; margin:14px 0 12px; }
+  .chip { background:#1F2430; padding:8px 14px; border-radius:18px; font-size:14px; font-weight:600; }
+  .chip.sel { background:#31435A; }
+  .list { max-width:900px; display:flex; flex-direction:column; gap:6px; }
+  .row { background:#1F2430; border-radius:10px; padding:12px 18px; display:flex; align-items:center; gap:14px; }
+  .row.focus { background:#31435A; outline:2px solid rgba(255,255,255,.7); }
+  .code { width:76px; font-weight:700; font-size:15px; flex-shrink:0; }
+  .name { flex:1; font-size:15px; }
+  .name .rus { color:#B8C0CC; font-size:13px; display:block; }
+  .date { font-size:13px; color:#7FB84F; flex-shrink:0; }      /* не вышла — зелёная */
+  .date.old { color:#6B7488; }                                  /* вышла — серая */
+  .btn { font-size:13px; padding:7px 14px; border-radius:8px; flex-shrink:0; }
+  .watch { background:#2E4A26; color:#9CCC65; font-weight:600; }
+  .torrent { background:#243044; color:#fff; }
+  .note { color:#6B7488; font-size:13px; margin-top:14px; max-width:900px; }
+</style>
+</head>
+<body>
+  <h2>🎬 Сезоны и серии <span class="upd">🔄 Обновить</span></h2>
+
+  <div class="chips">
+    <div class="chip sel">Сезон 1</div><div class="chip">Сезон 2</div><div class="chip">Сезон 3</div><div class="chip">Сезон 4</div><div class="chip">Сезон 5</div>
+  </div>
+
+  <div class="list">
+    <div class="row focus">
+      <span class="code">S01E01</span>
+      <span class="name">Titans<span class="rus">Титаны</span></span>
+      <span class="date old">12.10.2018</span>
+      <span class="btn watch">▶ Смотреть</span>
+    </div>
+    <div class="row">
+      <span class="code">S01E02</span>
+      <span class="name">Hawk and Dove</span>
+      <span class="date old">19.10.2018</span>
+      <span class="btn watch">▶ Смотреть</span>
+    </div>
+    <div class="row">
+      <span class="code">S05E03</span>
+      <span class="name">Вуду-луна<span class="rus">новая серия</span></span>
+      <span class="date">выйдет 15.11</span>
+      <span class="btn torrent">🧲 Раздача</span>
+    </div>
+    <div class="row">
+      <span class="code">S05E04</span>
+      <span class="name">Два и половина аптечки</span>
+      <span class="date">выйдет 22.11</span>
+      <span class="btn torrent">🧲 Раздача</span>
+    </div>
+  </div>
+
+  <p class="note">Вертикальный список (прокрутка) вместо ленты «в одну линию». У каждой серии: код + название, дата выхода
+  (вышла — серая, будущая — зелёная) и одна кнопка: «▶ Смотреть» если раздача есть, «🧲 Раздача» если нет — ведёт на поиск раздачи.</p>
+</body>
+</html>

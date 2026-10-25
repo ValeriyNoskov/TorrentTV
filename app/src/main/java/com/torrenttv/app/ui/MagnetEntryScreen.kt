@@ -58,7 +58,7 @@ fun MagnetEntryScreen(item: MediaItem, onDone: () -> Unit, onBack: () -> Unit) {
 
         Text(
             text = "magnet:?xt=… или прямая ссылка на .torrent файл (http…torrent)",
-            color = if (magnet.isBlank()) Color.White.copy(alpha = 0.35f) else Color(0xFFF5B942),
+            color = if (magnet.isBlank()) Color.White.copy(alpha = 0.35f) else Color(0xFFA9D7F5),
             fontSize = 18.sp,
             maxLines = 3,
             modifier = Modifier.padding(top = 10.dp),
