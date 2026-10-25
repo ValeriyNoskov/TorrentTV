@@ -698,6 +698,24 @@ class LocalStore(context: Context) {
 
     fun torrServeHost(): String = prefs.getString("torrserve_host", "http://127.0.0.1:8090") ?: "http://127.0.0.1:8090"
 
+    /**
+     * Фолбэк на встроенный движок, когда TorrServe не отдал буфер: качать
+     * фильм на сам ТВ (files/downloads). По умолчанию ВЫКЛ — раз у владельца
+     * TorrServe на отдельном сервере, ТВ не должен качать гигабайты «про
+     * запас» (за сутки набегало ~2 ГБ недосмотренного). Включается
+     * галочкой в настройках, если TorrServe не используется вовсе.
+     */
+    fun fallbackInternal(): Boolean = prefs.getBoolean("fallback_internal", false)
+
+    fun setFallbackInternal(v: Boolean) {
+        prefs.edit().putBoolean("fallback_internal", v).apply()
+    }
+
+    /** TorrServe настроен пользователем (вводил адрес)? У кого не настроен —
+     *  играет встроенным движком, фолбэк им не запрещаем никогда. */
+    fun torrServeConfigured(): Boolean =
+        !prefs.getString("torrserve_host", null).isNullOrBlank()
+
     fun setTorrServeHost(v: String) {
         prefs.edit().putString("torrserve_host", v.trim().removeSuffix("/")).apply()
     }

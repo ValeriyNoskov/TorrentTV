@@ -281,8 +281,21 @@ fun PlayerScreen(
                     }
                 }
                 com.torrenttv.app.data.AppLog.log("player", "torrserve: no buffer, fallback to internal engine")
+                if (!store.fallbackInternal() && store.torrServeConfigured()) {
+                    // ТВ не должен качать гигабайты сам: TorrServe на отдельном
+                    // сервере — при его отказе показываем причину, а не качаем фильм
+                    // на телевизор (политика «сервер качает, ТВ стримит»)
+                    status = "TorrServe не даёт поток — включите «Качать на ТВ» в настройках или повторите позже"
+                    com.torrenttv.app.data.AppLog.log("player", "фолбэк на ТВ отключён настройкой — остановка")
+                    return@LaunchedEffect
+                }
             } else {
                 com.torrenttv.app.data.AppLog.log("player", "torrserve: failed, fallback to internal engine")
+                if (!store.fallbackInternal() && store.torrServeConfigured()) {
+                    status = "TorrServe недоступен — качать на ТВ запрещено настройкой"
+                    com.torrenttv.app.data.AppLog.log("player", "фолбэк на ТВ отключён настройкой — остановка")
+                    return@LaunchedEffect
+                }
             }
         }
 

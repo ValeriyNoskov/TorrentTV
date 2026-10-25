@@ -662,6 +662,21 @@ fun SettingsScreen(onBack: () -> Unit) {
                             valueOk = true,
                             modifier = Modifier.focusRequester(contentFocus),
                         ) { openEdit("ts", store.torrServeHost(), "http://127.0.0.1:8090") }
+                        SectionItem(
+                            title = (if (store.fallbackInternal()) "✓" else "○") +
+                                " Качать на ТВ, если TorrServe не отдаёт поток",
+                            selected = false,
+                        ) {
+                            store.setFallbackInternal(!store.fallbackInternal())
+                            com.torrenttv.app.data.AppLog.log(
+                                "ui", "настройка «Качать на ТВ»: " + if (store.fallbackInternal()) "вкл" else "выкл",
+                            )
+                        }
+                        SettingsNote(
+                            "Выкл (рекомендуется с сервером TorrServe): телевизор не качает сам — " +
+                                "при отказе сервера показываем ошибку. Вкл: при сбое TorrServe фильм " +
+                                "скачается на ТВ (занимает место, лимит 20 ГБ)."
+                        )
                         SettingsNote("Необязательно: стрим через TorrServe быстрее. Без него работает встроенный движок.")
                     }
 

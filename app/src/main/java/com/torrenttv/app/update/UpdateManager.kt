@@ -263,4 +263,20 @@ object UpdateManager {
         }
         context.startActivity(intent)
     }
+
+    /** Имя apk, скачанного и ожидающего установки (для чистки старых — см. cleanupApks). */
+    fun pendingApkName(): String? = downloaded?.second?.name
+
+    /**
+     * Убрать APK прошлых обновлений из кеша: после установки файл остаётся
+     * (~80 МБ на каждое обновление) и копится сутками. Вызывается при старте
+     * приложения; скачанный и ожидающий установки APK не трогаем.
+     */
+    fun cleanupApks(context: Context) {
+        val pending = pendingApkName()
+        runCatching {
+            context.cacheDir.listFiles { f -> f.name.startsWith("update-") && f.name.endsWith(".apk") }
+                ?.forEach { if (it.name != pending) it.delete() }
+        }
+    }
 }
