@@ -688,6 +688,35 @@ fun SettingsScreen(onBack: () -> Unit) {
                             value = store.torrServeHost(),
                             valueOk = true,
                         ) { openEdit("ts", store.torrServeHost(), "http://127.0.0.1:8090") }
+                        // Веб-интерфейс TorrServe (список раздач, место, удаление):
+                        // на ТВ с браузером — открыть, без браузера — подсказка,
+                        // что адрес открывается с телефона/компа
+                        var webTip by remember { mutableStateOf<String?>(null) }
+                        val ctx = androidx.compose.ui.platform.LocalContext.current
+                        SectionItem(
+                            title = "🌐 Веб-интерфейс сервера (${store.torrServeHost()})",
+                            selected = false,
+                        ) {
+                            val host = store.torrServeHost()
+                            if (host.isBlank()) {
+                                webTip = "адрес сервера не задан"
+                            } else {
+                                com.torrenttv.app.data.AppLog.log("ui", "нажал: «Веб-интерфейс сервера» $host")
+                                val ok = runCatching {
+                                    ctx.startActivity(
+                                        android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(host))
+                                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                                    )
+                                }.isSuccess
+                                webTip = if (ok) null
+                                else "браузера на ТВ нет — откройте $host с телефона или компьютера"
+                            }
+                        }
+                        webTip?.let { SettingsNote("🌐 $it") }
+                        SettingsNote(
+                            "Веб-интерфейс TorrServe: все раздачи на сервере, сколько скачано, " +
+                                "скорость, удаление вручную. Открывается с телефона/компа в той же сети."
+                        )
                         // Очистка старого кеша: сносим с сервера раздачи, которых
                         // нет в избранном (разовые просмотры, старые проверки).
                         // Деструктивное — подтверждение вторым нажатием.
