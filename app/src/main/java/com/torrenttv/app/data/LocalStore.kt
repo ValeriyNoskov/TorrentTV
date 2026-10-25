@@ -272,13 +272,6 @@ class LocalStore(context: Context) {
 
     // ---------- Просмотренные серии (галочка в списке, авто + кнопкой) ----------
 
-    /** Отметить серию просмотренной (ключ = sourceKey плеера). */
-    fun markWatchedKey(key: String, watched: Boolean = true) {
-        val set = prefs.getStringSet("watched", emptySet()) ?: emptySet()
-        val next = if (watched) set + key else set - key
-        prefs.edit().putStringSet("watched", next).apply()
-    }
-
     // ---------- Статистика просмотра (ROADMAP E) ----------
 
     /** Сводка для экрана «Статистика»: часы, серии, активность, топ по времени. */
@@ -397,10 +390,6 @@ class LocalStore(context: Context) {
         }.getOrDefault(emptyList<MediaItem>() to 0L)
     }
 
-    /** Серия отмечена просмотренной (кнопкой или досмотрена ≥95%)? */
-    fun isWatchedKey(key: String): Boolean =
-        prefs.getStringSet("watched", emptySet())?.contains(key) == true
-
     // ---------- Кеш найденных серий (поиск раздач — не при каждом открытии) ----------
 
     /** Сохранить собранные из раздач сезоны: повторное открытие — без поиска. */
@@ -446,23 +435,6 @@ class LocalStore(context: Context) {
         }.getOrDefault(emptyList())
 
     // ---------- Бейдж «+N серий» (ROADMAP A) ----------
-
-    /**
-     * Сколько серий появилось с последнего «просмотра списка» — дос-поиск
-     * доложил новые, а пользователь их ещё не открывал.
-     */
-    fun newEpisodes(item: MediaItem): Int {
-        val cached = loadEpisodeCache(item).sumOf { it.episodes.size }
-        if (cached == 0) return 0
-        val seen = prefs.getInt("epsSeen:" + item.storeKey, 0)
-        return (cached - seen).coerceAtLeast(0)
-    }
-
-    /** Пользователь открыл список серий — новые увидел, бейдж погасить. */
-    fun markEpisodesSeen(item: MediaItem) {
-        val cached = loadEpisodeCache(item).sumOf { it.episodes.size }
-        prefs.edit().putInt("epsSeen:" + item.storeKey, cached).apply()
-    }
 
     // ---------- Настройки фильтрации поиска ----------
 
@@ -565,10 +537,6 @@ class LocalStore(context: Context) {
     /** Cookie-строка трекера из настроек (вставляется из браузера). */
     fun trackerCookie(trackerId: String): String =
         prefs.getString("tracker_cookie_$trackerId", "") ?: ""
-
-    fun setTrackerCookie(trackerId: String, cookie: String) {
-        prefs.edit().putString("tracker_cookie_$trackerId", cookie.trim()).apply()
-    }
 
     /** Настроенные частные трекеры для автопоиска. */
     fun privateTrackers(): List<PrivateTrackers.TrackerAuth> =

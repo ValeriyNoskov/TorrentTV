@@ -69,6 +69,8 @@ fun PlayerScreen(
     onPlayNext: (com.torrenttv.app.data.Episode) -> Unit = {},
     /** «Другое качество» — вернуться к выбору раздач/ссылок. */
     onPickTorrent: () -> Unit = {},
+    /** Кнопка 🔍 — уйти во вкладку поиска (плеер приостанавливается в onDispose). */
+    onSearch: () -> Unit = {},
     /** Запуск конкретного файла раздачи (из экрана файлов). */
     startIndex: Int = -1,
 ) {
@@ -455,6 +457,7 @@ fun PlayerScreen(
             onPickTorrent = onPickTorrent,
             externalUrl = torrLink,
             skipSegs = skipSegs,
+            onSearch = onSearch,
 )
     } else {
         // Экран буферизации
@@ -524,6 +527,8 @@ private fun VideoPlayer(
     externalUrl: String? = null,
     /** Разметка пропуска (заставка/пересказ/титры) из открытых баз. */
     skipSegs: List<com.torrenttv.app.data.SkipSeg> = emptyList(),
+    /** 🔍 Поиск — уйти во вкладку поиска. */
+    onSearch: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val sourceKey = item.storeKey + (episode?.sourceSuffix ?: "")
@@ -944,6 +949,66 @@ private fun VideoPlayer(
             )
         }
 
+        // Центр: полупрозрачные пауза/перемотка — появляются при любом нажатии
+        // на пульте и исчезают вместе с панелью (как в YouTube/Kinopoisk).
+        // Фокус на «Пауза»: OK — пауза, ←/→ — между кнопками.
+        if ((showPanel || showFiles || showGear || showTrackMenu) && nextCountdown == null) {
+            Row(
+                modifier = Modifier.align(Alignment.Center),
+                horizontalArrangement = Arrangement.spacedBy(26.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                androidx.tv.material3.Surface(
+                    onClick = {
+                        val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
+                        player.seekTo((player.currentPosition - 10_000L).coerceIn(0L, dur))
+                        seekInfo = "⏪ −10 сек"; panelTick++
+                    },
+                    shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(16.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color(0x99151B26),
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContentColor = Color.Black,
+                    ),
+                ) { Text("⏪", fontSize = 30.sp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 15.dp)) }
+                androidx.tv.material3.Surface(
+                    onClick = {
+                        if (player.isPlaying) player.pause() else player.play()
+                        panelTick++
+                    },
+                    modifier = Modifier.focusRequester(playFocus),
+                    shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(16.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color(0x99151B26),
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContentColor = Color.Black,
+                    ),
+                ) {
+                    Text(
+                        if (player.isPlaying) "⏸" else "▶",
+                        fontSize = 34.sp,
+                        modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp),
+                    )
+                }
+                androidx.tv.material3.Surface(
+                    onClick = {
+                        val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
+                        player.seekTo((player.currentPosition + 10_000L).coerceIn(0L, dur))
+                        seekInfo = "⏩ +10 сек"; panelTick++
+                    },
+                    shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(16.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color(0x99151B26),
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContentColor = Color.Black,
+                    ),
+                ) { Text("⏩", fontSize = 30.sp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 15.dp)) }
+            }
+        }
+
         // ⏳ Буферизация посреди просмотра: чёрный экран ≠ «зависло»
         if (playerBuf && errorMsg.isBlank() && nextCountdown == null && !showFiles && !showGear && !showTrackMenu) {
             Column(
@@ -1162,49 +1227,7 @@ private fun VideoPlayer(
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // play/pause — фокус приходит сюда при показе панели
-                    androidx.tv.material3.Surface(
-                        onClick = { if (player.isPlaying) player.pause() else player.play() },
-                        modifier = Modifier.focusRequester(playFocus),
-                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Color(0xFF1F2430),
-                            contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFF5B942),
-                            focusedContentColor = Color.Black,
-                        ),
-                    ) { Text("⏸ / ▶", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) }
-                    Spacer(Modifier.width(8.dp))
-                    androidx.tv.material3.Surface(
-                        onClick = {
-                            val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
-                            player.seekTo((player.currentPosition - 10_000L).coerceIn(0L, dur))
-                            seekInfo = "⏪ −10 сек"; panelTick++
-                        },
-                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Color(0xFF1F2430),
-                            contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFF5B942),
-                            focusedContentColor = Color.Black,
-                        ),
-                    ) { Text("⏪ 10с", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
-                    Spacer(Modifier.width(8.dp))
-                    androidx.tv.material3.Surface(
-                        onClick = {
-                            val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
-                            player.seekTo((player.currentPosition + 10_000L).coerceIn(0L, dur))
-                            seekInfo = "⏩ +10 сек"; panelTick++
-                        },
-                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Color(0xFF1F2430),
-                            contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFF5B942),
-                            focusedContentColor = Color.Black,
-                        ),
-                    ) { Text("⏩ 10с", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
-                    Spacer(Modifier.width(8.dp))
+                    // Пауза/перемотка переехали в центр экрана (полупрозрачные)
                     // ⏱ Перейти к… — пресеты % (середина фильма и т.п.), как в MX/VLC
                     androidx.tv.material3.Surface(
                         onClick = { showJump = true; showFiles = false; showGear = false; panelTick++ },
@@ -1306,6 +1329,33 @@ private fun VideoPlayer(
                         ) { Text(if (showFiles) "✕ Серии" else "☰ Серии (${files.size})", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
                         Spacer(Modifier.width(8.dp))
                     }
+                    // 🧲 Качество — отдельная кнопка (выбор раздач/ссылок)
+                    androidx.tv.material3.Surface(
+                        onClick = onPickTorrent,
+                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF1F2430),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContentColor = Color.Black,
+                        ),
+                    ) { Text("🧲 Качество", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
+                    Spacer(Modifier.width(8.dp))
+                    // 🔍 Поиск — уйти во вкладку поиска (виден на всех экранах)
+                    androidx.tv.material3.Surface(
+                        onClick = {
+                            player.pause()
+                            onSearch()
+                        },
+                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF1F2430),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContentColor = Color.Black,
+                        ),
+                    ) { Text("🔍", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) }
+                    Spacer(Modifier.width(8.dp))
                     androidx.tv.material3.Surface(
                         onClick = { showGear = !showGear; showFiles = false },
                         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
@@ -1384,19 +1434,6 @@ private fun VideoPlayer(
                     .padding(10.dp),
                 horizontalAlignment = Alignment.End,
             ) {
-                androidx.tv.material3.Surface(
-                    onClick = { showGear = false; onPickTorrent() },
-                    shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
-                    ),
-                    colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
-                        containerColor = Color.Transparent,
-                        contentColor = Color.White,
-                        focusedContainerColor = Color(0xFFF5B942),
-                        focusedContentColor = Color.Black,
-                    ),
-                ) { Text("🧲 Другое качество", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
-                Spacer(Modifier.height(4.dp))
                 androidx.tv.material3.Surface(
                     onClick = {
                         showGear = false

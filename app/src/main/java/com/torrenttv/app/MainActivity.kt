@@ -435,6 +435,8 @@ private fun App() {
                 onPlayNext = { next -> screen = Screen.Player(s.item, next) },
                 // ⚙ «Другое качество» → экран выбора раздач/ссылок
                 onPickTorrent = { screen = Screen.Watch(s.item) },
+                // 🔍 Поиск → вкладка поиска
+                onSearch = { screen = Screen.Search },
             )
 
             else -> Unit
