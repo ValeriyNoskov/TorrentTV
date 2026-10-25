@@ -18,6 +18,9 @@ import java.util.concurrent.TimeUnit
  */
 object TorrServeService {
 
+    /** Одновременно не больше 2 preload-соединений — иначе TorrServe захлёбывается. */
+    private val preloadSlots = java.util.concurrent.Semaphore(2)
+
     const val PACKAGE = "ru.yourok.torrserve"
 
     /** После неудачи не дёргаем TorrServe 10 минут (чтобы не заставлять ждать дважды). */
@@ -292,13 +295,22 @@ object TorrServeService {
         // thresholdBytes — докачать файл ЦЕЛИКОМ (качка на сервер): null = только
         // порог для старта стрима (32 МБ)
         val name = file.path.substringAfterLast('/')
+        // Лимит одновременных preload-соединений: разведка/гонка плеера +
+        // автокачалка дают до 5-6 параллельных — TorrServe на таком числе
+        // захлёбывается (лог v0.9.19: и стрим стоит на 0 с, и докачка на
+        // 0 КБ/с при живых пирах). Два слота: гонке хватает, качалка ждёт.
+        preloadSlots.acquire()
         Thread {
-            runCatching {
-                client().newCall(
-                    Request.Builder()
-                        .url("$host/stream/${URLEncoder.encode(name, "UTF-8")}?link=$hash&index=${file.id}&preload")
-                        .build()
-                ).execute().use { it.body?.bytes() }
+            try {
+                runCatching {
+                    client().newCall(
+                        Request.Builder()
+                            .url("$host/stream/${URLEncoder.encode(name, "UTF-8")}?link=$hash&index=${file.id}&preload")
+                            .build()
+                    ).execute().use { it.body?.bytes() }
+                }
+            } finally {
+                preloadSlots.release()
             }
         }.apply { isDaemon = true }.start()
 

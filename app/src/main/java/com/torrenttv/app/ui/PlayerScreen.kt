@@ -190,23 +190,36 @@ fun PlayerScreen(
                 "player",
                 "разведка раздач: ${candidates.size} шт, стартуем с самой скачанной",
             )
-            // Выбор файла серии в раздаче (общий для запуска и гонки)
+            // Выбор файла серии в раздаче (общий для запуска и гонки).
+            // ПОРЯДОК: явная серия → сохранённый S/E (переносится между
+            // раздачами!) → сохранённое имя файла → индекс. Раньше был
+            // только индекс: гонка выигрывала ДРУГУЮ раздачу, и под тем же
+            // индексом открывалась чужая серия («запустил E06 — открылась E03»).
             fun pickFile(t: com.torrenttv.app.data.TorrServeService.TSTorrent) =
                 run {
-                    // Если пользователь выбрал конкретный файл (экран раздачи) —
-                    // играем ИМЕННО его, а не «лучший» (иначе E08 запускает E01)
                     val byIndex = if (startIndex >= 0)
                         t.files.firstOrNull { it.id == startIndex }
                             ?: t.files.getOrNull(startIndex)
                     else null
-                    byIndex ?: run {
+                    if (byIndex != null) byIndex else run {
                         val ep = episode
-                        if (ep != null) t.files.firstOrNull {
-                            com.torrenttv.app.data.Episode.fileMatches(it.path, ep.season, ep.episode)
-                        } ?: com.torrenttv.app.data.TorrServeService.bestVideo(t)
-                        else {
-                            // Продолжение просмотра: запомненная серия раздачи —
-                            // иначе каждый «Смотреть» стартует E01 и теряет серию/время
+                        val byEpisodeParam = ep?.let { e ->
+                            t.files.firstOrNull {
+                                com.torrenttv.app.data.Episode.fileMatches(it.path, e.season, e.episode)
+                            }
+                        }
+                        val lastEpPair = store.lastEp(item)
+                        val byLastEp = if (byEpisodeParam == null) lastEpPair?.let { (s, e) ->
+                            t.files.firstOrNull {
+                                com.torrenttv.app.data.Episode.fileMatches(it.path, s, e)
+                            }
+                        } else null
+                        val byName = if (byEpisodeParam == null && byLastEp == null) {
+                            store.lastFileName(item)?.let { name ->
+                                t.files.firstOrNull { it.path.substringAfterLast('/') == name }
+                            }
+                        } else null
+                        byEpisodeParam ?: byLastEp ?: byName ?: run {
                             val last = store.lastFile(item)
                             val videoSorted = t.files.filter {
                                 it.path.substringAfterLast('.', "").lowercase() in TorrentEngine.VIDEO_EXT
@@ -315,11 +328,19 @@ fun PlayerScreen(
                 tsEpNum = epNumOf(file.path)
                 tsSeason = Regex("[Ss](\\d{1,2})").find(file.path)?.groupValues?.get(1)?.toIntOrNull()
                     ?: Regex("(\\d{1,2})\\s*[сС]езон").find(file.path)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                // Понятный лог: какую серию реально запустили (гонка могла
+                // выбрать другую раздачу — по логу сразу видно что открылось)
+                com.torrenttv.app.data.AppLog.log(
+                    "player",
+                    "запущена серия: S%02dE%02d «%s» (раздача %s…, файлов %d)".format(
+                        tsSeason, tsEpNum, file.path.substringAfterLast('/'), ts.hash.take(8), ts.files.size,
+                    ),
+                )
                 // Zona-стиль для TorrServe: сериал впервые — сразу список серий
                 val firstRun = episode == null && startIndex < 0 && !store.hasLastFile(item)
                 tsShowFiles = firstRun && tsFiles.size > 1
-                if (!tsShowFiles && episode == null && startIndex < 0) {
-                    store.saveLastFile(item, tsCurrent)
+                if (!tsShowFiles) {
+                    store.saveLastWatched(item, tsCurrent, file.path)
                 }
                 // Предзагрузка следующей серии фоном (как у Stremio):
                 // пока смотрим текущую, TorrServe качает следующую
@@ -436,7 +457,14 @@ fun PlayerScreen(
                 },
                 // Прямой запуск файла (из экрана файлов раздачи),
                 // иначе — запомненная последняя серия раздачи
-                fileIndex = if (startIndex >= 0) startIndex else store.lastFile(item),
+                fileIndex = if (startIndex >= 0) startIndex else {
+                    // Приоритет: сохранённый S/E → эпизод в файлах → индекс
+                    val sEp = store.lastEp(item)
+                    val byEp = if (episode == null && sEp != null) torrentFiles.indexOfFirst {
+                        com.torrenttv.app.data.Episode.fileMatches(it.second, sEp.first, sEp.second)
+                    } else -1
+                    if (byEp >= 0) byEp else store.lastFile(item)
+                },
             )
         }
         if (st == null) {
@@ -444,6 +472,7 @@ fun PlayerScreen(
             status = "Не удалось начать стриминг"
             return@LaunchedEffect
         }
+        store.saveLastWatched(item, st.fileIndex, st.videoFile.path)
         com.torrenttv.app.data.AppLog.log(
             "player",
             "started: file=\"${st.videoFile.name}\" size=${st.fileSize}",
@@ -540,6 +569,13 @@ fun PlayerScreen(
                         tsSeason = Regex("[Ss](\\d{1,2})").find(f.path)?.groupValues?.get(1)?.toIntOrNull()
                             ?: Regex("(\\d{1,2})\\s*[сС]езон").find(f.path)?.groupValues?.get(1)?.toIntOrNull() ?: 0
                         torrLink = com.torrenttv.app.data.TorrServeService.streamUrl(host, hash, f)
+                        store.saveLastWatched(item, n, f.path)
+                        com.torrenttv.app.data.AppLog.log(
+                            "player",
+                            "запущена серия: S%02dE%02d «%s» (переключение)".format(
+                                tsSeason, tsEpNum, f.path.substringAfterLast('/'),
+                            ),
+                        )
                         com.torrenttv.app.data.AppLog.log("player", "torrserve: switched to \"${f.path}\"")
                     } else {
                         com.torrenttv.app.data.AppLog.log("player", "torrserve: switch failed")
@@ -582,8 +618,10 @@ fun PlayerScreen(
             onSelectFile = { idx ->
                 if (idx != stream?.fileIndex) {
                     restartFileIndex = idx
-                    // Переключили серию — запоминаем её как последнюю
-                    store.saveLastFile(item, idx)
+                    // Переключили серию — запоминаем её: индекс + имя + S/E
+                    // (имя и S/E переживают смену раздачи гонкой)
+                    torrentFiles.getOrNull(idx)?.let { store.saveLastWatched(item, idx, it.second) }
+                        ?: store.saveLastFile(item, idx)
                 }
             },
             onPickTorrent = onPickTorrent,

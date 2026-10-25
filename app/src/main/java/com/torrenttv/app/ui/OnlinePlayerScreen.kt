@@ -423,7 +423,11 @@ fun OnlinePlayerScreen(
         }
     }
     DisposableEffect(player) {
+        // Плеер активен → качалка приостанавливается: канал сервера отдаёт
+        // стрим, а не докачку («сервер качает, ТВ стримит» — по очереди)
+        com.torrenttv.app.data.ServerDownloads.setPlayerActive(true)
         onDispose {
+            com.torrenttv.app.data.ServerDownloads.setPlayerActive(false)
             val pos = (player.currentPosition / 1000).toInt()
             val dur = (player.duration / 1000).toInt()
             if (saveProgress && pos > 10 && dur > 0) {

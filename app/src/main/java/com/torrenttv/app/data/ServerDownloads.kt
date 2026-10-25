@@ -67,6 +67,18 @@ object ServerDownloads {
 
     @Volatile private var stopRequested = false
 
+    /** Плеер на экране → качалка ждёт (сервер отдаёт стрим, канал один). */
+    @Volatile private var playerActive = false
+
+    fun setPlayerActive(active: Boolean) {
+        playerActive = active
+        AppLog.log("serverdl", if (active) "плеер активен — качалка приостановлена" else "плеер закрыт — качалка продолжается")
+    }
+
+    private fun waitPlayerIdle() {
+        while (playerActive && !stopRequested) Thread.sleep(5_000)
+    }
+
     /** Текущая задача (null — ничего не качается). */
     fun current(): Job? = job
 
@@ -197,10 +209,48 @@ object ServerDownloads {
                     AppLog.log("serverdl", "${spec.item.title}: раздача ${mi + 1} без видео-файлов — следующая")
                     continue
                 }
-                // Просмотренные серии НЕ качаем (в т.ч. целиком просмотренные
-                // «старые» сезоны): качаем только непросмотренное
+                // Просмотренные серии НЕ качаем; кроме того качаем только от
+                // «точки продолжения» — последней просмотренной серии (S05E06
+                // → качаем S05E07+, а паки S01 по 40 ГБ не заливаются на сервер:
+                // непросмотрённый ≠ нужный, продолжаем смотреть с того места,
+                // где остановились)
+                var allWatched = true
+                var continuePoint: Pair<Int, Int>? = null
+                if (spec.item.type != "movie") {
+                    val normPrefix = "norm:" + spec.item.title.lowercase().filter { it.isLetterOrDigit() } + ":"
+                    val watchedSet = store.watchedKeys()
+                    val points = watchedSet.mapNotNull { k ->
+                        Regex(":s(\\d+)e(\\d+)$").find(k)?.let { m ->
+                            val key = k.substringBefore(":s")
+                            if (key.startsWith("norm:") || key.startsWith(spec.item.storeKey + ":online"))
+                                m.groupValues[1].toInt() * 1000 + m.groupValues[2].toInt()
+                            else null
+                        }
+                    }.filter { it > 0 }
+                    if (points.isNotEmpty()) {
+                        val max = points.max()
+                        continuePoint = max / 1000 to max % 1000
+                        AppLog.log(
+                            "serverdl",
+                            "${spec.item.title}: точка продолжения S%02dE%02d — старые серии не качаю".format(
+                                continuePoint.first, continuePoint.second,
+                            ),
+                        )
+                    }
+                }
                 val videos = videosAll.filter { f ->
-                    val nums = Episode.fileNumbers(f.path) ?: return@filter true
+                    val nums = Episode.fileNumbers(f.path)
+                    if (nums != null && continuePoint != null) {
+                        val p = nums.first * 1000 + nums.second
+                        if (p < continuePoint.first * 1000 + continuePoint.second) {
+                            AppLog.log(
+                                "serverdl",
+                                "${spec.item.title}: «${f.path.substringAfterLast('/').take(50)}» — до точки продолжения, не качаю",
+                            )
+                            return@filter false
+                        }
+                    }
+                    if (nums == null) return@filter true // не эпизод (пак без разметки) — качаем
                     val suffix = ":" + "S%02dE%02d".format(nums.first, nums.second).lowercase()
                     val watched = store.isWatchedAny(listOf(
                         spec.item.storeKey + ":online" + suffix,
@@ -211,17 +261,25 @@ object ServerDownloads {
                             "serverdl",
                             "${spec.item.title}: «${f.path.substringAfterLast('/').take(50)}» — просмотрена, не качаю",
                         )
-                    }
+                    } else allWatched = false
                     !watched
                 }
                 if (videos.isEmpty()) {
-                    AppLog.log("serverdl", "${spec.item.title}: все серии раздачи просмотрены — пропускаю")
+                    if (allWatched) {
+                        // Нечего качать не ошибка: тайтс просмотрен целиком
+                        AppLog.log("serverdl", "${spec.item.title}: всё просмотрено — пропускаю")
+                        job = job?.copy(state = "готово", filesDone = 0, filesTotal = 0)
+                        return
+                    }
+                    AppLog.log("serverdl", "${spec.item.title}: после фильтра качать нечего — следующая раздача")
                     continue
                 }
                 total = videos.size
                 done = 0
                 var consecutiveFails = 0
                 for ((i, f) in videos.withIndex()) {
+                    if (stopRequested) break@outer
+                    waitPlayerIdle()
                     if (stopRequested) break@outer
                     job = Job(
                         spec.item.title, m, done, total, f.path.substringAfterLast('/'),

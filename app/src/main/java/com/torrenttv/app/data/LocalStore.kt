@@ -274,6 +274,32 @@ class LocalStore(context: Context) {
         prefs.edit().putInt("lastfile:" + item.storeKey, fileIndex).apply()
     }
 
+    /**
+     * Запомнить последнюю серию ПОЛНОСТЬЮ: индекс файла, имя файла и S/E.
+     * Индекс в другой раздаче указывает на другую серию (гонка может
+     * выиграть иной пак) — поэтому pickFile сначала ищет ПО ЭПИЗОДУ и имени.
+     */
+    fun saveLastWatched(item: MediaItem, fileIndex: Int, path: String) {
+        val name = path.substringAfterLast('/')
+        prefs.edit()
+            .putInt("lastfile:" + item.storeKey, fileIndex)
+            .putString("lastname:" + item.storeKey, name)
+            .putInt("lasts:" + item.storeKey, Regex("[Ss](\\d{1,2})").find(path)?.groupValues?.get(1)?.toIntOrNull() ?: 0)
+            .putInt("laste:" + item.storeKey, Regex("[Ee](\\d{1,3})").find(name)?.groupValues?.get(1)?.toIntOrNull() ?: 0)
+            .apply()
+    }
+
+    /** Последняя запущенная серия (S, E) — переносится между раздачами. */
+    fun lastEp(item: MediaItem): Pair<Int, Int>? {
+        val s = prefs.getInt("lasts:" + item.storeKey, 0)
+        val e = prefs.getInt("laste:" + item.storeKey, 0)
+        return if (s > 0 && e > 0) s to e else null
+    }
+
+    /** Последнее запущенное имя файла — фолбэк для матчинга внутри раздачи. */
+    fun lastFileName(item: MediaItem): String? =
+        prefs.getString("lastname:" + item.storeKey, null)
+
     /** Последняя серия раздачи или -1 (не смотрели). */
     fun lastFile(item: MediaItem): Int =
         prefs.getInt("lastfile:" + item.storeKey, -1)
@@ -369,6 +395,9 @@ class LocalStore(context: Context) {
         val set = prefs.getStringSet("watched", emptySet()) ?: emptySet()
         return keys.any { it in set }
     }
+
+    /** Все ключи просмотра — автокачалке для поиска «точки продолжения». */
+    fun watchedKeys(): Set<String> = prefs.getStringSet("watched", emptySet()) ?: emptySet()
 
     /**
      * Нормализованный ключ просмотра: одинаковый для ЛЮБЫХ раздач одного
