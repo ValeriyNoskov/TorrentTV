@@ -169,6 +169,13 @@ object UpdateManager {
     }
 
     /** Скачать APK в кеш и запустить установку. */
+    /**
+     * Скачать и установить. Если закачка УЖЕ идёт (фоном с главного экрана
+     * или с другого экрана) — НЕ запускаем вторую параллельную: оба потока
+     * писали в один apk-файл, канал делился пополам и прогресс «прыгал»
+     * (10% → 20% → 10%). Ждём текущую закачку и ставим её результат;
+     * если фоновая упала — качаем сами.
+     */
     fun downloadAndInstall(context: Context, info: UpdateInfo, onProgress: (String) -> Unit, onError: (String) -> Unit) {
         // Уже скачано в фоне — ставим сразу, без скачивания
         if (readyToInstall(info)) {
@@ -176,6 +183,27 @@ object UpdateManager {
             installApk(context, downloaded!!.second)
             return
         }
+        if (downloading) {
+            Thread {
+                mainHandler.post { onProgress("Скачивание v${info.version}… (идёт в фоне)") }
+                val deadline = System.currentTimeMillis() + 15 * 60_000L
+                while (System.currentTimeMillis() < deadline) {
+                    if (readyToInstall(info)) {
+                        mainHandler.post { onProgress("Установка v${info.version}…") }
+                        installApk(context, downloaded!!.second)
+                        return@Thread
+                    }
+                    // Фоновая закачка упала — выходим из ожидания, скачаем сами
+                    if (!downloading) break
+                    Thread.sleep(1000)
+                }
+                if (!readyToInstall(info)) {
+                    downloadAndInstall(context, info, onProgress, onError)
+                }
+            }.start()
+            return
+        }
+        downloading = true
         Thread {
             try {
                 mainHandler.post { onProgress("Скачивание v${info.version}…") }
@@ -217,6 +245,8 @@ object UpdateManager {
                 }
             } catch (e: Exception) {
                 mainHandler.post { onError("Ошибка обновления: ${e.message}") }
+            } finally {
+                downloading = false
             }
         }.start()
     }

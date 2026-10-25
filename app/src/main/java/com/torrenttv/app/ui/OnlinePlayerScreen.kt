@@ -174,6 +174,9 @@ fun OnlinePlayerScreen(
     // зацикливать не надо — предлагаем сменить качество (🧲)
     var stallRestarts by remember { mutableStateOf(0) }
     var showStalled by remember { mutableStateOf(false) }
+    // Фактическое состояние торрента на TorrServe в момент зависания
+    // (скачано/пиров): отделяет «сервер не качает» от проблем плеера
+    var stallStats by remember { mutableStateOf("") }
     var retryCount by remember { mutableStateOf(0) }
     // Когда была последняя ошибка: счётчик повторов сбрасываем только после
     // 20 секунд стабильного показа, иначе каждый READY обнулял попытки
@@ -519,6 +522,18 @@ fun OnlinePlayerScreen(
 
     // Детектор зависания стрима: играет, но позиция И буфер стоят 30+ сек —
     // тихо перезапускаем (TorrServe иногда залипает; раньше — только руками)
+    // Опрос состояния торрента на сервере: скачано/пиров — сразу видно,
+    // качает ли TorrServe вообще (источник почти всегда один: пиры)
+    suspend fun torrStatsLine(url: String): String {
+        val hash = Regex("[?&]link=([a-fA-F0-9]{40})").find(url)?.groupValues?.get(1)
+            ?: return "статус недоступен (нет hash)"
+        val host = url.substringBefore("/stream/")
+        val t = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { com.torrenttv.app.data.TorrServeService.get(host, hash) }.getOrNull()
+        } ?: return "статус недоступен (сервер не ответил)"
+        return "сервер: скачано ${t.preloadedBytes / 1024 / 1024} МБ, пиров ${t.peers}, stat=${t.stat}"
+    }
+
     LaunchedEffect(player, retryTick) {
         var stuck = 0
         var idleBuf = 0
@@ -554,6 +569,8 @@ fun OnlinePlayerScreen(
             if (pos == lastPos && buf == lastBuf) {
                 stuck++
                 if (stuck >= 6) { // 6 × 5 сек = 30 секунд без движения
+                    stallStats = torrStatsLine(link.url)
+                    com.torrenttv.app.data.AppLog.log("player", "torrserve при зависании: $stallStats")
                     stallRestarts++
                     if (stallRestarts >= 3) {
                         // Раздача не качается: не зацикливаемся, зовём сменить качество
@@ -1454,7 +1471,8 @@ fun OnlinePlayerScreen(
                 Text("📡 Стрим не загружается", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Раздача не отдаёт данные — попробуйте другую",
+                    if (stallStats.isNotBlank()) stallStats
+                    else "Раздача не отдаёт данные — попробуйте другую",
                     color = Color.White.copy(alpha = 0.6f),
                     fontSize = 15.sp,
                 )
