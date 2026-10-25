@@ -1242,7 +1242,9 @@ private fun KeywordChip(word: String, onRemove: () -> Unit) {
 
 
 /**
- * Ввод кода разработчика (DEV_CODE): 4 цифры с пульта или клавиатуры.
+ * Ввод кода разработчика (DEV_CODE): экранная цифровая панель, управляемая
+ * стрелками пульта (у ТВ-пульта цифровых кнопок нет), плюс поддержка
+ * аппаратных цифр — если клавиатура/пульт с цифрами подключены.
  * Верно — onOk (блок «разработка» появляется в меню), иначе «Неверный код»
  * и очистка. Код запрашивается при каждом открытии — не запоминаем.
  */
@@ -1251,96 +1253,91 @@ private fun DevCodeScreen(onOk: () -> Unit, onClose: () -> Unit) {
     var code by remember { mutableStateOf("") }
     var wrong by remember { mutableStateOf(false) }
     BackHandler { onClose() }
-    Box(
+    Column(
         Modifier
             .fillMaxSize()
             .background(Color(0xFF0E1116))
-            // Цифры с пульта (0–9, NUMPAD) и ⌫; Enter не нужен — код ровно 4 цифры
-            .onPreviewKeyEvent { e ->
-                if (e.type != androidx.compose.ui.input.key.KeyEventType.KeyUp) return@onPreviewKeyEvent false
-                val digit = when (e.key) {
-                    androidx.compose.ui.input.key.Key.Zero -> 0
-                    androidx.compose.ui.input.key.Key.One -> 1
-                    androidx.compose.ui.input.key.Key.Two -> 2
-                    androidx.compose.ui.input.key.Key.Three -> 3
-                    androidx.compose.ui.input.key.Key.Four -> 4
-                    androidx.compose.ui.input.key.Key.Five -> 5
-                    androidx.compose.ui.input.key.Key.Six -> 6
-                    androidx.compose.ui.input.key.Key.Seven -> 7
-                    androidx.compose.ui.input.key.Key.Eight -> 8
-                    androidx.compose.ui.input.key.Key.Nine -> 9
-                    androidx.compose.ui.input.key.Key.NumPad0 -> 0
-                    androidx.compose.ui.input.key.Key.NumPad1 -> 1
-                    androidx.compose.ui.input.key.Key.NumPad2 -> 2
-                    androidx.compose.ui.input.key.Key.NumPad3 -> 3
-                    androidx.compose.ui.input.key.Key.NumPad4 -> 4
-                    androidx.compose.ui.input.key.Key.NumPad5 -> 5
-                    androidx.compose.ui.input.key.Key.NumPad6 -> 6
-                    androidx.compose.ui.input.key.Key.NumPad7 -> 7
-                    androidx.compose.ui.input.key.Key.NumPad8 -> 8
-                    androidx.compose.ui.input.key.Key.NumPad9 -> 9
-                    else -> -1
-                }
-                when {
-                    digit >= 0 && code.length < 4 -> {
-                        wrong = false
-                        code += digit
-                        if (code.length == 4) {
-                            if (code == DEV_CODE) onOk()
-                            else {
-                                wrong = true
-                                code = ""
-                            }
-                        }
-                        true
-                    }
-                    e.key == androidx.compose.ui.input.key.Key.Backspace -> {
-                        wrong = false
-                        code = code.dropLast(1)
-                        true
-                    }
-                    else -> false
-                }
-            },
-        contentAlignment = Alignment.Center,
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("🔒 Код доступа", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Text("🔒 Код доступа", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Text(
+            "Стрелками выберите 4 цифры, OK — ввести",
+            color = Color.White.copy(alpha = 0.55f),
+            fontSize = 16.sp,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        // Введённые цифры
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 20.dp)) {
+            repeat(4) { i ->
+                Box(
+                    Modifier
+                        .size(width = 56.dp, height = 64.dp)
+                        .background(Color(0xFF1F2430), RoundedCornerShape(10.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        if (i < code.length) "●" else "",
+                        color = Color.White,
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
+        if (wrong) {
             Text(
-                "Введите 4 цифры с пульта",
-                color = Color.White.copy(alpha = 0.55f),
-                fontSize = 16.sp,
-                modifier = Modifier.padding(top = 6.dp),
+                "Неверный код",
+                color = Color(0xFFE57373),
+                fontSize = 15.sp,
+                modifier = Modifier.padding(top = 10.dp),
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 24.dp)) {
-                repeat(4) { i ->
-                    Box(
-                        Modifier
-                            .size(width = 64.dp, height = 76.dp)
-                            .background(
-                                if (i == code.length) Color(0xFF31435A) else Color(0xFF1F2430),
-                                RoundedCornerShape(10.dp),
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            if (i < code.length) "●" else "",
-                            color = Color.White,
-                            fontSize = 30.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
+        }
+        // Экранная панель 0–9 + ⌫: фокус стрелками пульта, OK — цифра
+        fun press(d: String) {
+            when {
+                d == "⌫" -> { code = code.dropLast(1); wrong = false }
+                d != "OK" && code.length < 4 -> {
+                    code += d
+                    if (code.length == 4) {
+                        if (code == DEV_CODE) onOk()
+                        else { wrong = true; code = "" }
                     }
                 }
             }
-            if (wrong) {
-                Text(
-                    "Неверный код",
-                    color = Color(0xFFE57373),
-                    fontSize = 15.sp,
-                    modifier = Modifier.padding(top = 16.dp),
-                )
-            }
-            Button(onClick = onClose, modifier = Modifier.padding(top = 28.dp)) { Text("← Отмена") }
         }
+        val digits = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "OK")
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(top = 20.dp),
+        ) {
+            for (row in digits.chunked(3)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 10.dp)) {
+                    for (d in row) {
+                        androidx.tv.material3.Surface(
+                            onClick = { press(d) },
+                            shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+                            colors = ClickableSurfaceDefaults.colors(
+                                containerColor = Color(0xFF1F2430),
+                                contentColor = Color.White,
+                                focusedContainerColor = Color(0xB3FFFFFF),
+                                focusedContentColor = Color(0xFF0E1116),
+                                pressedContainerColor = Color(0xFF273548),
+                                pressedContentColor = Color.White,
+                            ),
+                        ) {
+                            Text(
+                                d,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 22.dp, vertical = 12.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        Button(onClick = onClose, modifier = Modifier.padding(top = 24.dp)) { Text("← Отмена") }
     }
 }
