@@ -36,6 +36,15 @@ data class Episode(
                     if (ep in 1..99) return m.groupValues[1].toInt() to ep
                 }
             }
+            // Сезон только в имени ПАПКИ — как в Lampa (EpisodeParser,
+            // folder_regexps): «Титаны/Season 5/01.mkv», «/5 сезон/06.mkv».
+            // Без этого такие паки считались первым сезоном.
+            folderSeason(name)?.let { season ->
+                Regex("""^0?(\d{1,3})(\D|$)""").find(n)?.let { e ->
+                    val ep = e.groupValues[1].toInt()
+                    if (ep in 1..99) return season to ep
+                }
+            }
             Regex("""[._ -]e(\d{1,3})(\D|$)""", RegexOption.IGNORE_CASE).find(n)?.let {
                 return 1 to it.groupValues[1].toInt()
             }
@@ -44,6 +53,23 @@ data class Episode(
             Regex("""^0(\d)(\D|$)""").find(n)?.let {
                 return 1 to it.groupValues[1].toInt()
             }
+            return null
+        }
+
+        /**
+         * Сезон из имени папки («Season 5», «5 сезон», «S05»). null — нет метки.
+         * Проверенное решение Lampa: в паках сезон часто указан только на
+         * папке, а файлы называются «01. Серия.mkv».
+         */
+        fun folderSeason(name: String): Int? {
+            val folder = name.substringBeforeLast('/', "").substringAfterLast('/')
+            if (folder.isBlank()) return null
+            Regex("""(?:season|сезон)\s*(\d{1,2})""", RegexOption.IGNORE_CASE)
+                .find(folder)?.let { return it.groupValues[1].toInt() }
+            Regex("""(\d{1,2})\s*(?:season|сезон)""", RegexOption.IGNORE_CASE)
+                .find(folder)?.let { return it.groupValues[1].toInt() }
+            Regex("""\bs(\d{1,2})\b""", RegexOption.IGNORE_CASE)
+                .find(folder)?.let { return it.groupValues[1].toInt() }
             return null
         }
 
@@ -63,7 +89,8 @@ data class Episode(
             Regex("""(\d{1,2})x(\d{1,3})""", RegexOption.IGNORE_CASE).find(n)?.let {
                 return it.groupValues[1].toInt()
             }
-            return null
+            // Папка: «Season 5/», «5 сезон/», «S05/»
+            return folderSeason(name)
         }
 
         /**

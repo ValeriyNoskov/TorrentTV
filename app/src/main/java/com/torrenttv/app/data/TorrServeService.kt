@@ -18,6 +18,13 @@ import java.util.concurrent.TimeUnit
  */
 object TorrServeService {
 
+    /** Кэш карты кусков /cache: hash + время + завершённые куски. */
+    private val cacheLock = Any()
+    private var cacheAt = 0L
+    private var cacheHash = ""
+    private var cacheDone: HashSet<Int>? = null
+    private var cachePlen = 0L
+
     /** Одновременно не больше 2 preload-соединений — иначе TorrServe захлёбывается. */
     private val preloadSlots = java.util.concurrent.Semaphore(2)
 
@@ -106,9 +113,9 @@ object TorrServeService {
         }
     }
 
-    private fun postJson(host: String, body: String): String? {
+    private fun postJson(host: String, body: String, path: String = "/torrents"): String? {
         val req = Request.Builder()
-            .url("$host/torrents")
+            .url("$host$path")
             .post(body.toRequestBody("application/json".toMediaType()))
             .build()
         return runCatching {
@@ -329,7 +336,10 @@ object TorrServeService {
         while (System.currentTimeMillis() < deadline) {
             Thread.sleep(1500)
             val t = get(host, hash) ?: continue
-            val pb = t.preloadedBytes
+            // Прогресс именно этого файла (карта кусков /cache), а не всего
+            // торрента: иначе в паке серий «буфер есть», а серия пустая
+            val exact = runCatching { fileCachedBytes(host, hash, file, t.files) }.getOrNull()
+            val pb = exact ?: t.preloadedBytes
             onStatus("Буферизация TorrServe… ${pb / 1024 / 1024} МБ из ~${threshold / 1024 / 1024}")
             // Детальный лог прогресса раз в ~7 с: качается ли файл вообще,
             // сколько пиров — по нему отличаем «медленно» от «неоткуда»
@@ -345,12 +355,12 @@ object TorrServeService {
                 lastLogAt = now
             }
             if (pb >= threshold) {
-                // ВАЖНО: preloaded_bytes — это прогресс ВСЕГО торрента, а не
-                // файла (в раздаче на 12 серий 100 МБ «общего» прогресса не
-                // значит, что нужная серия скачана). Раньше здесь писалось
-                // «файл уже скачан — мгновенно» и это было ложью в логе
-                // (v0.9.23: 101 МБ ≥ 32 МБ у нескачанного файла).
-                return true
+                // pb — байты ИМЕННО этого файла (из /cache). Если сервер не
+                // отдал карту кусков — это общий прогресс торрента, и тогда
+                // порог не гарантирует, что нужная серия есть (v0.9.23: 101 МБ
+                // «общего» у пустой серии). Поэтому без точных данных требуем
+                // двойной порог — так «тёплый» пак не пускает на пустой файл.
+                if (exact != null || pb >= threshold * 2) return true
             }
             firstCheck = false
             if (thresholdBytes == null) {
@@ -398,6 +408,69 @@ object TorrServeService {
             listOf(".mp4", ".mkv", ".avi", ".ts", ".m2ts", ".mov", ".webm", ".m4v", ".vob", ".mpg", ".flv", ".wmv").any { n.endsWith(it) }
         }
         return (video.ifEmpty { t.files }).maxByOrNull { it.length }
+    }
+
+    /**
+     * Сколько байт НУЖНОГО файла уже в кеше TorrServe.
+     *
+     * `/torrents` отдаёт preloaded_bytes по всему торренту: в паке из 6 серий
+     * «300 МБ буфера» могут быть в другой серии, и плеер стартовал на пустом
+     * файле (0 байт → вечная буферизация). `/cache` отдаёт карту кусков
+     * (Pieces: Id → Completed, как в клиенте TorrServe/Lampa) — считаем только
+     * куски, попадающие в диапазон файла. Смещение = сумма длин предыдущих
+     * файлов в порядке id. null — сервер не ответил (тогда общий счётчик).
+     */
+    fun fileCachedBytes(host: String, hash: String, file: TSFile, allFiles: List<TSFile>): Long? {
+        // Карта кусков — тяжёлый ответ (тысячи кусков), а спрашиваем каждые
+        // 1.5 с на каждом preload. Кэш на 3 с: прогресс всё равно заметен
+        // только по кускам (4 МБ).
+        val now0 = System.currentTimeMillis()
+        var done: HashSet<Int>? = null
+        var plen = 0L
+        synchronized(cacheLock) {
+            if (cacheHash == hash && now0 - cacheAt < 3000) {
+                done = cacheDone
+                plen = cachePlen
+            }
+        }
+        if (done == null || plen <= 0) {
+            val body = JSONObject().put("action", "get").put("hash", hash).toString()
+            val resp = postJson(host, body, path = "/cache") ?: return null
+            val o = runCatching { JSONObject(resp) }.getOrNull() ?: return null
+            val pieces = o.optJSONObject("Pieces") ?: return null
+            plen = o.optLong("PiecesLength", 4L * 1024 * 1024).let { if (it > 0) it else 4L * 1024 * 1024 }
+            val set = HashSet<Int>()
+            val keys = pieces.keys()
+            while (keys.hasNext()) {
+                val k = keys.next()
+                val p = pieces.optJSONObject(k) ?: continue
+                if (p.optBoolean("Completed", false)) {
+                    set += p.optInt("Id", k.toIntOrNull() ?: -1)
+                }
+            }
+            synchronized(cacheLock) {
+                cacheHash = hash
+                cacheAt = now0
+                cacheDone = set
+                cachePlen = plen
+            }
+            done = set
+        }
+        val ordered = allFiles.sortedBy { it.id }
+        var offset = 0L
+        for (f in ordered) {
+            val len = if (f.length > 0) f.length else 0L
+            if (f.id == file.id) {
+                if (len <= 0) return 0
+                val first = (offset / plen).toInt()
+                val last = ((offset + len - 1) / plen).toInt()
+                var bytes = 0L
+                for (p in first..last) if (p in done) bytes += plen
+                return minOf(bytes, len)
+            }
+            offset += len
+        }
+        return null
     }
 
     fun streamUrl(host: String, hash: String, file: TSFile): String {

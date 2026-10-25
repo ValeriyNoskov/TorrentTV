@@ -60,6 +60,25 @@ class EpisodesTest {
     }
 
     @Test
+    fun `season from folder name like Lampa`() {
+        // Проверенное из Lampa (EpisodeParser, folder_regexps): в паках сезон
+        // указан только на папке, файлы — «01. Серия.mkv»
+        assertEquals(5, Episode.folderSeason("/t/Season 5/01. Серия.mkv"))
+        assertEquals(5, Episode.folderSeason("/t/Титаны/5 сезон/06.mkv"))
+        assertEquals(5, Episode.folderSeason("/t/Titans.S05.2026/06. Титаны.mkv"))
+        assertEquals(null, Episode.folderSeason("/t/Титаны.S05.2026.mkv"))
+        assertEquals(null, Episode.folderSeason("/t/2026 Фильм WEB-DL.mkv"))
+
+        assertEquals(5 to 1, Episode.fileNumbers("/t/Season 5/01. Серия.mkv"))
+        assertEquals(5 to 6, Episode.fileNumbers("/t/Титаны/5 сезон/06.mkv"))
+        assertEquals(5, Episode.fileSeasonInName("/t/Season 5/01. Серия.mkv"))
+
+        // Матчинг серии по папке: S05E06 — только шестой файл
+        assertTrue(Episode.fileMatches("/t/Season 5/06.mkv", 5, 6))
+        assertFalse(Episode.fileMatches("/t/Season 5/03.mkv", 5, 6))
+    }
+
+    @Test
     fun `episode code and source suffix`() {
         val ep = Episode(season = 1, episode = 5)
         assertEquals("S01E05", ep.code)

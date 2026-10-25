@@ -166,10 +166,35 @@ fun PlayerScreen(
                 if (startIndex >= 0) listOf(magnet)
                 else (listOf(magnet) + store.savedMagnets(item)).distinct()
 
-            // Разведка СРАЗУ (а не после неудачи): спрашиваем у TorrServe, сколько
-            // каждой раздачи уже скачано. Отбор: раздачи, где ЕСТЬ нужная серия,
-            // идут первыми (иначе «тёплая» раздача другого сезона — как S01 у
-            // Титанов — выигрывала разведку и подменяла серию).
+            // Отбор кандидатов БЕЗ перегруза. Раньше здесь добавлялись ВСЕ
+            // 5-6 раздач сразу (лог v0.9.23: 20 add за минуту) — TorrServe
+            // захлёбывался, скорость падала до 30 КБ/с. Теперь:
+            //   1) сортируем по названию магнита (сезон/серия в dn) — без сети;
+            //   2) добавляем по одной, пока не наберём 2 с нужной серией;
+            //   3) раздачи без серии не трогаем.
+            fun magnetHint(m: String): Int {
+                val ep = episode ?: return 0
+                val dn = runCatching {
+                    java.net.URLDecoder.decode(
+                        Regex("[&?]dn=([^&]*)").find(m)?.groupValues?.get(1) ?: "", "UTF-8",
+                    )
+                }.getOrDefault("")
+                var score = 0
+                if (ep.season > 0) {
+                    val s = Regex(
+                        "(?i)(s0?" + ep.season + "|" + ep.season + "x|" + ep.season + "\\s*сезон)",
+                    )
+                    if (s.containsMatchIn(dn)) score += 2
+                }
+                if (ep.episode > 0) {
+                    val e = Regex(
+                        "(?i)(e0?" + ep.episode + "|" + ep.season + "x0?" + ep.episode + ")",
+                    )
+                    if (e.containsMatchIn(dn)) score += 1
+                }
+                return score
+            }
+
             fun hasEpisode(t: com.torrenttv.app.data.TorrServeService.TSTorrent): Boolean {
                 val ep = episode ?: return true
                 if (ep.episode <= 0) return true
@@ -179,38 +204,36 @@ fun PlayerScreen(
                 }
             }
 
-            val probed: List<Pair<String, com.torrenttv.app.data.TorrServeService.TSTorrent?>> =
-                candidates.map { m ->
-                    val t = withContext(Dispatchers.IO) {
-                        runCatching {
-                            com.torrenttv.app.data.TorrServeService.addMagnet(tsHost, m, item.title) { }
-                        }.getOrNull()
-                    }
-                    val mb = t?.preloadedBytes ?: -1L
-                    com.torrenttv.app.data.AppLog.log(
-                        "player",
-                        "разведка: ${m.take(60)}… → ${if (mb >= 0) "скачано ${mb / 1024 / 1024} МБ" else "нет данных"}" +
-                            (if (t != null && episode != null && !hasEpisode(t)) ", нужной серии НЕТ" else ""),
-                    )
-                    m to t
+            val ordered = candidates.sortedByDescending { magnetHint(it) }
+            val probed = mutableListOf<Pair<String, com.torrenttv.app.data.TorrServeService.TSTorrent>>()
+            val rejected = mutableListOf<String>()
+            for (m in ordered) {
+                if (probed.size >= 2) break
+                val t = withContext(Dispatchers.IO) {
+                    runCatching {
+                        com.torrenttv.app.data.TorrServeService.addMagnet(tsHost, m, item.title) { }
+                    }.getOrNull()
                 }
-            // Подходящие по серии — в начало; внутри группы «теплее» выше
-            val ranked = probed
-                .sortedWith(
-                    compareByDescending<Pair<String, com.torrenttv.app.data.TorrServeService.TSTorrent?>> {
-                        it.second?.let { t -> hasEpisode(t) } == true
-                    }.thenByDescending { it.second?.preloadedBytes ?: -1L },
+                if (t == null) {
+                    com.torrenttv.app.data.AppLog.log("player", "разведка: ${m.take(40)}… → нет данных")
+                    continue
+                }
+                val ok = hasEpisode(t)
+                com.torrenttv.app.data.AppLog.log(
+                    "player",
+                    "разведка: ${m.take(40)}… → скачано ${t.preloadedBytes / 1024 / 1024} МБ, " +
+                        "пиров ${t.peers}, файлов ${t.files.size}" +
+                        if (episode != null) (if (ok) ", серия ЕСТЬ" else ", серии НЕТ — пропускаю") else "",
                 )
-                .map { it.first }
-            // Раздачи, где нужной серии нет, в гонке не участвуют вовсе —
-            // иначе проигрыш подменяется чужой серией того же номера
+                if (ok || episode == null) probed += m to t else rejected += m
+            }
             val episodeOk = probed
-                .filter { it.second?.let { t -> hasEpisode(t) } == true }
-                .sortedByDescending { it.second?.preloadedBytes ?: -1L }
+                .sortedByDescending { it.second.preloadedBytes }
                 .map { it.first }
+            val ranked = episodeOk.ifEmpty { ordered }
             com.torrenttv.app.data.AppLog.log(
                 "player",
-                "разведка раздач: ${candidates.size} шт, с нужной серией: ${episodeOk.size}, " +
+                "отбор раздач: проверено ${probed.size + rejected.size}, подходит ${probed.size}, " +
                     "стартуем с «${ranked.firstOrNull()?.take(50) ?: "—"}»",
             )
             // Выбор файла в раздаче.
@@ -393,17 +416,23 @@ fun PlayerScreen(
                 return true
             }
 
-            // Волна 1: гонка сохранённых раздач. Если известна серия — только
-            // раздачи, где она есть (иначе подмены серии не избежать).
-            val pool = if (episodeOk.isNotEmpty()) episodeOk else ranked
-            val race = pool.take(if (episodeOk.isNotEmpty()) 2 else 3)
-            status = if (race.size > 1) "Запускаю раздачи наперегонки…" else "Подключаюсь к раздаче…"
-            val winner1 = raceWinner(race, seconds = 120)
-            com.torrenttv.app.data.AppLog.log(
-                "player",
-                "гонка сохранённых раздач: ${race.size} шт, победила ${winner1?.take(40) ?: "никакая"}",
-            )
-            if (winner1 != null && playTorrent(winner1)) return@LaunchedEffect
+            // Волна 1: запуск сохранённых раздач. Если известна серия —
+            // ТОЛЬКО раздачи с ней (иначе подмена серии), гонка максимум из 2.
+            val race = if (episode != null) episodeOk.take(2) else ranked.take(2)
+            if (race.isNotEmpty()) {
+                status = if (race.size > 1) "Запускаю раздачи наперегонки…" else "Подключаюсь к раздаче…"
+                val winner1 = raceWinner(race, seconds = 120)
+                com.torrenttv.app.data.AppLog.log(
+                    "player",
+                    "гонка сохранённых раздач: ${race.size} шт, победила ${winner1?.take(40) ?: "никакая"}",
+                )
+                if (winner1 != null && playTorrent(winner1)) return@LaunchedEffect
+            } else {
+                com.torrenttv.app.data.AppLog.log(
+                    "player",
+                    "ни в одной сохранённой раздаче нет нужной серии — ищу живую",
+                )
+            }
 
             // Волна 2: ни одна сохранённая не качается — ищем свежие раздачи сами.
             // Универсальное решение «не хочу каждый сериал разбирать»: и «Полдень»,
