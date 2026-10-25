@@ -29,6 +29,7 @@ import com.torrenttv.app.data.MediaItem
 import com.torrenttv.app.ui.CatalogScreen
 import com.torrenttv.app.ui.DetailsScreen
 import com.torrenttv.app.ui.EpisodesScreen
+import com.torrenttv.app.ui.ServerWebScreen
 import com.torrenttv.app.ui.TrailerScreen
 import com.torrenttv.app.ui.TorrentsScreen
 import com.torrenttv.app.ui.FavoritesScreen
@@ -77,6 +78,8 @@ sealed interface Screen {
 
     /** Живое ТВ: канал и весь список (для переключения ←/→ в плеере). */
     data class Live(val channel: com.torrenttv.app.data.IptvChannel, val channels: List<com.torrenttv.app.data.IptvChannel>) : Screen
+    /** Встроенный браузер веб-интерфейса сервера (управление пультом). */
+    data class WebServer(val url: String, val title: String) : Screen
     data class TorrentResults(
         val item: MediaItem,
         val query: String,
@@ -253,6 +256,7 @@ private fun App() {
             is Screen.TorrentFiles -> "Состав раздачи «${s.item.title}»"
             is Screen.TorrentResults -> "Результаты «${s.item.title}»"
             is Screen.Live -> "ТВ «${s.channel.name}»"
+            is Screen.WebServer -> "Веб-интерфейс «${s.title}»"
         }
         com.torrenttv.app.data.AppLog.log("nav", "открыл: $name")
     }
@@ -349,6 +353,10 @@ private fun App() {
                 )
                 Screen.Settings -> SettingsScreen(
                     onBack = { screen = Screen.Home },
+                    onOpenWebServer = { url, title ->
+                        com.torrenttv.app.data.AppLog.log("ui", "нажал: «Веб-интерфейс сервера» $url")
+                        screen = Screen.WebServer(url, title)
+                    },
                 )
                 else -> Unit
                 }
@@ -438,6 +446,12 @@ private fun App() {
                 channels = s.channels,
                 onBack = { screen = lastTab; menuFocusTick++ },
                 onSwitch = { ch -> screen = Screen.Live(ch, s.channels) },
+            )
+
+            is Screen.WebServer -> ServerWebScreen(
+                url = s.url,
+                title = s.title,
+                onBack = { screen = Screen.Settings },
             )
 
             is Screen.TorrentSearch -> TorrentSearchScreen(

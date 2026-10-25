@@ -68,7 +68,7 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
     var genres by remember { mutableStateOf(savedFilters.genres) }      // slug'и категорий
     var countries by remember { mutableStateOf(savedFilters.countries) }
     var years by remember { mutableStateOf(savedFilters.years) }        // «2024», «2010-е»
-    var showFilters by remember { mutableStateOf(false) }
+    var openFilter by remember { mutableStateOf<String?>(null) }        // открытый диалог фильтра
 
 
     androidx.compose.runtime.SideEffect {
@@ -361,10 +361,27 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
                 Spacer(Modifier.width(6.dp))
                 ActionPill(text = "🔥 Популярное", active = sort == "popular") { changeSort("popular") }
                 Spacer(Modifier.width(10.dp))
+                // Фильтры «как во вкладках Фильмы/Сериалы»: кнопки Жанр · Тип ·
+                // Страна · Год, каждая открывает общую модалку со списком и поиском
                 ActionPill(
-                    text = "⚙ Фильтры" + if (filters.count > 0) " · ${filters.count}" else "",
-                    active = showFilters || filters.count > 0,
-                ) { showFilters = true }
+                    text = "🎭 Жанр" + if (genres.isNotEmpty()) " · ${genres.size}" else "",
+                    active = genres.isNotEmpty(),
+                ) { openFilter = "genre" }
+                Spacer(Modifier.width(6.dp))
+                ActionPill(
+                    text = "🎬 Тип" + if (types.isNotEmpty()) " · ${types.size}" else "",
+                    active = types.isNotEmpty(),
+                ) { openFilter = "type" }
+                Spacer(Modifier.width(6.dp))
+                ActionPill(
+                    text = "🌍 Страна" + if (countries.isNotEmpty()) " · ${countries.size}" else "",
+                    active = countries.isNotEmpty(),
+                ) { openFilter = "country" }
+                Spacer(Modifier.width(6.dp))
+                ActionPill(
+                    text = "📅 Год" + if (years.isNotEmpty()) " · ${years.size}" else "",
+                    active = years.isNotEmpty(),
+                ) { openFilter = "year" }
                 Spacer(Modifier.width(8.dp))
                 // Выбранные фильтры — чипами, ✕ снимает значение
                 for (t in types.toList()) {
@@ -532,19 +549,45 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
             }
         }
 
-        // ---------- Оверлей фильтров ----------
-        if (showFilters) {
-            FiltersOverlay(
-                types = types,
-                genres = genres,
-                countries = countries,
-                years = years,
-                countryChoices = countryChoices,
-                onTypes = { types = it },
-                onGenres = { genres = it },
-                onCountries = { countries = it },
-                onYears = { years = it },
-                onClose = { showFilters = false },
+        // ---------- Диалоги фильтров (общие с «Фильмами», со списком и поиском) ----------
+        openFilter?.let { which ->
+            val opts = when (which) {
+                "genre" -> RutrackerrCatalog.genreList().map { (slug, name) ->
+                    com.torrenttv.app.ui.FilterOption("g:$slug", name, slug in genres)
+                }
+                "type" -> listOf("movie", "tv", "show").map { t ->
+                    com.torrenttv.app.ui.FilterOption("t:$t", typeName(t), t in types)
+                }
+                "country" -> (MAIN_COUNTRIES + countryChoices.filter { c -> MAIN_COUNTRIES.none { it.equals(c, true) } })
+                    .map { c -> com.torrenttv.app.ui.FilterOption("c:$c", c, countries.any { it.equals(c, true) }) }
+                else -> yearChoices().map { y ->
+                    com.torrenttv.app.ui.FilterOption("y:$y", y, y in years)
+                }
+            }
+            com.torrenttv.app.ui.FilterListDialog(
+                title = when (which) {
+                    "genre" -> "Жанр"; "type" -> "Тип"; "country" -> "Страна"; else -> "Год"
+                },
+                options = opts,
+                onToggle = { opt ->
+                    val id = opt.id.substringAfter(':')
+                    when (which) {
+                        "genre" -> genres = if (id in genres) genres - id else genres + id
+                        "type" -> types = if (id in types) types - id else types + id
+                        "country" -> countries = if (countries.any { it.equals(id, true) })
+                            countries.filterNot { it.equals(id, true) }.toSet() else countries + id
+                        else -> years = if (id in years) years - id else years + id
+                    }
+                },
+                onReset = {
+                    when (which) {
+                        "genre" -> genres = emptySet()
+                        "type" -> types = emptySet()
+                        "country" -> countries = emptySet()
+                        else -> years = emptySet()
+                    }
+                },
+                onClose = { openFilter = null },
             )
         }
     }
@@ -615,151 +658,10 @@ private fun ChipX(text: String, onRemove: () -> Unit) {
     }
 }
 
-/**
- * Оверлей фильтров: разделы слева-сверху, выбранное — галочками,
- * мультивыбор в каждом разделе. Пусто = «любой».
- */
-@Composable
-private fun FiltersOverlay(
-    types: Set<String>,
-    genres: Set<String>,
-    countries: Set<String>,
-    years: Set<String>,
-    countryChoices: List<String>,
-    onTypes: (Set<String>) -> Unit,
-    onGenres: (Set<String>) -> Unit,
-    onCountries: (Set<String>) -> Unit,
-    onYears: (Set<String>) -> Unit,
-    onClose: () -> Unit,
-) {
-    val total = types.size + genres.size + countries.size + years.size
-    // Фокус внутрь модалки СРАЗУ и выход по «Назад»: без этого на ТВ фокус
-    // остаётся на кнопках заднего экрана («Поступившие»/«Популярное») и
-    // DPAD переключает их под оверлеем — в фильтры «не попасть»
-    val applyFocus = remember { androidx.compose.ui.focus.FocusRequester() }
-    androidx.activity.compose.BackHandler { onClose() }
-    LaunchedEffect(Unit) { runCatching { applyFocus.requestFocus() } }
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(Color(0xF20E1116))
-            .padding(28.dp),
-    ) {
-        Column(Modifier.fillMaxSize()) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("⚙ Фильтры", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.width(14.dp))
-                Text(
-                    if (total == 0) "ничего не выбрано — показываю всё" else "выбрано: $total",
-                    color = Color.White.copy(alpha = 0.5f),
-                    fontSize = 14.sp,
-                )
-                Spacer(Modifier.weight(1f))
-                ActionPill(text = "↺ Сбросить", active = false) {
-                    onTypes(emptySet()); onGenres(emptySet())
-                    onCountries(emptySet()); onYears(emptySet())
-                }
-                Spacer(Modifier.width(8.dp))
-                ActionPill(
-                    text = "✓ Применить",
-                    active = true,
-                    modifier = Modifier.focusRequester(applyFocus),
-                ) { onClose() }
-                Spacer(Modifier.width(8.dp))
-                ActionPill(text = "✕ Закрыть", active = false) { onClose() }
-            }
-            Text(
-                "Галочками можно выбрать несколько значений в каждом разделе. Пусто = «любой».",
-                color = Color.White.copy(alpha = 0.45f),
-                fontSize = 13.sp,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-            LazyColumn(
-                contentPadding = PaddingValues(vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                item {
-                    FilterSection("Тип") {
-                        MultiChip("Фильмы", types.contains("movie")) { onTypes(toggle(types, "movie")) }
-                        MultiChip("Сериалы", types.contains("tv")) { onTypes(toggle(types, "tv")) }
-                        MultiChip("Шоу", types.contains("show")) { onTypes(toggle(types, "show")) }
-                    }
-                }
-                item {
-                    FilterSection("Жанры") {
-                        for ((slug, name) in RutrackerrCatalog.genreList()) {
-                            MultiChip(name, genres.contains(slug)) { onGenres(toggle(genres, slug)) }
-                        }
-                    }
-                }
-                item {
-                    FilterSection("Страны") {
-                        for (c in countryChoices) {
-                            MultiChip(c, countries.contains(c)) { onCountries(toggle(countries, c)) }
-                        }
-                    }
-                }
-                item {
-                    FilterSection("Годы") {
-                        for (y in yearChoices()) {
-                            MultiChip(y, years.contains(y)) { onYears(toggle(years, y)) }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-private fun toggle(set: Set<String>, value: String): Set<String> =
-    if (set.contains(value)) set - value else set + value
-
 private fun yearChoices(): List<String> {
     val years = (2026 downTo 1990).map { it.toString() }
     val decades = listOf("2020-е", "2010-е", "2000-е", "1990-е")
     return decades + years
-}
-
-/** Раздел фильтров: заголовок и строки чипов (FlowRow переносит по ширине). */
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
-@Composable
-private fun FilterSection(title: String, content: @Composable () -> Unit) {
-    Column {
-        Text(
-            title.uppercase(),
-            color = Color(0xFF8B95A7),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
-        )
-        androidx.compose.foundation.layout.FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.fillMaxWidth(),
-        ) { content() }
-    }
-}
-
-/** Чип с галочкой (мультивыбор). */
-@Composable
-private fun MultiChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    androidx.tv.material3.Surface(
-        onClick = onClick,
-        shape = clickableSurfaceShape(androidx.compose.foundation.shape.RoundedCornerShape(9.dp)),
-        colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) Color(0xFF1E3A4D) else Color(0xFF1F2430),
-            contentColor = if (selected) Color(0xFFA9D7F5) else Color.White.copy(alpha = 0.85f),
-            focusedContainerColor = Color(0xFFA9D7F5),
-            focusedContentColor = Color(0xFF0E1116),
-        ),
-    ) {
-        Text(
-            text = (if (selected) "✓ " else "☐ ") + label,
-            fontSize = 13.sp,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-        )
-    }
 }
 
 /** Сколько страниц каталога грузим сразу: 1 страница трекера = 10 карточек. */

@@ -96,7 +96,7 @@ private val SECTIONS = USER_SECTIONS + DEV_SECTIONS
 private const val DEV_CODE = "0301"
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
+fun SettingsScreen(onBack: () -> Unit, onOpenWebServer: (String, String) -> Unit = { _, _ -> }) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
 
@@ -688,11 +688,8 @@ fun SettingsScreen(onBack: () -> Unit) {
                             value = store.torrServeHost(),
                             valueOk = true,
                         ) { openEdit("ts", store.torrServeHost(), "http://127.0.0.1:8090") }
-                        // Веб-интерфейс TorrServe (список раздач, место, удаление):
-                        // на ТВ с браузером — открыть, без браузера — подсказка,
-                        // что адрес открывается с телефона/компа
+                        // Веб-интерфейс TorrServe: встроенный браузер с пультом
                         var webTip by remember { mutableStateOf<String?>(null) }
-                        val ctx = androidx.compose.ui.platform.LocalContext.current
                         SectionItem(
                             title = "🌐 Веб-интерфейс сервера (${store.torrServeHost()})",
                             selected = false,
@@ -701,21 +698,16 @@ fun SettingsScreen(onBack: () -> Unit) {
                             if (host.isBlank()) {
                                 webTip = "адрес сервера не задан"
                             } else {
-                                com.torrenttv.app.data.AppLog.log("ui", "нажал: «Веб-интерфейс сервера» $host")
-                                val ok = runCatching {
-                                    ctx.startActivity(
-                                        android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(host))
-                                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
-                                    )
-                                }.isSuccess
-                                webTip = if (ok) null
-                                else "браузера на ТВ нет — откройте $host с телефона или компьютера"
+                                com.torrenttv.app.data.AppLog.log("ui", "нажал: «Веб-интерфейс сервера» $host — встроенный браузер")
+                                // Встроенный WebView с управлением пультом — без
+                                // поиска браузера на устройстве
+                                onOpenWebServer(host, "Сервер")
                             }
                         }
                         webTip?.let { SettingsNote("🌐 $it") }
                         SettingsNote(
                             "Веб-интерфейс TorrServe: все раздачи на сервере, сколько скачано, " +
-                                "скорость, удаление вручную. Открывается с телефона/компа в той же сети."
+                                "скорость, удаление вручную. Открывается внутри приложения, управление пультом."
                         )
                         // Очистка старого кеша: сносим с сервера раздачи, которых
                         // нет в избранном (разовые просмотры, старые проверки).
