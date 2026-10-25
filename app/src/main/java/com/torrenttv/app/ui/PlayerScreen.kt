@@ -31,6 +31,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -74,8 +75,9 @@ fun PlayerScreen(
     /** Запуск конкретного файла раздачи (из экрана файлов). */
     startIndex: Int = -1,
 ) {
-    // Экран не гаснет, пока играет фильм
-    KeepScreenOn()
+    // Экран не гаснет, пока играет фильм; в аудио-режиме — можно гаснуть
+    var audioMode by remember { mutableStateOf(false) }
+    KeepScreenOn(enabled = !audioMode)
 
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
@@ -458,6 +460,8 @@ fun PlayerScreen(
             externalUrl = torrLink,
             skipSegs = skipSegs,
             onSearch = onSearch,
+            audioMode = audioMode,
+            onAudioMode = { audioMode = it },
 )
     } else {
         // Экран буферизации
@@ -529,6 +533,9 @@ private fun VideoPlayer(
     skipSegs: List<com.torrenttv.app.data.SkipSeg> = emptyList(),
     /** 🔍 Поиск — уйти во вкладку поиска. */
     onSearch: () -> Unit = {},
+    /** 🎧 Аудио-режим: видео не рисуется, экран может гаснуть (state в PlayerScreen). */
+    audioMode: Boolean = false,
+    onAudioMode: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
     val sourceKey = item.storeKey + (episode?.sourceSuffix ?: "")
@@ -788,6 +795,8 @@ private fun VideoPlayer(
     // ---------- MX: блокировка экрана от случайных нажатий ----------
     var locked by remember { mutableStateOf(false) }
 
+    // 🎧 Аудио-режим живёт в PlayerScreen (там KeepScreenOn); сюда — параметром
+
     // ---------- MX: масштаб картинки (Вписать / Растянуть / Заполнить) ----------
     var pv by remember { mutableStateOf<androidx.media3.ui.PlayerView?>(null) }
     val scales = listOf(
@@ -912,7 +921,7 @@ private fun VideoPlayer(
             .fillMaxSize()
             .background(Color.Black),
     ) {
-        AndroidView(
+        if (!audioMode) AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
                     this.player = player
@@ -935,6 +944,59 @@ private fun VideoPlayer(
             },
             modifier = Modifier.fillMaxSize(),
         )
+
+        // 🎧 Полноэкранная заглушка аудио-режима: название + возврат видео
+        if (audioMode) {
+            val backFocusAudio = remember { androidx.compose.ui.focus.FocusRequester() }
+            LaunchedEffect(Unit) { runCatching { backFocusAudio.requestFocus() } }
+            androidx.tv.material3.Surface(
+                onClick = { onAudioMode(false); seekInfo = "🎬 Видео включено"; panelTick++ },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .focusRequester(backFocusAudio),
+                shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(0.dp)),
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = Color(0xF20A0E14),
+                    contentColor = Color.White,
+                    focusedContainerColor = Color(0xF20A0E14),
+                    focusedContentColor = Color.White,
+                ),
+            ) {
+                Column(
+                    Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text("🎧", fontSize = 64.sp)
+                    Spacer(Modifier.height(18.dp))
+                    Text(
+                        item.title,
+                        color = Color.White,
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 60.dp),
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "Экран ТВ может гаснуть — звук продолжится\nOK — вернуть видео",
+                        color = Color.White.copy(alpha = 0.55f),
+                        fontSize = 16.sp,
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(26.dp))
+                    Text(
+                        "↩ Показать видео",
+                        color = Color(0xFF062B10),
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .background(Color(0xFF7FB84F), RoundedCornerShape(10.dp))
+                            .padding(horizontal = 20.dp, vertical = 10.dp),
+                    )
+                }
+            }
+        }
 
         // Ошибка воспроизведения: сверху, чтобы не пересекаться с тостами центра
         if (errorMsg.isNotEmpty()) {            androidx.tv.material3.Text(
@@ -1299,6 +1361,18 @@ private fun VideoPlayer(
                             focusedContentColor = Color.Black,
                         ),
                     ) { Text("⛶ ${scales[scaleIdx].first}", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
+                    Spacer(Modifier.width(8.dp))
+                    // 🎧 Аудио-режим: звук без видео, экран ТВ может гаснуть
+                    androidx.tv.material3.Surface(
+                        onClick = { onAudioMode(true); seekInfo = "🎧 Аудио-режим"; panelTick++ },
+                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF1F2430),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContentColor = Color.Black,
+                        ),
+                    ) { Text("🎧", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) }
                     Spacer(Modifier.width(8.dp))
                     // 🔒 Блокировка экрана (как lock в MX): пульт мёртв, OK — разблок
                     androidx.tv.material3.Surface(

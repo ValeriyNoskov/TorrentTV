@@ -416,6 +416,25 @@ class LocalStore(context: Context) {
             JSONObject(prefs.getString("eps:" + item.storeKey, "{}") ?: "{}").getLong("at")
         }.getOrDefault(0L)
 
+    /**
+     * Бейдж «N новых серий»: сколько серий досмотрено в кеше с момента
+     * последнего открытия списка серий. Работает без сети — по кешу,
+     * который дозагрузка наполняет при открытии сериала.
+     */
+    fun newEpisodesCount(item: MediaItem): Int {
+        if (item.type != "tv") return 0
+        val cached = loadEpisodeCache(item).sumOf { it.episodes.size }
+        if (cached == 0) return 0
+        val seen = prefs.getInt("epsSeen:" + item.storeKey, 0)
+        return (cached - seen).coerceAtLeast(0)
+    }
+
+    /** Пользователь открыл список серий — новые увидел, бейдж погасить. */
+    fun markEpisodesSeen(item: MediaItem) {
+        val cached = loadEpisodeCache(item).sumOf { it.episodes.size }
+        prefs.edit().putInt("epsSeen:" + item.storeKey, cached).apply()
+    }
+
     /** Кеш сезонов из раздач (пусто — не собирали). */
     fun loadEpisodeCache(item: MediaItem): List<Season> =
         runCatching {

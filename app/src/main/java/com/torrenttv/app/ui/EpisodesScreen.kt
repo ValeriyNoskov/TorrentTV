@@ -69,6 +69,9 @@ fun EpisodesScreen(
     // Причина пустого списка («TorrServe не отвечает») — вместо немого «не найдены»
     var failReason by remember { mutableStateOf<String?>(null) }
 
+    // Список открыт — «N новых серий» пользователь увидел, бейдж погасить
+    LaunchedEffect(item.id) { store.markEpisodesSeen(item) }
+
     LaunchedEffect(item) {
         // Кеш: найденные однажды серии запоминаются — повторные открытия
         // показываются мгновенно, без поиска (жалоба: «запоминай ссылки»)

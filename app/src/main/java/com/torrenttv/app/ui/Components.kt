@@ -59,6 +59,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
 
+/**
+ * Общий LocalStore для UI-мелочей (бейджи новых серий в PosterCard) —
+ * SharedPreferences дёшевы и читаются из кеша в памяти, объект один на процесс.
+ */
+object LocalStoreShared {
+    @Volatile private var inst: LocalStore? = null
+    fun get(context: android.content.Context): LocalStore =
+        inst ?: synchronized(this) {
+            inst ?: LocalStore(context.applicationContext).also { inst = it }
+        }
+}
+
 /** Единая форма для всех состояний кликабельного Surface (tv-material 1.0.0 требует обёртку). */
 @Composable
 fun clickableSurfaceShape(shape: Shape): ClickableSurfaceShape =
@@ -78,11 +90,16 @@ fun Modifier.mouseClick(onClick: () -> Unit): Modifier =
  * Флаг снимается при уходе с экрана автоматически.
  */
 @Composable
-fun KeepScreenOn() {
+fun KeepScreenOn(enabled: Boolean = true) {
     val view = androidx.compose.ui.platform.LocalView.current
-    androidx.compose.runtime.DisposableEffect(view) {
+    androidx.compose.runtime.DisposableEffect(view, enabled) {
         val window = (view.context as? android.app.Activity)?.window
-        window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (enabled) {
+            window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            // Аудио-режим: экран ТВ может погаснуть по таймауту, звук продолжается
+            window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
         onDispose {
             window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
@@ -195,6 +212,14 @@ var cardWidthDp by mutableStateOf(170)
 @Composable
 fun PosterCard(item: MediaItem, onClick: () -> Unit) {
     val w = cardWidthDp
+    // Бейдж «N новых серий» для сериалов: LocalStore — дешёвые SharedPreferences,
+    // читаем лениво и только для type=tv (один remember на карточку).
+    val appCtx = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    val newEps = if (item.type == "tv") {
+        remember(item.id) {
+            runCatching { LocalStoreShared.get(appCtx).newEpisodesCount(item) }.getOrDefault(0)
+        }
+    } else 0
     Surface(
         onClick = onClick,
         modifier = Modifier
@@ -240,6 +265,21 @@ fun PosterCard(item: MediaItem, onClick: () -> Unit) {
                             .align(Alignment.TopStart)
                             .padding(8.dp)
                             .background(Color(0xFFF5B942), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                    )
+                }
+                // 🟢 Бейдж новых серий: «+2 сер.» — появились в кеше после
+                // последнего открытия списка серий
+                if (newEps > 0) {
+                    Text(
+                        text = "+$newEps сер.",
+                        color = Color(0xFF062B10),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp)
+                            .background(Color(0xFF7FB84F), RoundedCornerShape(8.dp))
                             .padding(horizontal = 8.dp, vertical = 3.dp),
                     )
                 }

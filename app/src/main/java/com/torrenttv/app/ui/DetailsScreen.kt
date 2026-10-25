@@ -2,6 +2,7 @@ package com.torrenttv.app.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.blur
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -109,10 +110,31 @@ fun DetailsScreen(
         }
     }
 
+    // 🖼 Fanart-фон: постер растянут на весь экран, размыт и затемнён
+    // (стиль Netflix/Kinopoisk) — карточка перестаёт «тонуть» в чёрном фоне
+    if (itemState.posterUrl.isNotBlank()) {
+        AsyncImage(
+            model = itemState.posterUrl,
+            contentDescription = null,
+            modifier = Modifier
+                .fillMaxSize()
+                .blur(28.dp),
+            contentScale = ContentScale.Crop,
+            alpha = 0.30f,
+        )
+        // Затемняющая плёнка поверх — текст читается
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color(0x990E1116)),
+        )
+    }
+
     Column(
         Modifier
             .fillMaxSize()
-            .background(Color(0xFF0E1116))
+            // Поверх fanart фон прозрачный — иначе непрозрачный Column закроет его
+            .background(if (itemState.posterUrl.isNotBlank()) Color.Transparent else Color(0xFF0E1116))
             .padding(horizontal = 24.dp, vertical = 18.dp),
     ) {
         // Вертикальная карточка: постер → кнопки → описание → «Похожее».
@@ -292,6 +314,14 @@ fun DetailsScreen(
                     )
                 }) { Text(if (fav) "★ В избранном" else "☆ В избранное") }
                 MiniButton("🔍 Раздача") { onManualSearch() }
+                // ▶ Трейлер — ищем на Rutube и играем встроенным плеером
+                MiniButton("🎬 Трейлер") {
+                    com.torrenttv.app.data.AppLog.log(
+                        "ui",
+                        "нажал: «🎬 Трейлер» «${item.title}»",
+                    )
+                    onTrailer()
+                }
                 if (inHistory) {
                     MiniButton("✕ Из просмотра") {
                         store.removeProgress(item)
