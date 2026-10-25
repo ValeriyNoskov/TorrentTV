@@ -997,7 +997,7 @@ fun SideNav(active: Screen, onTab: (Screen) -> Unit, restoreFocusTick: Int = 0) 
             )
         } else {
             Text(
-                text = "ВК",
+                text = "ВНК",
                 color = Color(0xFFF5B942),
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
@@ -1065,6 +1065,8 @@ fun SideBarButton(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
+            // В свёрнутом баре иконка — по центру кнопки, иначе прижата влево
+            horizontalArrangement = if (expanded) Arrangement.Start else Arrangement.Center,
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp, horizontal = if (expanded) 12.dp else 0.dp),
         ) {
             Text(
@@ -1111,6 +1113,7 @@ fun SideBarExitButton(expanded: Boolean = true, onFocusInBar: (Boolean) -> Unit 
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = if (expanded) Arrangement.Start else Arrangement.Center,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = if (expanded) 12.dp else 0.dp),
             ) {
                 Text(text = "⛔", fontSize = 21.sp, modifier = if (expanded) Modifier.padding(end = 10.dp) else Modifier)

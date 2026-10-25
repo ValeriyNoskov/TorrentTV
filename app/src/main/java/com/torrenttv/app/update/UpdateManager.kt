@@ -28,6 +28,9 @@ object UpdateManager {
     private val http = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
+        // Общий лимит на всю загрузку APK: без него при плохом соединении
+        // «Скачивание…» висит вечно (readTimeout — лишь пауза между байтами)
+        .callTimeout(10, TimeUnit.MINUTES)
         .build()
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -182,9 +185,27 @@ object UpdateManager {
                 http.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}")
                     val apkFile = File(context.cacheDir, "update-${info.version}.apk")
-                    response.body!!.byteStream().use { input ->
+                    val body = response.body!!
+                    val total = body.contentLength()
+                    body.byteStream().use { input ->
                         apkFile.outputStream().use { output ->
-                            input.copyTo(output, bufferSize = 64 * 1024)
+                            // Прогресс в процентах: без него «Скачивание…»
+                            // неотличимо от зависания (проверено на ТВ)
+                            val buf = ByteArray(64 * 1024)
+                            var read: Int
+                            var done = 0L
+                            var lastPct = -1
+                            while (input.read(buf).also { read = it } != -1) {
+                                output.write(buf, 0, read)
+                                done += read
+                                if (total > 0) {
+                                    val pct = (done * 100 / total).toInt()
+                                    if (pct != lastPct) {
+                                        lastPct = pct
+                                        mainHandler.post { onProgress("Скачивание v${info.version}… $pct%") }
+                                    }
+                                }
+                            }
                         }
                     }
                     mainHandler.post { onProgress("Установка v${info.version}…") }
