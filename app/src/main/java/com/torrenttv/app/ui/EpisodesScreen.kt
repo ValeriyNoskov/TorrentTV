@@ -112,8 +112,13 @@ fun EpisodesScreen(
                 // Фоновый скоуп: не отменяется уходом с экрана
                 episodeRefreshScope.launch {
                     val (found, reason) = seasonsFromTorrents(item, store, context)
-                    if (found.isNotEmpty()) {
-                        val merged = enrichWithTrakt(item, mergeSeasons(cached, found))
+                    // Trakt тоже переспрашиваем: дос-поиск видит только раздачи,
+                    // а сезон может существовать пока лишь в Trakt («Титаны» S5
+                    // выходил отдельной раздачей — до этого сезон не появлялся
+                    // вовсе, т.к. из кеша Trakt не вызывался совсем)
+                    var merged = mergeSeasons(cached, found)
+                    merged = enrichWithTrakt(item, merged) // сетевая версия: тянет недостающее из Trakt
+                    if (merged != cached) {
                         val added = merged.sumOf { it.episodes.size } - cached.sumOf { it.episodes.size }
                         store.saveEpisodeCache(item, merged)
                         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
@@ -127,7 +132,12 @@ fun EpisodesScreen(
                             }
                         }
                     } else {
-                        AppLog.log("episodes", "«${item.title}»: дос-поиск не удался${reason?.let { ": $it" } ?: ""}")
+                        // merged == cached: нет ни новых серий из раздач, ни
+                        // нового в Trakt (сеть могла просто не дать изменений)
+                        AppLog.log(
+                            "episodes",
+                            "«${item.title}»: дос-поиск без изменений${reason?.let { " (раздачи: $it)" } ?: ""}",
+                        )
                         store.saveEpisodeCache(item, cached)
                     }
                 }

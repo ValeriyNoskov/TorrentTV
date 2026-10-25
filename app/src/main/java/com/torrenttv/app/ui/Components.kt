@@ -1002,6 +1002,10 @@ fun PagedMediaRow(
                     }
                     attempts += 1
                 }
+                // 5 страниц подряд целиком отсеяны включающим фильтром — считаем
+                // полку исчерпанной. Иначе exhausted не ставится: «Загрузка…»
+                // висит вечно, а повторного requestNext никто не вызовет
+                if (attempts >= 5 && !exhausted) exhausted = true
             } finally {
                 busy.set(false)
             }
