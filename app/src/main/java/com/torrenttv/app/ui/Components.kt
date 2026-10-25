@@ -86,8 +86,24 @@ fun KeyboardSheet(
     onBackspace: () -> Unit,
     onClear: () -> Unit,
     onDismiss: () -> Unit,
+    /** Клик по чипу-подсказке: хозяин заменяет весь текст. */
+    onSuggest: (String) -> Unit = {},
 ) {
     val kbFocus = remember { FocusRequester() }
+    // Подсказки слов: история поисков + названия открытых карточек,
+    // фильтр по набранному (вхождение без учёта регистра), топ-6
+    val appCtx = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    val suggestions = remember(value) {
+        if (value.length < 2) emptyList()
+        else runCatching {
+            val st = LocalStoreShared.get(appCtx)
+            (st.recentQueries() + st.kbWords())
+                .distinct()
+                .filterNot { it.equals(value, ignoreCase = true) }
+                .filter { it.contains(value.trim(), ignoreCase = true) }
+                .take(6)
+        }.getOrDefault(emptyList())
+    }
     androidx.activity.compose.BackHandler { onDismiss() }
     Box(Modifier.fillMaxSize()) {
         // Затемнение поверх контента; клик мышью — закрыть
@@ -127,6 +143,33 @@ fun KeyboardSheet(
                         focusedContentColor = Color.Black,
                     ),
                 ) { Text(doneLabel, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 18.dp, vertical = 11.dp)) }
+            }
+            if (suggestions.isNotEmpty()) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(bottom = 6.dp),
+                ) {
+                    suggestions.forEach { word ->
+                        Surface(
+                            onClick = { onSuggest(word) },
+                            shape = clickableSurfaceShape(RoundedCornerShape(20.dp)),
+                            colors = ClickableSurfaceDefaults.colors(
+                                containerColor = Color(0xFF242B3A),
+                                contentColor = Color(0xFFE8ECF4),
+                                focusedContainerColor = Color(0xFFF5B942),
+                                focusedContentColor = Color.Black,
+                            ),
+                        ) {
+                            Text(
+                                word,
+                                fontSize = 15.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                            )
+                        }
+                    }
+                }
             }
             TvKeyboard(
                 onChar = onChar,
@@ -255,6 +298,7 @@ fun FilterPicker(
                 onBackspace = { if (filter.isNotEmpty()) filter = filter.dropLast(1) },
                 onClear = { filter = "" },
                 onDismiss = { filterOn = false },
+                onSuggest = { filter = it },
             )
         }
     }

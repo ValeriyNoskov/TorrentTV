@@ -97,6 +97,8 @@ fun DetailsScreen(
 
     LaunchedEffect(item) {
         similar = withContext(Dispatchers.IO) { MediaApi.similar(item) }
+        // Название карточки — в словарь подсказок клавиатуры
+        runCatching { store.kbAddWord(itemState.title) }
     }
 
     // Бесплатный легальный стрим: полные фильмы/серии на Rutube (открытый API)

@@ -137,6 +137,9 @@ fun PlayerScreen(
     var tsHostStr by remember { mutableStateOf<String?>(null) }
     var tsHashStr by remember { mutableStateOf<String?>(null) }
     var tsEpNum by remember { mutableStateOf(0) }
+    // Реальный сезон из имени файла («S05E03», «5 сезон») — раньше всегда 1,
+    // из-за чего позиция S05E03 писалась в ключ S01E03
+    var tsSeason by remember { mutableStateOf(0) }
     var tsShowFiles by remember { mutableStateOf(false) }
 
     // Приоритет движков: 1) TorrServe (внешний), 2) внутренний jlibtorrent
@@ -245,6 +248,8 @@ fun PlayerScreen(
                         fun epNumOf(path: String): Int =
                             Regex("[Ee](\\d{1,3})").find(path.substringAfterLast('/'))?.groupValues?.get(1)?.toIntOrNull() ?: 0
                         tsEpNum = epNumOf(file.path)
+                        tsSeason = Regex("[Ss](\\d{1,2})").find(file.path)?.groupValues?.get(1)?.toIntOrNull()
+                            ?: Regex("(\\d{1,2})\\s*[сС]езон").find(file.path)?.groupValues?.get(1)?.toIntOrNull() ?: 0
                         // Zona-стиль для TorrServe: сериал впервые — сразу список серий
                         val firstRun = episode == null && startIndex < 0 && !store.hasLastFile(item)
                         tsShowFiles = firstRun && tsFiles.size > 1
@@ -386,7 +391,12 @@ fun PlayerScreen(
     val tl = torrLink
     if (tl != null) {
         OnlinePlayerScreen(
-            link = OnlineLink(url = tl, label = "torrserve", season = if (tsEpNum > 0) 1 else 0, episode = tsEpNum),
+            link = OnlineLink(
+                url = tl,
+                label = "torrserve",
+                season = tsSeason.takeIf { it > 0 && tsEpNum > 0 } ?: 0,
+                episode = tsEpNum,
+            ),
             item = item,
             title = item.title,
             onBack = onBack,
@@ -409,6 +419,8 @@ fun PlayerScreen(
                         tsCurrent = n
                         tsEpNum = Regex("[Ee](\\d{1,3})").find(f.path.substringAfterLast('/'))
                             ?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                        tsSeason = Regex("[Ss](\\d{1,2})").find(f.path)?.groupValues?.get(1)?.toIntOrNull()
+                            ?: Regex("(\\d{1,2})\\s*[сС]езон").find(f.path)?.groupValues?.get(1)?.toIntOrNull() ?: 0
                         torrLink = com.torrenttv.app.data.TorrServeService.streamUrl(host, hash, f)
                         com.torrenttv.app.data.AppLog.log("player", "torrserve: switched to \"${f.path}\"")
                     } else {
@@ -1362,18 +1374,6 @@ private fun VideoPlayer(
                         ),
                     ) { Text("⛶ ${scales[scaleIdx].first}", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
                     Spacer(Modifier.width(8.dp))
-                    // 🎧 Аудио-режим: звук без видео, экран ТВ может гаснуть
-                    androidx.tv.material3.Surface(
-                        onClick = { onAudioMode(true); seekInfo = "🎧 Аудио-режим"; panelTick++ },
-                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Color(0xFF1F2430),
-                            contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFF5B942),
-                            focusedContentColor = Color.Black,
-                        ),
-                    ) { Text("🎧", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) }
-                    Spacer(Modifier.width(8.dp))
                     // 🔒 Блокировка экрана (как lock в MX): пульт мёртв, OK — разблок
                     androidx.tv.material3.Surface(
                         onClick = {
@@ -1403,33 +1403,6 @@ private fun VideoPlayer(
                         ) { Text(if (showFiles) "✕ Серии" else "☰ Серии (${files.size})", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
                         Spacer(Modifier.width(8.dp))
                     }
-                    // 🧲 Качество — отдельная кнопка (выбор раздач/ссылок)
-                    androidx.tv.material3.Surface(
-                        onClick = onPickTorrent,
-                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Color(0xFF1F2430),
-                            contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFF5B942),
-                            focusedContentColor = Color.Black,
-                        ),
-                    ) { Text("🧲 Качество", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
-                    Spacer(Modifier.width(8.dp))
-                    // 🔍 Поиск — уйти во вкладку поиска (виден на всех экранах)
-                    androidx.tv.material3.Surface(
-                        onClick = {
-                            player.pause()
-                            onSearch()
-                        },
-                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Color(0xFF1F2430),
-                            contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFF5B942),
-                            focusedContentColor = Color.Black,
-                        ),
-                    ) { Text("🔍", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) }
-                    Spacer(Modifier.width(8.dp))
                     androidx.tv.material3.Surface(
                         onClick = { showGear = !showGear; showFiles = false },
                         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
@@ -1508,6 +1481,47 @@ private fun VideoPlayer(
                     .padding(10.dp),
                 horizontalAlignment = Alignment.End,
             ) {
+                // 🧲 Качество — выбор раздач/ссылок (владелец: всё в шестерёнку)
+                androidx.tv.material3.Surface(
+                    onClick = { showGear = false; onPickTorrent() },
+                    shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+                    ),
+                    colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                        containerColor = Color.Transparent,
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContentColor = Color.Black,
+                    ),
+                ) { Text("🧲 Качество (другая раздача)", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
+                androidx.tv.material3.Surface(
+                    onClick = {
+                        showGear = false
+                        player.pause()
+                        onSearch()
+                    },
+                    shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+                    ),
+                    colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                        containerColor = Color.Transparent,
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContentColor = Color.Black,
+                    ),
+                ) { Text("🔍 Поиск", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
+                androidx.tv.material3.Surface(
+                    onClick = { showGear = false; onAudioMode(true); seekInfo = "🎧 Аудио-режим"; panelTick++ },
+                    shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+                    ),
+                    colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                        containerColor = Color.Transparent,
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContentColor = Color.Black,
+                    ),
+                ) { Text("🎧 Аудио-режим", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
                 androidx.tv.material3.Surface(
                     onClick = {
                         showGear = false

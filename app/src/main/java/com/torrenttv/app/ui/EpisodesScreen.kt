@@ -38,6 +38,7 @@ import com.torrenttv.app.data.KinopoiskClient
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
 import com.torrenttv.app.data.MediaApi
+import kotlinx.coroutines.launch
 import com.torrenttv.app.data.Season
 import com.torrenttv.app.data.TorrServeService
 import com.torrenttv.app.data.TorrentSearch
@@ -94,21 +95,27 @@ fun EpisodesScreen(
             // Дос-досылка: серии выходят периодически — тихо ищем раз в 12 ч,
             // добавляем ТОЛЬКО недостающие, названия старых не трогаем
             if (refreshTick > 0 || System.currentTimeMillis() - store.episodeCacheTime(item) > 12 * 3_600_000L) {
-                val (found, reason) = withContext(Dispatchers.IO) { seasonsFromTorrents(item, store, context) }
-                if (found.isNotEmpty()) {
-                    val merged = mergeSeasons(cached, found)
-                    val added = merged.sumOf { it.episodes.size } - cached.sumOf { it.episodes.size }
-                    store.saveEpisodeCache(item, merged)
-                    if (added > 0) {
-                        seasons = merged
-                        tick++
-                        AppLog.log("episodes", "«${item.title}»: дос-поиск добавил $added новых серий")
+                // Фоновый скоуп: не отменяется уходом с экрана
+                episodeRefreshScope.launch {
+                    val (found, reason) = seasonsFromTorrents(item, store, context)
+                    if (found.isNotEmpty()) {
+                        val merged = mergeSeasons(cached, found)
+                        val added = merged.sumOf { it.episodes.size } - cached.sumOf { it.episodes.size }
+                        store.saveEpisodeCache(item, merged)
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            if (added > 0) {
+                                seasons = merged
+                                loading = false
+                                tick++
+                                AppLog.log("episodes", "«${item.title}»: дос-поиск добавил $added новых серий")
+                            } else {
+                                AppLog.log("episodes", "«${item.title}»: дос-поиск — новых серий нет")
+                            }
+                        }
                     } else {
-                        AppLog.log("episodes", "«${item.title}»: дос-поиск — новых серий нет")
+                        AppLog.log("episodes", "«${item.title}»: дос-поиск не удался${reason?.let { ": $it" } ?: ""}")
+                        store.saveEpisodeCache(item, cached)
                     }
-                } else {
-                    AppLog.log("episodes", "«${item.title}»: дос-поиск не удался${reason?.let { ": $it" } ?: ""}")
-                    store.saveEpisodeCache(item, cached) // обновить время кеша — не молотить каждое открытие
                 }
             }
             return@LaunchedEffect
@@ -131,23 +138,28 @@ fun EpisodesScreen(
         // КП молчал — и при наличии сезона 1 «пятёрка» не появлялась вовсе.
         // Теперь всегда подмешиваем сезоны из раздач (фоном, после отрисовки)
         if (seasons.isNotEmpty()) {
-            val (fromTorrents, reason) = withContext(Dispatchers.IO) { seasonsFromTorrents(item, store, context) }
-            if (fromTorrents.isNotEmpty()) {
-                val merged = mergeSeasons(seasons, fromTorrents)
-                val added = merged.sumOf { it.episodes.size } - seasons.sumOf { it.episodes.size }
-                if (added > 0) {
-                    seasons = merged
-                    store.saveEpisodeCache(item, merged)
-                    tick++
-                    AppLog.log(
-                        "episodes",
-                        "«${item.title}»: из раздач добавлено $added серий (сезоны ${fromTorrents.map { it.number }})",
-                    )
+            // Фоновый скоуп: не отменяется уходом с экрана
+            episodeRefreshScope.launch {
+                val (fromTorrents, reason) = seasonsFromTorrents(item, store, context)
+                if (fromTorrents.isNotEmpty()) {
+                    val merged = mergeSeasons(seasons, fromTorrents)
+                    val added = merged.sumOf { it.episodes.size } - seasons.sumOf { it.episodes.size }
+                    if (added > 0) {
+                        store.saveEpisodeCache(item, merged)
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            seasons = merged
+                            tick++
+                            AppLog.log(
+                                "episodes",
+                                "«${item.title}»: из раздач добавлено $added серий (сезоны ${fromTorrents.map { it.number }})",
+                            )
+                        }
+                    } else {
+                        AppLog.log("episodes", "«${item.title}»: раздачи новых серий не дали")
+                    }
                 } else {
-                    AppLog.log("episodes", "«${item.title}»: раздачи новых серий не дали")
+                    AppLog.log("episodes", "«${item.title}»: раздачи не дали серий${reason?.let { ": $it" } ?: ""}")
                 }
-            } else {
-                AppLog.log("episodes", "«${item.title}»: раздачи не дали серий${reason?.let { ": $it" } ?: ""}")
             }
         }
         if (seasons.isNotEmpty() && selected == null) {
@@ -319,6 +331,16 @@ private fun mergeSeasons(old: List<Season>, fresh: List<Season>): List<Season> {
  * подхватывает лучшую раздачу, серии — видео-файлы (S01E05…). Магнит раздачи
  * сохраняется за каждой серией — «Смотреть» работает сразу, без поиска.
  */
+/**
+ * Фоновое обновление серий ВНЕ compose-скоупа: уход с экрана («Смотреть»,
+ * «Назад») раньше отменял поиск раздач на середине («coroutine scope left
+ * the composition») — новые сезоны никогда не докачивались. Здесь поиск
+ * завершается всегда, результат пишется в кеш, экран подхватит при открытии.
+ */
+private val episodeRefreshScope = kotlinx.coroutines.CoroutineScope(
+    kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO,
+)
+
 private suspend fun seasonsFromTorrents(
     item: MediaItem,
     store: LocalStore,

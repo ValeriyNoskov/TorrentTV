@@ -40,6 +40,8 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.torrenttv.app.data.AppLog
 import com.torrenttv.app.data.Epg
@@ -73,6 +75,8 @@ fun LivePlayerScreen(
 
     var current by remember { mutableStateOf(channel) }
     var showPanel by remember { mutableStateOf(true) }
+    // ⚙ Меню: перезапуск, избранное, выход (владелец: панель минимальная)
+    var showGear by remember { mutableStateOf(false) }
     var playing by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf("") }
     var panelTick by remember { mutableStateOf(0) }
@@ -319,34 +323,117 @@ fun LivePlayerScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    LiveButton("⏮ Канал", focus = panelFocus) { step(-1) }
-                    LiveButton(if (playing) "⏸ Пауза" else "▶ Играть") {
-                        if (player.isPlaying) player.pause() else player.play()
-                        panelTick++
-                    }
-                    LiveButton("⏭ Канал") { step(1) }
-                    LiveButton("↻ Перезапуск") {
-                        error = ""
-                        runCatching {
-                            player.setMediaItem(MediaItem.fromUri(current.url))
-                            player.prepare()
-                            player.playWhenReady = true
-                        }
-                    }
-                    val isFav = remember(current.url, panelTick) { store.isTvFavorite(current.url) }
-                    LiveButton(if (isFav) "★ В избранном" else "☆ В избранное") {
-                        val added = store.toggleTvFavorite(current.url)
-                        AppLog.log("tv", if (added) "в избранное: «${current.name}»" else "из избранного: «${current.name}»")
-                        panelTick++
-                    }
-                    LiveButton("✕ Выйти") { onBack() }
-                    Spacer(Modifier.weight(1f))
                     Text(
                         "${channels.size} каналов",
                         color = Color.White.copy(alpha = 0.35f),
                         fontSize = 12.sp,
                     )
+                    Spacer(Modifier.weight(1f))
+                    // Единственная кнопка панели — шестерёнка (единый стиль плееров)
+                    androidx.tv.material3.Surface(
+                        onClick = { showGear = !showGear; panelTick++ },
+                        shape = clickableSurfaceShape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF1F2430),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFE8ECF4),
+                            focusedContentColor = Color(0xFF0E1116),
+                        ),
+                    ) { Text(if (showGear) "✕" else "⚙", fontSize = 18.sp, modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)) }
                 }
+            }
+        }
+
+        // Центр: полупрозрачные ⏮/⏸/⏭ — переключение каналов, пауза
+        if (showPanel) {
+            Row(
+                modifier = Modifier.align(Alignment.Center),
+                horizontalArrangement = Arrangement.spacedBy(26.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                androidx.tv.material3.Surface(
+                    onClick = { step(-1) },
+                    shape = clickableSurfaceShape(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color(0x99151B26),
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFE8ECF4),
+                        focusedContentColor = Color(0xFF0E1116),
+                    ),
+                ) { Text("⏮", fontSize = 30.sp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 15.dp)) }
+                androidx.tv.material3.Surface(
+                    onClick = {
+                        if (player.isPlaying) player.pause() else player.play()
+                        panelTick++
+                    },
+                    modifier = Modifier.focusRequester(panelFocus),
+                    shape = clickableSurfaceShape(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color(0x99151B26),
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFE8ECF4),
+                        focusedContentColor = Color(0xFF0E1116),
+                    ),
+                ) {
+                    Text(
+                        if (playing) "⏸" else "▶",
+                        fontSize = 34.sp,
+                        modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp),
+                    )
+                }
+                androidx.tv.material3.Surface(
+                    onClick = { step(1) },
+                    shape = clickableSurfaceShape(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color(0x99151B26),
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFE8ECF4),
+                        focusedContentColor = Color(0xFF0E1116),
+                    ),
+                ) { Text("⏭", fontSize = 30.sp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 15.dp)) }
+            }
+        }
+
+        // ⚙ Меню: перезапуск, избранное, выход
+        if (showGear) {
+            Column(
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 24.dp, bottom = 120.dp)
+                    .background(Color(0xF2151B26), RoundedCornerShape(14.dp))
+                    .padding(10.dp),
+            ) {
+                @Composable fun GItem(label: String, action: () -> Unit) {
+                    androidx.tv.material3.Surface(
+                        onClick = { showGear = false; action() },
+                        modifier = Modifier
+                            .width(260.dp)
+                            .padding(vertical = 2.dp),
+                        shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color.Transparent,
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFE8ECF4),
+                            focusedContentColor = Color(0xFF0E1116),
+                        ),
+                    ) { Text(label, fontSize = 15.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) }
+                }
+                GItem("↻ Перезапустить поток") {
+                    error = ""
+                    runCatching {
+                        player.setMediaItem(MediaItem.fromUri(current.url))
+                        player.prepare()
+                        player.playWhenReady = true
+                    }
+                }
+                GItem(
+                    if (store.isTvFavorite(current.url)) "★ Убрать из избранного" else "☆ В избранное",
+                ) {
+                    val added = store.toggleTvFavorite(current.url)
+                    AppLog.log("tv", if (added) "в избранное: «${current.name}»" else "из избранного: «${current.name}»")
+                    panelTick++
+                }
+                GItem("✕ Выйти") { onBack() }
             }
         }
     }

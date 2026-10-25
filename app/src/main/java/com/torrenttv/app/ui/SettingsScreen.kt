@@ -807,6 +807,7 @@ private fun EditScreen(
                 onBackspace = { if (value.isNotEmpty()) onChange(value.dropLast(1)) },
                 onClear = { onChange("") },
                 onDismiss = { showKb = false },
+                onSuggest = { onChange(it) },
             )
         }
     }
@@ -1077,6 +1078,7 @@ private fun SubscreenKeywords(
             onBackspace = { if (draft.isNotEmpty()) draft = draft.dropLast(1) },
             onClear = { draft = "" },
             onDismiss = { showKb = false },
+            onSuggest = { draft = it },
         )
     }
 }

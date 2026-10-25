@@ -843,6 +843,25 @@ class LocalStore(context: Context) {
             .split('\u0001')
             .filter { it.isNotBlank() }
 
+    /**
+     * Словарь для подсказок клавиатуры: названия просмотренных/открытых
+     * карточек + история поисков. Ограничение — 300 свежих записей.
+     */
+    fun kbWords(): List<String> =
+        runCatching {
+            val arr = org.json.JSONArray(prefs.getString("kb_words", "[]") ?: "[]")
+            (0 until arr.length()).map { arr.getString(it) }
+        }.getOrDefault(emptyList())
+
+    fun kbAddWord(word: String) {
+        val w = word.trim()
+        if (w.length < 3 || w.length > 60) return
+        val next = (listOf(w) + kbWords().filterNot { it.equals(w, ignoreCase = true) }).take(300)
+        prefs.edit()
+            .putString("kb_words", org.json.JSONArray(next).toString())
+            .apply()
+    }
+
     fun addRecentQuery(q: String) {
         val v = q.trim()
         if (v.length < 2) return

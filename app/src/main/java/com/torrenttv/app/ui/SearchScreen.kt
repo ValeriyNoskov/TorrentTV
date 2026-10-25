@@ -589,6 +589,7 @@ fun SearchScreen(
                     onBackspace = { if (query.isNotEmpty()) query = query.dropLast(1) },
                     onClear = { query = "" },
                     onDismiss = { showKb = false },
+                    onSuggest = { query = it },
                 )
             }
         }

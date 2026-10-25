@@ -105,9 +105,12 @@ fun OnlinePlayerScreen(
     onSelectFile: (Int) -> Unit = {},
     /** «Другая раздача» — выйти в выбор раздач (позиция сохранится). */
     onPickTorrent: () -> Unit = {},
+    /** 🔍 Поиск — уйти во вкладку поиска (из шестерёнки). */
+    onSearch: () -> Unit = {},
 ) {
-    // Экран не гаснет, пока играет фильм
-    KeepScreenOn()
+    // Экран не гаснет, пока играет фильм; в аудио-режиме — может гаснуть
+    var audioMode by remember { mutableStateOf(false) }
+    KeepScreenOn(enabled = !audioMode)
 
     val context = LocalContext.current
     // Подпись с серией в заголовках плеера: «Название · S01E08» (или «· Серия 8»)
@@ -151,6 +154,9 @@ fun OnlinePlayerScreen(
     }
     var showQuality by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    // ⚙ Единое меню шестерёнки: серии, перемотка, скорость, дорожки, аудио,
+    // качество потока, внешний плеер, другая раздача, поиск
+    var showGear by remember { mutableStateOf(false) }
     var showTrackMenu by remember { mutableStateOf(false) }
     var showJump by remember { mutableStateOf(false) }
     // Список серий (TorrServe): выбор серии прямо в плеере
@@ -159,6 +165,10 @@ fun OnlinePlayerScreen(
     var watchedTick by remember { mutableStateOf(0) }
     // Авто-повтор при ошибке старта потока TorrServe (3003: данные ещё не готовы)
     var retryTick by remember { mutableStateOf(0) }
+    // Подряд безуспешные авто-перезапуски: 3+ = раздача не качается,
+    // зацикливать не надо — предлагаем сменить качество (🧲)
+    var stallRestarts by remember { mutableStateOf(0) }
+    var showStalled by remember { mutableStateOf(false) }
     var retryCount by remember { mutableStateOf(0) }
     // Когда была последняя ошибка: счётчик повторов сбрасываем только после
     // 20 секунд стабильного показа, иначе каждый READY обнулял попытки
@@ -210,11 +220,11 @@ fun OnlinePlayerScreen(
     var showPanel by remember { mutableStateOf(true) }
     var panelHideSec by remember { mutableStateOf(store.panelHideSec()) }
     LaunchedEffect(panelTick, panelHideSec) {
-        if (panelTick > 0 && !showSettings && !showQuality && !showTrackMenu) {
+        if (panelTick > 0 && !showSettings && !showQuality && !showTrackMenu && !showGear) {
             showPanel = true
             if (panelHideSec > 0) {
                 kotlinx.coroutines.delay(panelHideSec * 1000L)
-                if (!showSettings && !showQuality && !showTrackMenu) showPanel = false
+                if (!showSettings && !showQuality && !showTrackMenu && !showGear) showPanel = false
             }
         }
     }
@@ -539,9 +549,19 @@ fun OnlinePlayerScreen(
             if (pos == lastPos && buf == lastBuf) {
                 stuck++
                 if (stuck >= 6) { // 6 × 5 сек = 30 секунд без движения
+                    stallRestarts++
+                    if (stallRestarts >= 3) {
+                        // Раздача не качается: не зацикливаемся, зовём сменить качество
+                        com.torrenttv.app.data.AppLog.log(
+                            "player",
+                            "стрим завис 3 раза подряд (pos=$pos) — предлагаю сменить раздачу",
+                        )
+                        showStalled = true
+                        break
+                    }
                     com.torrenttv.app.data.AppLog.log(
                         "player",
-                        "стрим завис (30 сек без движения, pos=$pos) — авто-перезапуск",
+                        "стрим завис (30 сек без движения, pos=$pos) — авто-перезапуск $stallRestarts/3",
                     )
                     seekInfo = "🔄 Стрим завис — перезапускаю…"
                     panelTick++
@@ -549,6 +569,7 @@ fun OnlinePlayerScreen(
                     break
                 }
             } else {
+                if (stuck > 0 && pos > lastPos) stallRestarts = 0 // снова играет — счётчик в ноль
                 stuck = 0
                 lastPos = pos
                 lastBuf = buf
@@ -601,7 +622,7 @@ fun OnlinePlayerScreen(
             // случайного нажатия: выход только вторым BACK при видимой панели).
             // Открытые оверлеи отдают false — их закрывают BackHandler'ы ниже
             KeyEvent.KEYCODE_BACK -> {
-                if (!showPanel && !showSettings && !showQuality && !showTrackMenu && !showFiles && !showJump) {
+                if (!showPanel && !showSettings && !showQuality && !showTrackMenu && !showFiles && !showJump && !showGear) {
                     showPanel = true
                     panelTick++
                     backArmedAt = System.currentTimeMillis()
@@ -632,7 +653,7 @@ fun OnlinePlayerScreen(
     // BACK при видимой панели: если панель только что показал BACK (armed) —
     // второй BACK выходит; если панель открылась сама (действие пульта) —
     // ОДИН BACK её прячет, без «ещё раз — выход» (жалоба владельца)
-    BackHandler(enabled = showPanel && !showSettings && !showQuality && !showTrackMenu && !showFiles && !showJump) {
+    BackHandler(enabled = showPanel && !showSettings && !showQuality && !showTrackMenu && !showFiles && !showJump && !showGear) {
         val now = System.currentTimeMillis()
         if (backArmedAt > 0 && now - backArmedAt < 3000) {
             com.torrenttv.app.data.AppLog.log("player", "back: выход из плеера (подтверждён)")
@@ -648,6 +669,7 @@ fun OnlinePlayerScreen(
     BackHandler(enabled = showTrackMenu) { showTrackMenu = false }
     BackHandler(enabled = showSettings) { showSettings = false }
     BackHandler(enabled = showQuality) { showQuality = false }
+    BackHandler(enabled = showGear) { showGear = false }
 
     // Галочка «Всегда внешний плеер»: сразу открываем во внешнем плеере и выходим
     val storePrefs = remember { com.torrenttv.app.data.LocalStore(context) }
@@ -768,6 +790,98 @@ fun OnlinePlayerScreen(
             update = { view -> view.player = player },
             modifier = Modifier.fillMaxSize(),
         )
+
+        // 🎧 Аудио-режим: видео не рисуем, звук играет, экран ТВ может гаснуть
+        if (audioMode) {
+            val audioFocus = remember { FocusRequester() }
+            LaunchedEffect(Unit) { kotlinx.coroutines.delay(200); runCatching { audioFocus.requestFocus() } }
+            androidx.tv.material3.Surface(
+                onClick = { audioMode = false; seekInfo = "🎬 Видео включено"; panelTick++ },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .focusRequester(audioFocus),
+                shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(0.dp)),
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = Color(0xF20A0E14),
+                    contentColor = Color.White,
+                    focusedContainerColor = Color(0xF20A0E14),
+                    focusedContentColor = Color.White,
+                ),
+            ) {
+                Column(
+                    Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text("🎧", fontSize = 64.sp)
+                    Spacer(Modifier.height(18.dp))
+                    Text(titleWithEp, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.SemiBold,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 60.dp))
+                    Spacer(Modifier.height(10.dp))
+                    Text("Экран ТВ может гаснуть — звук продолжится\nOK — вернуть видео",
+                        color = Color.White.copy(alpha = 0.55f), fontSize = 16.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    Spacer(Modifier.height(26.dp))
+                    Text("↩ Показать видео", color = Color(0xFF062B10), fontSize = 17.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.background(Color(0xFF7FB84F), RoundedCornerShape(10.dp))
+                            .padding(horizontal = 20.dp, vertical = 10.dp))
+                }
+            }
+        }
+
+        // Центр: полупрозрачные ⏪/⏸/⏩ при показе панели (как в PlayerScreen)
+        if (showPanel && !audioMode && nextCountdown == null) {
+            Row(
+                modifier = Modifier.align(Alignment.Center),
+                horizontalArrangement = Arrangement.spacedBy(26.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                @Composable fun CenterBtn(label: String, action: () -> Unit) {
+                    androidx.tv.material3.Surface(
+                        onClick = action,
+                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(16.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0x99151B26),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContentColor = Color.Black,
+                        ),
+                    ) { Text(label, fontSize = 30.sp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 15.dp)) }
+                }
+                CenterBtn("⏪") {
+                    val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
+                    player.seekTo((player.currentPosition - 10_000L).coerceIn(0L, dur))
+                    seekInfo = "⏪ −10 сек"; panelTick++
+                }
+                androidx.tv.material3.Surface(
+                    onClick = {
+                        if (player.isPlaying) player.pause() else player.play()
+                        playing = !player.isPlaying
+                        panelTick++
+                    },
+                    modifier = Modifier.focusRequester(playBtnFocus),
+                    shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(16.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color(0x99151B26),
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContentColor = Color.Black,
+                    ),
+                ) {
+                    Text(
+                        if (playing) "⏸" else "▶",
+                        fontSize = 34.sp,
+                        modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp),
+                    )
+                }
+                CenterBtn("⏩") {
+                    val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
+                    player.seekTo((player.currentPosition + 10_000L).coerceIn(0L, dur))
+                    seekInfo = "⏩ +10 сек"; panelTick++
+                }
+            }
+        }
         // Название и серия — без технических пометок источника («torrserve»,
         // «filmix» и т.п.). Видно только при открытой панели: владелец просил,
         // чтобы заголовок уходил вместе с меню.
@@ -1082,70 +1196,67 @@ fun OnlinePlayerScreen(
                         color = Color.White, fontSize = 14.sp,
                     )
                 }
-                // Ряд кнопок (как в Zona): перемотка, пауза, серии, настройки.
-                // Фокус при показе панели — на ▶/⏸, стрелки ходят по ряду
-                Spacer(Modifier.height(10.dp))
+                // Панель минимальная (владелец): только ⚙ — все действия в ней
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    @Composable fun Btn(label: String, focusReq: FocusRequester? = null, action: () -> Unit) {
-                        androidx.tv.material3.Surface(
-                            onClick = action,
-                            modifier = if (focusReq != null) Modifier.focusRequester(focusReq) else Modifier,
-                            shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
-                            colors = ClickableSurfaceDefaults.colors(
-                                containerColor = Color(0xFF1F2430),
-                                contentColor = Color.White,
-                                focusedContainerColor = Color(0xFFE8ECF4),
-                                focusedContentColor = Color(0xFF0E1116),
-                            ),
-                        ) { Text(label, fontSize = 16.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) }
-                    }
-                    Btn("⏪") {
-                        val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
-                        player.seekTo((player.currentPosition - 10_000L).coerceIn(0L, dur))
-                        seekInfo = "⏪ −10 сек"; panelTick++
-                    }
-                    Spacer(Modifier.width(10.dp))
-                    Btn(if (playing) "⏸" else "▶", focusReq = playBtnFocus) {
-                        if (player.isPlaying) player.pause() else player.play()
-                        playing = !player.isPlaying
-                        seekInfo = if (player.isPlaying) "▶ Продолжаем" else "⏸ Пауза"
-                        panelTick++
-                    }
-                    Spacer(Modifier.width(10.dp))
-                    Btn("⏩") {
-                        val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
-                        player.seekTo((player.currentPosition + 10_000L).coerceIn(0L, dur))
-                        seekInfo = "⏩ +10 сек"; panelTick++
-                    }
-                    if (files.size > 1) {
-                        Spacer(Modifier.width(10.dp))
-                        Btn("☰ Серии (${files.size})") { showFiles = true; panelTick++ }
-                    }
                     Spacer(Modifier.weight(1f))
-                    Btn("⏱") { showJump = true; panelTick++ }
-                    Spacer(Modifier.width(10.dp))
-                    // Скорость: цикл 1× → 1.25× → 1.5× → 2× → 0.75× → 1× (ROADMAP №8)
-                    Btn(speedLabel) {
-                        val speeds = listOf(1f, 1.25f, 1.5f, 2f, 0.75f)
-                        speedIdx = (speedIdx + 1) % speeds.size
-                        player.setPlaybackSpeed(speeds[speedIdx])
-                        speedLabel = if (speeds[speedIdx] == 1f) "1×" else "${speeds[speedIdx]}×"
-                        seekInfo = "Скорость ${speeds[speedIdx]}×"
-                        panelTick++
-                    }
-                    Spacer(Modifier.width(10.dp))
-                    Btn("🎵") { showTrackMenu = true; panelTick++ }
-                    Spacer(Modifier.width(10.dp))
-                    // Другая раздача/качество без выхода из просмотра: позиция
-                    // сохранится (onDispose), после выбора — «Продолжаем с…» (ROADMAP №7)
-                    Btn("🧲") {
-                        com.torrenttv.app.data.AppLog.log("player", "нажал: «Другая раздача» в онлайн-плеере")
-                        onPickTorrent()
-                    }
-                    Spacer(Modifier.width(10.dp))
-                    Btn("⤴") { openExternal() }
-                    Spacer(Modifier.width(10.dp))
-                    Btn("⚙") { showQuality = true; panelTick++ }
+                    androidx.tv.material3.Surface(
+                        onClick = { showGear = !showGear; panelTick++ },
+                        shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF1F2430),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFE8ECF4),
+                            focusedContentColor = Color(0xFF0E1116),
+                        ),
+                    ) { Text(if (showGear) "✕" else "⚙", fontSize = 18.sp, modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)) }
+                }
+            }
+        }
+
+        // ⚙ Меню шестерёнки: все действия плеера в одном месте (стиль PlayerScreen)
+        if (showGear) {
+            Column(
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 24.dp, bottom = 120.dp)
+                    .background(Color(0xF2151B26), RoundedCornerShape(14.dp))
+                    .padding(10.dp),
+            ) {
+                @Composable fun GItem(label: String, action: () -> Unit) {
+                    androidx.tv.material3.Surface(
+                        onClick = { showGear = false; action() },
+                        modifier = Modifier
+                            .width(280.dp)
+                            .padding(vertical = 2.dp),
+                        shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color.Transparent,
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContentColor = Color.Black,
+                        ),
+                    ) { Text(label, fontSize = 15.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) }
+                }
+                if (files.size > 1) GItem("☰ Серии (${files.size})") { showFiles = true; panelTick++ }
+                GItem("⏱ Перейти к…") { showJump = true; panelTick++ }
+                GItem(speedLabel + " Скорость") {
+                    val speeds = listOf(1f, 1.25f, 1.5f, 2f, 0.75f)
+                    speedIdx = (speedIdx + 1) % speeds.size
+                    player.setPlaybackSpeed(speeds[speedIdx])
+                    speedLabel = if (speeds[speedIdx] == 1f) "1×" else "${speeds[speedIdx]}×"
+                    seekInfo = "Скорость ${speeds[speedIdx]}×"; panelTick++
+                }
+                GItem("🎵 Дорожки") { showTrackMenu = true; panelTick++ }
+                GItem("📶 Качество потока") { showQuality = true; panelTick++ }
+                GItem("🎧 Аудио-режим") { audioMode = true; seekInfo = "🎧 Аудио-режим"; panelTick++ }
+                GItem("⤴ Внешний плеер") { openExternal() }
+                GItem("🧲 Другая раздача") {
+                    com.torrenttv.app.data.AppLog.log("player", "нажал: «Другая раздача» в онлайн-плеере")
+                    onPickTorrent()
+                }
+                GItem("🔍 Поиск") {
+                    runCatching { player.pause() }
+                    onSearch()
                 }
             }
         }
@@ -1304,6 +1415,51 @@ fun OnlinePlayerScreen(
                             )
                         }
                     }
+                }
+            }
+        }
+
+        // Раздача не качается: плашка с быстрым выходом к выбору раздачи
+        if (showStalled) {
+            val stalledFocus = remember { FocusRequester() }
+            LaunchedEffect(Unit) { kotlinx.coroutines.delay(200); runCatching { stalledFocus.requestFocus() } }
+            Column(
+                Modifier
+                    .align(Alignment.Center)
+                    .background(Color(0xF0151B26), RoundedCornerShape(16.dp))
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text("📡 Стрим не загружается", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Раздача не отдаёт данные — попробуйте другую",
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 15.sp,
+                )
+                Spacer(Modifier.height(16.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    androidx.tv.material3.Surface(
+                        onClick = { showStalled = false; onPickTorrent() },
+                        modifier = Modifier.focusRequester(stalledFocus),
+                        shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF7FB84F),
+                            contentColor = Color(0xFF062B10),
+                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContentColor = Color.Black,
+                        ),
+                    ) { Text("🧲 Другая раздача", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) }
+                    androidx.tv.material3.Surface(
+                        onClick = { showStalled = false; retryCount = 0; stallRestarts = 0; retryTick++ },
+                        shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF1F2430),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFE8ECF4),
+                            focusedContentColor = Color(0xFF0E1116),
+                        ),
+                    ) { Text("↻ Ещё раз", fontSize = 16.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) }
                 }
             }
         }

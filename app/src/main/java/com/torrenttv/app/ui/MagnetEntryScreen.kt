@@ -117,6 +117,7 @@ fun MagnetEntryScreen(item: MediaItem, onDone: () -> Unit, onBack: () -> Unit) {
                 onBackspace = { if (magnet.isNotEmpty()) magnet = magnet.dropLast(1) },
                 onClear = { magnet = "" },
                 onDismiss = { showKb = false },
+                onSuggest = { magnet = it },
             )
         }
     }

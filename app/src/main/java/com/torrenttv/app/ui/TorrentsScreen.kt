@@ -468,6 +468,7 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
                         onBackspace = { if (searchQ.isNotEmpty()) searchQ = searchQ.dropLast(1) },
                         onClear = { searchQ = "" },
                         onDismiss = { inputOpen = false },
+                        onSuggest = { searchQ = it },
                     )
                 }
             }
