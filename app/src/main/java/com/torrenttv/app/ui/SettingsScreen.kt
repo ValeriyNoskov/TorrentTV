@@ -629,7 +629,6 @@ fun SettingsScreen(onBack: () -> Unit) {
                                     fontSize = 15.sp,
                                 )
                             }
-                            SettingsNote("Сброс — раз в сутки. КП — каталоги и поиск, Trakt — серии.")
                         }
                     }
 
