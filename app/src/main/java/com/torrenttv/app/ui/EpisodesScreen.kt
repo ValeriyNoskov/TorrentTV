@@ -178,7 +178,7 @@ fun EpisodesScreen(
             .background(Color(0xFF0E1116))
             .padding(32.dp),
     ) {
-        Text("🎬 Эпизоды", color = Color(0xFFF5B942), fontSize = 16.sp)
+        Text("🎬 Эпизоды", color = Color.White, fontSize = 16.sp)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(item.title, color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             // 🔄 Принудительный пересбор серий из раздач: дос-досылка раз в 12 ч,
@@ -197,7 +197,7 @@ fun EpisodesScreen(
                 colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
                     containerColor = Color(0xFF1F2430),
                     contentColor = Color.White,
-                    focusedContainerColor = Color(0xFFF5B942),
+                    focusedContainerColor = Color(0xB3FFFFFF),
                     focusedContentColor = Color.Black,
                     disabledContainerColor = Color(0xFF141922),
                     disabledContentColor = Color.White.copy(alpha = 0.3f),
@@ -265,7 +265,7 @@ fun EpisodesScreen(
                         ) {
                              Text(
                                  text = ep.code,
-                                 color = Color(0xFFF5B942),
+                                 color = Color.White,
                                  fontSize = 15.sp,
                                  fontWeight = FontWeight.Bold,
                                  modifier = Modifier.width(78.dp),
@@ -319,7 +319,7 @@ fun EpisodesScreen(
  * Объединение кеша и дос-поиска: новые серии добавляются, старые (с их
  * названиями из КП/файлов) не трогаются.
  */
-private fun mergeSeasons(old: List<Season>, fresh: List<Season>): List<Season> {
+internal fun mergeSeasons(old: List<Season>, fresh: List<Season>): List<Season> {
     val map = sortedMapOf<Int, MutableMap<Int, Episode>>()
     for (s in old) for (e in s.episodes) map.getOrPut(s.number) { mutableMapOf() }[e.episode] = e
     for (s in fresh) for (e in s.episodes) map.getOrPut(s.number) { mutableMapOf() }.putIfAbsent(e.episode, e)
@@ -337,11 +337,11 @@ private fun mergeSeasons(old: List<Season>, fresh: List<Season>): List<Season> {
  * the composition») — новые сезоны никогда не докачивались. Здесь поиск
  * завершается всегда, результат пишется в кеш, экран подхватит при открытии.
  */
-private val episodeRefreshScope = kotlinx.coroutines.CoroutineScope(
+internal val episodeRefreshScope = kotlinx.coroutines.CoroutineScope(
     kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO,
 )
 
-private suspend fun seasonsFromTorrents(
+internal suspend fun seasonsFromTorrents(
     item: MediaItem,
     store: LocalStore,
     context: android.content.Context,
@@ -444,9 +444,9 @@ private fun SeasonChip(label: String, selected: Boolean, onClick: () -> Unit) {
             .mouseClick { onClick() },
         shape = clickableSurfaceShape(RoundedCornerShape(20.dp)),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) Color(0xFFF5B942) else Color(0xFF1F2430),
+            containerColor = if (selected) Color(0xFF31435A) else Color(0xFF1F2430),
             contentColor = if (selected) Color(0xFF0E1116) else Color.White,
-            focusedContainerColor = Color(0xFFFFD07A),
+            focusedContainerColor = Color(0xB3FFFFFF),
             focusedContentColor = Color(0xFF0E1116),
             pressedContainerColor = Color(0xFFE0A82E),
             pressedContentColor = Color(0xFF0E1116),

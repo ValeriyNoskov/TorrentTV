@@ -493,12 +493,16 @@ fun PlayerScreen(
             verticalArrangement = Arrangement.Center,
         ) {
             Text(item.title, color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+            // Реальное качество (из имени файла, не названия раздачи)
+            val bufQuality = tsFiles.getOrNull(tsCurrent)?.let { (_, path) ->
+                com.torrenttv.app.data.ReleaseQuality.fromFileName(path)
+            } ?: ""
             if (episode != null) {
                 Spacer(Modifier.height(6.dp))
-                Text(episode.code, color = Color(0xFFF5B942), fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                Text(episode.code, color = Color(0xFFE8ECF4), fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
             }
             Spacer(Modifier.height(16.dp))
-            Text(status, color = Color(0xFFF5B942), fontSize = 18.sp)
+            Text(status + if (bufQuality.isNotBlank()) "  ·  $bufQuality" else "", color = Color(0xFFE8ECF4), fontSize = 18.sp)
             if (netInfo.isNotBlank()) {
                 Spacer(Modifier.height(8.dp))
                 Text(netInfo, color = Color.White.copy(alpha = 0.6f), fontSize = 15.sp)
@@ -517,7 +521,7 @@ fun PlayerScreen(
                         Modifier
                             .fillMaxWidth(bufferedPct / 100f)
                             .height(10.dp)
-                            .background(Color(0xFFF5B942)),
+                            .background(Color(0xFFE8ECF4)),
                     )
                 }
                 Spacer(Modifier.height(8.dp))
@@ -1048,7 +1052,7 @@ private fun VideoPlayer(
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = Color(0x99151B26),
                         contentColor = Color.White,
-                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContainerColor = Color(0xB3FFFFFF),
                         focusedContentColor = Color.Black,
                     ),
                 ) { Text("⏪", fontSize = 30.sp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 15.dp)) }
@@ -1062,7 +1066,7 @@ private fun VideoPlayer(
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = Color(0x99151B26),
                         contentColor = Color.White,
-                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContainerColor = Color(0xB3FFFFFF),
                         focusedContentColor = Color.Black,
                     ),
                 ) {
@@ -1082,7 +1086,7 @@ private fun VideoPlayer(
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = Color(0x99151B26),
                         contentColor = Color.White,
-                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContainerColor = Color(0xB3FFFFFF),
                         focusedContentColor = Color.Black,
                     ),
                 ) { Text("⏩", fontSize = 30.sp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 15.dp)) }
@@ -1100,7 +1104,7 @@ private fun VideoPlayer(
             ) {
                 Text("⏳ Буферизация…", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
-                Text("буфер $bufPct%", color = Color(0xFFF5B942), fontSize = 15.sp)
+                Text("буфер $bufPct%", color = Color(0xB3FFFFFF), fontSize = 15.sp)
             }
         }
 
@@ -1200,7 +1204,7 @@ private fun VideoPlayer(
                 colors = androidx.tv.material3.ButtonDefaults.colors(
                     containerColor = Color(0xCC1F2430),
                     contentColor = Color.White,
-                    focusedContainerColor = Color(0xFFF5B942),
+                    focusedContainerColor = Color(0xB3FFFFFF),
                     focusedContentColor = Color.Black,
                 ),
             ) {
@@ -1233,7 +1237,7 @@ private fun VideoPlayer(
                 colors = androidx.tv.material3.ButtonDefaults.colors(
                     containerColor = Color(0xCC1F2430),
                     contentColor = Color.White,
-                    focusedContainerColor = Color(0xFFF5B942),
+                    focusedContainerColor = Color(0xB3FFFFFF),
                     focusedContentColor = Color.Black,
                 ),
             ) {
@@ -1324,7 +1328,7 @@ private fun VideoPlayer(
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = Color.Transparent,
                         contentColor = Color.White,
-                        focusedContainerColor = Color(0x33F5B942),
+                        focusedContainerColor = Color(0x33FFFFFF),
                         focusedContentColor = Color.White,
                     ),
                 ) {
@@ -1350,7 +1354,7 @@ private fun VideoPlayer(
                                     .fillMaxWidth(shownFrac)
                                     .height(8.dp)
                                     .align(Alignment.CenterStart)
-                                    .background(if (jumpTarget != null) Color.White else Color(0xFFF5B942), RoundedCornerShape(4.dp)),
+                                    .background(if (jumpTarget != null) Color.White else Color(0xB3FFFFFF), RoundedCornerShape(4.dp)),
                             )
                             Text(
                                 posText,
@@ -1382,7 +1386,7 @@ private fun VideoPlayer(
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color(0xFF1F2430),
                             contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContainerColor = Color(0xB3FFFFFF),
                             focusedContentColor = Color.Black,
                         ),
                     ) { Text("⏱", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
@@ -1399,8 +1403,8 @@ private fun VideoPlayer(
                         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color(0xFF1F2430),
-                            contentColor = Color(0xFFF5B942),
-                            focusedContainerColor = Color(0xFFF5B942),
+                            contentColor = Color(0xB3FFFFFF),
+                            focusedContainerColor = Color(0xB3FFFFFF),
                             focusedContentColor = Color.Black,
                         ),
                     ) { Text("${speeds[speedIdx]}×", fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
@@ -1412,7 +1416,7 @@ private fun VideoPlayer(
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color(0xFF1F2430),
                             contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContainerColor = Color(0xB3FFFFFF),
                             focusedContentColor = Color.Black,
                         ),
                     ) { Text("♪ Аудио", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
@@ -1424,7 +1428,7 @@ private fun VideoPlayer(
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color(0xFF1F2430),
                             contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContainerColor = Color(0xB3FFFFFF),
                             focusedContentColor = Color.Black,
                         ),
                     ) { Text("💬 Субтитры", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
@@ -1442,7 +1446,7 @@ private fun VideoPlayer(
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color(0xFF1F2430),
                             contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContainerColor = Color(0xB3FFFFFF),
                             focusedContentColor = Color.Black,
                         ),
                     ) { Text("⛶ ${scales[scaleIdx].first}", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
@@ -1458,7 +1462,7 @@ private fun VideoPlayer(
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color(0xFF1F2430),
                             contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContainerColor = Color(0xB3FFFFFF),
                             focusedContentColor = Color.Black,
                         ),
                     ) { Text("🔒", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
@@ -1470,7 +1474,7 @@ private fun VideoPlayer(
                             colors = ClickableSurfaceDefaults.colors(
                                 containerColor = Color(0xFF1F2430),
                                 contentColor = Color.White,
-                                focusedContainerColor = Color(0xFFF5B942),
+                                focusedContainerColor = Color(0xB3FFFFFF),
                                 focusedContentColor = Color.Black,
                             ),
                         ) { Text(if (showFiles) "✕ Серии" else "☰ Серии (${files.size})", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
@@ -1482,7 +1486,7 @@ private fun VideoPlayer(
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color(0xFF1F2430),
                             contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContainerColor = Color(0xB3FFFFFF),
                             focusedContentColor = Color.Black,
                         ),
                     ) { Text(if (showGear) "✕" else "⚙", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) }
@@ -1515,7 +1519,7 @@ private fun VideoPlayer(
                         colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
                             containerColor = if (current) Color(0xFF3A5A2E) else Color(0xFF1F2430),
                             contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContainerColor = Color(0xB3FFFFFF),
                             focusedContentColor = Color.Black,
                         ),
                     ) {
@@ -1563,7 +1567,7 @@ private fun VideoPlayer(
                     colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
                         containerColor = Color.Transparent,
                         contentColor = Color.White,
-                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContainerColor = Color(0xB3FFFFFF),
                         focusedContentColor = Color.Black,
                     ),
                 ) { Text("🧲 Качество (другая раздача)", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
@@ -1579,7 +1583,7 @@ private fun VideoPlayer(
                     colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
                         containerColor = Color.Transparent,
                         contentColor = Color.White,
-                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContainerColor = Color(0xB3FFFFFF),
                         focusedContentColor = Color.Black,
                     ),
                 ) { Text("🔍 Поиск", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
@@ -1591,7 +1595,7 @@ private fun VideoPlayer(
                     colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
                         containerColor = Color.Transparent,
                         contentColor = Color.White,
-                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContainerColor = Color(0xB3FFFFFF),
                         focusedContentColor = Color.Black,
                     ),
                 ) { Text("🎧 Аудио-режим", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
@@ -1646,7 +1650,7 @@ private fun VideoPlayer(
                     colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
                         containerColor = Color.Transparent,
                         contentColor = Color.White,
-                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContainerColor = Color(0xB3FFFFFF),
                         focusedContentColor = Color.Black,
                     ),
                 ) { Text("⤴ Внешний плеер", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
@@ -1672,7 +1676,7 @@ private fun VideoPlayer(
                     colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
                         containerColor = Color.Transparent,
                         contentColor = Color.White,
-                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContainerColor = Color(0xB3FFFFFF),
                         focusedContentColor = Color.Black,
                     ),
                 ) {
@@ -1713,7 +1717,7 @@ private fun VideoPlayer(
             }
             androidx.tv.material3.Text(
                 seekInfo,
-                color = Color(0xFFF5B942),
+                color = Color(0xB3FFFFFF),
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier

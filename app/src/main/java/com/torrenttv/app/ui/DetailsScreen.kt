@@ -40,6 +40,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.torrenttv.app.data.LocalStore
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import com.torrenttv.app.data.MediaItem
@@ -188,7 +189,7 @@ fun DetailsScreen(
                     append(item.typeLabel)
                     if (item.year.isNotBlank()) append(" · ${item.year}")
                 },
-                color = Color(0xFFF5B942),
+                color = Color(0xFFB8C0CC),
                 fontSize = 18.sp,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
@@ -216,7 +217,7 @@ fun DetailsScreen(
                     Box(
                         Modifier
                             .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xFFF5B942))
+                            .background(Color(0xFF31435A))
                             .padding(horizontal = 10.dp, vertical = 4.dp),
                     ) {
                         Text(
@@ -302,12 +303,6 @@ fun DetailsScreen(
                     },
                     modifier = Modifier.focusRequester(watchFocus),
                 ) { Text("▶ Смотреть") }
-                if (item.type == "tv") {
-                    Button(onClick = {
-                        com.torrenttv.app.data.AppLog.log("ui", "нажал: «Эпизоды» на карточке «${item.title}»")
-                        onEpisodes(0)
-                    }) { Text("🎬 Эпизоды") }
-                }
                 Button(onClick = {
                     fav = store.toggleFavorite(item)
                     com.torrenttv.app.data.AppLog.log(
@@ -377,31 +372,83 @@ fun DetailsScreen(
             }
 
             if (status.isNotBlank()) {
-                Text(status, color = Color(0xFFFFD54F), fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
+                Text(status, color = Color(0xFFE8ECF4), fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
             }
 
-            // ---------- Сезоны и серии ----------
+            // ---------- Сезоны и серии (владелец: вместо кнопки «Эпизоды»,
+            // с автообновлением при открытии и кнопкой «Обновить») ----------
             var seasons by remember(item) { mutableStateOf<List<com.torrenttv.app.data.Season>>(emptyList()) }
             var selSeason by remember(item) { mutableStateOf<Int?>(null) }
+            var epTick by remember(item) { mutableStateOf(0) }
             if (item.type == "tv") {
-                LaunchedEffect(item) {
-                    seasons = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        runCatching { com.torrenttv.app.data.MediaApi.seasons(item) }.getOrDefault(emptyList())
+                LaunchedEffect(item, epTick) {
+                    // 1) Кеш: секция видна мгновенно
+                    val cached = store.loadEpisodeCache(item)
+                    if (cached.isNotEmpty()) {
+                        seasons = cached
+                        if (selSeason == null) selSeason = store.lastSeason(item).takeIf { n -> n != 0 && cached.any { it.number == n } }
+                            ?: cached.first().number
                     }
-                    selSeason = seasons.firstOrNull()?.number
+                    // 2) Автообновление при открытии: дос-поиск раздач, если
+                    //    с прошлого — больше 30 минут (иначе закрытие/открытие
+                    //    карточки молотило бы поиск каждый раз)
+                    val stale = System.currentTimeMillis() - store.episodeCacheTime(item) > 30 * 60_000L
+                    if (cached.isEmpty() || stale || epTick > 0) {
+                        if (epTick > 0) com.torrenttv.app.data.AppLog.log("episodes", "«${item.title}»: ручное обновление серий (детали)")
+                        episodeRefreshScope.launch {
+                            val (found, reason) = seasonsFromTorrents(item, store, context)
+                            if (found.isNotEmpty()) {
+                                val merged = mergeSeasons(cached, found)
+                                store.saveEpisodeCache(item, merged)
+                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                    seasons = merged
+                                    if (selSeason == null) selSeason = merged.firstOrNull()?.number
+                                    com.torrenttv.app.data.AppLog.log("episodes", "«${item.title}»: секция серий обновлена (${merged.sumOf { it.episodes.size }} серий)")
+                                }
+                            } else if (cached.isEmpty()) {
+                                // Кеша нет и раздачи пусты — метаданные из КП
+                                val meta = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    runCatching { com.torrenttv.app.data.MediaApi.seasons(item) }.getOrDefault(emptyList())
+                                }
+                                if (meta.isNotEmpty()) store.saveEpisodeCache(item, meta)
+                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                    seasons = meta
+                                    if (selSeason == null) selSeason = meta.firstOrNull()?.number
+                                }
+                            } else {
+                                com.torrenttv.app.data.AppLog.log("episodes", "«${item.title}»: дос-поиск секции — новых нет${reason?.let { ": $it" } ?: ""}")
+                            }
+                        }
+                    }
                 }
             }
             if (seasons.isNotEmpty()) {
-                Text(
-                    "🎬 Сезоны и серии",
-                    color = Color(0xFFF5B942),
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.Center,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 22.dp),
-                )
+                ) {
+                    Text(
+                        "🎬 Сезоны и серии",
+                        color = Color.White,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    androidx.tv.material3.Surface(
+                        onClick = {
+                            if (epTick >= 0) { epTick++; com.torrenttv.app.data.AppLog.log("episodes", "«${item.title}»: нажал «Обновить» в секции серий") }
+                        },
+                        shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF1F2430),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xB3FFFFFF),
+                            focusedContentColor = Color.Black,
+                        ),
+                    ) { Text("🔄 Обновить", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) }
+                }
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.padding(top = 8.dp),
@@ -412,10 +459,10 @@ fun DetailsScreen(
                             onClick = { selSeason = s.number },
                             shape = clickableSurfaceShape(RoundedCornerShape(18.dp)),
                             colors = ClickableSurfaceDefaults.colors(
-                                containerColor = if (sel) Color(0xFFF5B942) else Color(0xFF1F2430),
-                                contentColor = if (sel) Color(0xFF0E1116) else Color.White,
-                                focusedContainerColor = Color(0xFFFFD07A),
-                                focusedContentColor = Color(0xFF0E1116),
+                                containerColor = if (sel) Color(0xFF31435A) else Color(0xFF1F2430),
+                                contentColor = Color.White,
+                                focusedContainerColor = Color(0xB3FFFFFF),
+                                focusedContentColor = Color.Black,
                             ),
                         ) {
                             Text(
@@ -443,26 +490,21 @@ fun DetailsScreen(
                                 colors = ClickableSurfaceDefaults.colors(
                                     containerColor = if (hasSource) Color(0xFF2E4A26) else Color(0xFF1F2430),
                                     contentColor = Color.White,
-                                    focusedContainerColor = Color(0xFFF5B942),
+                                    focusedContainerColor = Color(0xB3FFFFFF),
                                     focusedContentColor = Color.Black,
                                 ),
                             ) {
                                 Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                                     Text(
-                                        (if (hasSource) "▶ " else "") + ep.code,
+                                        ep.code,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.SemiBold,
                                     )
-                                    if (ep.title.isNotBlank()) {
-                                        Text(
-                                            ep.title,
-                                            color = Color.White.copy(alpha = 0.6f),
-                                            fontSize = 12.sp,
-                                            maxLines = 1,
-                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                            modifier = Modifier.width(150.dp),
-                                        )
-                                    }
+                                    Text(
+                                        if (hasSource) "есть раздача" else "найти раздачу",
+                                        color = if (hasSource) Color(0xFF9CCC65) else Color.White.copy(alpha = 0.45f),
+                                        fontSize = 12.sp,
+                                    )
                                 }
                             }
                         }
@@ -474,7 +516,7 @@ fun DetailsScreen(
             if (similar.isNotEmpty()) {
                 Text(
                     "🎬 Похожее",
-                    color = Color(0xFFF5B942),
+                    color = Color.White,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center,

@@ -46,6 +46,18 @@ object ReleaseQuality {
         Regex("(?i)\\b480p?\\b|\\bdvd|\\bsat|\\bts\\b|\\bcam|\\bhdtv") to "SD",
     )
 
+    /**
+     * Реальное качество из ИМЕНИ ФАЙЛА (не названия раздачи): релизеры
+     * пишут «4K» в заголовке, а файл внутри — 1080p. Показываем факт.
+     */
+    fun fromFileName(path: String): String {
+        val name = path.substringAfterLast('/')
+        for ((re, res) in patterns) {
+            if (re.containsMatchIn(name)) return res
+        }
+        return ""
+    }
+
     /** Определить качество по названию раздачи; пусто, если ничего не распознано. */
     fun parse(name: String): String {
         for ((re, res) in patterns) {

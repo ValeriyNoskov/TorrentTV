@@ -114,12 +114,17 @@ fun OnlinePlayerScreen(
 
     val context = LocalContext.current
     // Подпись с серией в заголовках плеера: «Название · S01E08» (или «· Серия 8»)
-    val titleWithEp = remember(link) {
+    // Реальное качество ТЕКУЩЕГО файла (из его имени, не из названия раздачи:
+    // релизеры пишут «4K», а файл — 1080p)
+    val qualityHint = remember(files, currentFile) {
+        files.getOrNull(currentFile)?.let { com.torrenttv.app.data.ReleaseQuality.fromFileName(it.second) } ?: ""
+    }
+    val titleWithEp = remember(link, qualityHint) {
         title + when {
             link.season > 0 && link.episode > 0 -> "  ·  " + "S%02dE%02d".format(link.season, link.episode)
             link.episode > 0 -> "  ·  Серия ${link.episode}"
             else -> ""
-        }
+        } + if (qualityHint.isNotBlank()) "  ·  $qualityHint" else ""
     }
     // Каждый вход в плеер — в лог: по выгрузке видно цепочку «нажал → открылся → ошибка»
     androidx.compose.runtime.LaunchedEffect(link.url) {
@@ -823,8 +828,8 @@ fun OnlinePlayerScreen(
                         color = Color.White.copy(alpha = 0.55f), fontSize = 16.sp,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                     Spacer(Modifier.height(26.dp))
-                    Text("↩ Показать видео", color = Color(0xFF062B10), fontSize = 17.sp, fontWeight = FontWeight.Bold,
-                        modifier = Modifier.background(Color(0xFF7FB84F), RoundedCornerShape(10.dp))
+                    Text("↩ Показать видео", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.background(Color(0x99151B26), RoundedCornerShape(10.dp))
                             .padding(horizontal = 20.dp, vertical = 10.dp))
                 }
             }
@@ -844,7 +849,7 @@ fun OnlinePlayerScreen(
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color(0x99151B26),
                             contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContainerColor = Color(0xB3FFFFFF),
                             focusedContentColor = Color.Black,
                         ),
                     ) { Text(label, fontSize = 30.sp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 15.dp)) }
@@ -865,7 +870,7 @@ fun OnlinePlayerScreen(
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = Color(0x99151B26),
                         contentColor = Color.White,
-                        focusedContainerColor = Color(0xFFF5B942),
+                        focusedContainerColor = Color(0xB3FFFFFF),
                         focusedContentColor = Color.Black,
                     ),
                 ) {
@@ -1161,7 +1166,7 @@ fun OnlinePlayerScreen(
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = Color.Transparent,
                         contentColor = Color.White,
-                        focusedContainerColor = Color(0x33F5B942),
+                        focusedContainerColor = Color(0x33FFFFFF),
                         focusedContentColor = Color.White,
                     ),
                 ) {
@@ -1248,7 +1253,7 @@ fun OnlinePlayerScreen(
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color.Transparent,
                             contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFF5B942),
+                            focusedContainerColor = Color(0xB3FFFFFF),
                             focusedContentColor = Color.Black,
                         ),
                     ) { Text(label, fontSize = 15.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) }
@@ -1460,9 +1465,9 @@ fun OnlinePlayerScreen(
                         modifier = Modifier.focusRequester(stalledFocus),
                         shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
                         colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Color(0xFF7FB84F),
-                            contentColor = Color(0xFF062B10),
-                            focusedContainerColor = Color(0xFFF5B942),
+                            containerColor = Color(0x99151B26),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xB3FFFFFF),
                             focusedContentColor = Color.Black,
                         ),
                     ) { Text("🧲 Другая раздача", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) }
