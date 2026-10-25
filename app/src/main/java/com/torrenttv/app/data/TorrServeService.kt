@@ -320,6 +320,7 @@ object TorrServeService {
         // thresholdBytes задаёт качать до конца файла (режим «скачать на сервер»)
         val threshold = thresholdBytes ?: minOf(32L * 1024 * 1024, maxOf(4L * 1024 * 1024, file.length / 20))
         val deadline = System.currentTimeMillis() + timeoutMs
+        var firstCheck = true
         var lastProgress = -1L
         var lastProgressAt = System.currentTimeMillis()
         var lastLogAt = 0L
@@ -343,7 +344,17 @@ object TorrServeService {
                 )
                 lastLogAt = now
             }
-            if (pb >= threshold) return true
+            if (pb >= threshold) {
+                if (firstCheck) {
+                    AppLog.log(
+                        "player",
+                        "preload: файл уже скачан на сервере (${pb / 1024 / 1024} МБ ≥ ${threshold / 1024 / 1024}) — мгновенно",
+                    )
+                }
+                firstCheck = false
+                return true
+            }
+            firstCheck = false
             if (thresholdBytes == null) {
                 // Ранние выходы — только для стрим-режима: полная закачка на
                 // сервер терпит паузы между кусками (перестановка приоритетов)

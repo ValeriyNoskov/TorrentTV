@@ -15,7 +15,11 @@ data class Episode(
     val sourceSuffix: String get() = ":" + code.lowercase()
 
     companion object {
-        /** Номера (сезон, эпизод) из имени файла: S01E05 / 1x05 / E05 (сезон 1). */
+        /**
+         * Номера (сезон, эпизод) из имени файла: S01E05 / 1x05 / E05 (сезон 1) /
+         * «03. Название.S05…» (номер в начале + сезон в середине — паки
+         * типа Files-x без E-разметки).
+         */
         fun fileNumbers(name: String): Pair<Int, Int>? {
             val n = name.substringAfterLast('/').substringBeforeLast('.')
             Regex("""s(\d{1,2})[._ -]?e(\d{1,3})""", RegexOption.IGNORE_CASE).find(n)?.let {
@@ -23,6 +27,14 @@ data class Episode(
             }
             Regex("""(\d{1,2})x(\d{1,3})(\D|$)""", RegexOption.IGNORE_CASE).find(n)?.let {
                 return it.groupValues[1].toInt() to it.groupValues[2].toInt()
+            }
+            // Сезон в имени (S05) без номера эпизода + номер в начале
+            // («03. Титаны.S05.2026…») — иначе E00 ломает память серий
+            Regex("""s(\d{1,2})(\D|$)""", RegexOption.IGNORE_CASE).find(n)?.let { m ->
+                Regex("""^0?(\d{1,3})(\.|\D|$)""").find(n)?.let { e ->
+                    val ep = e.groupValues[1].toInt()
+                    if (ep in 1..99) return m.groupValues[1].toInt() to ep
+                }
             }
             Regex("""[._ -]e(\d{1,3})(\D|$)""", RegexOption.IGNORE_CASE).find(n)?.let {
                 return 1 to it.groupValues[1].toInt()
@@ -36,8 +48,9 @@ data class Episode(
         }
 
         /**
-         * Совпадает ли имя файла с эпизодом: S01E05, s1e5, 1x05.
-         * Для пачек сезона — чтобы плеер включил нужную серию.
+         * Совпадает ли имя файла с эпизодом: S01E05, s1e5, 1x05,
+         * «03. Название.S05…». Для пачек сезона — чтобы плеер включил
+         * нужную серию независимо от раздачи.
          */
         fun fileMatches(name: String, season: Int, episode: Int): Boolean {
             val n = name.lowercase()
@@ -47,6 +60,8 @@ data class Episode(
             Regex("""(\d{1,2})x(\d{1,3})(\D|$)""").find(n)?.let { m ->
                 if (m.groupValues[1].toInt() == season && m.groupValues[2].toInt() == episode) return true
             }
+            // Универсальный fallback: парсер номеров (в т.ч. «03. …S05…»)
+            fileNumbers(name)?.let { (s, e) -> if (s == season && e == episode) return true }
             return false
         }
     }

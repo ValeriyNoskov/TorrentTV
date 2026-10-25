@@ -288,7 +288,8 @@ object ServerDownloads {
                     AppLog.log(
                         "serverdl",
                         "${spec.item.title}: файл ${i + 1}/$total «${f.path.substringAfterLast('/').take(50)}» " +
-                            "(${f.length / 1024 / 1024} МБ) — качаю целиком",
+                            "(${f.length / 1024 / 1024} МБ) — проверяю на сервере, докачиваю если нужно " +
+                            "(уже скачанный проходит мгновенно)",
                     )
                     val fileOk = TorrServeService.preloadFile(
                         host, t.hash, f,

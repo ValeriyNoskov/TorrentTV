@@ -322,11 +322,15 @@ fun PlayerScreen(
                 tsCurrent = video.indexOfFirst { it.path == file.path }
                 tsHostStr = tsHost
                 tsHashStr = ts.hash
-                // Номер серии для раздельного прогресса («Продолжить»)
-                fun epNumOf(path: String): Int =
-                    Regex("[Ee](\\d{1,3})").find(path.substringAfterLast('/'))?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                // Номер серии для раздельного прогресса («Продолжить»):
+                // общий парсер понимает и «S05E06», и «03. Название.S05…»
+                // (раньше regex [Ee]\d+ не находил номер в начале имени и
+                // писал E00 — «Продолжить» теряла серию и открывала по индексу)
+                val nums = com.torrenttv.app.data.Episode.fileNumbers(file.path)
+                fun epNumOf(path: String): Int = nums?.second ?: 0
                 tsEpNum = epNumOf(file.path)
-                tsSeason = Regex("[Ss](\\d{1,2})").find(file.path)?.groupValues?.get(1)?.toIntOrNull()
+                tsSeason = nums?.first
+                    ?: Regex("[Ss](\\d{1,2})").find(file.path)?.groupValues?.get(1)?.toIntOrNull()
                     ?: Regex("(\\d{1,2})\\s*[сС]езон").find(file.path)?.groupValues?.get(1)?.toIntOrNull() ?: 0
                 // Понятный лог: какую серию реально запустили (гонка могла
                 // выбрать другую раздачу — по логу сразу видно что открылось)
@@ -564,9 +568,12 @@ fun PlayerScreen(
                     }
                     if (ok) {
                         tsCurrent = n
-                        tsEpNum = Regex("[Ee](\\d{1,3})").find(f.path.substringAfterLast('/'))
-                            ?.groupValues?.get(1)?.toIntOrNull() ?: 0
-                        tsSeason = Regex("[Ss](\\d{1,2})").find(f.path)?.groupValues?.get(1)?.toIntOrNull()
+                        val nums2 = com.torrenttv.app.data.Episode.fileNumbers(f.path)
+                        tsEpNum = nums2?.second
+                            ?: Regex("[Ee](\\d{1,3})").find(f.path.substringAfterLast('/'))
+                                ?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                        tsSeason = nums2?.first
+                            ?: Regex("[Ss](\\d{1,2})").find(f.path)?.groupValues?.get(1)?.toIntOrNull()
                             ?: Regex("(\\d{1,2})\\s*[сС]езон").find(f.path)?.groupValues?.get(1)?.toIntOrNull() ?: 0
                         torrLink = com.torrenttv.app.data.TorrServeService.streamUrl(host, hash, f)
                         store.saveLastWatched(item, n, f.path)

@@ -25,6 +25,23 @@ class EpisodesTest {
     }
 
     @Test
+    fun `file numbers parse packs without E-markup`() {
+        // Пак Files-x: «03. Название.S05.2026…» — номер в начале, сезон в середине
+        // (регрессия v0.9.22: E00 ломал «Продолжить» — открывалась чужая серия)
+        assertEquals(5 to 3, Episode.fileNumbers("/t/03. Титаны.S05.2026.WEB-DL 720p.Files-x.mkv"))
+        assertEquals(5 to 6, Episode.fileNumbers("/t/06. Титаны.S05.2026.WEB-DL 720p.Files-x.mkv"))
+        // Обычные форматы по-прежнему работают
+        assertEquals(1 to 5, Episode.fileNumbers("The Show S01E05.mkv"))
+        assertEquals(1 to 5, Episode.fileNumbers("Show.1x05.mkv"))
+        assertEquals(1 to 7, Episode.fileNumbers("/t/07. Название серии.mkv"))
+        // Год в начале имени — не серия
+        assertEquals(null, Episode.fileNumbers("2026 Титаны WEB-DL.mkv"))
+        // fileMatches через «03. …S05…»
+        assertTrue(Episode.fileMatches("06. Титаны.S05.2026.WEB-DL 720p.Files-x.mkv", 5, 6))
+        assertFalse(Episode.fileMatches("03. Титаны.S05.2026.WEB-DL 720p.Files-x.mkv", 5, 6))
+    }
+
+    @Test
     fun `episode code and source suffix`() {
         val ep = Episode(season = 1, episode = 5)
         assertEquals("S01E05", ep.code)

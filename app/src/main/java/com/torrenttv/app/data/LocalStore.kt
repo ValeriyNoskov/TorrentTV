@@ -281,11 +281,12 @@ class LocalStore(context: Context) {
      */
     fun saveLastWatched(item: MediaItem, fileIndex: Int, path: String) {
         val name = path.substringAfterLast('/')
+        val nums = Episode.fileNumbers(path)
         prefs.edit()
             .putInt("lastfile:" + item.storeKey, fileIndex)
             .putString("lastname:" + item.storeKey, name)
-            .putInt("lasts:" + item.storeKey, Regex("[Ss](\\d{1,2})").find(path)?.groupValues?.get(1)?.toIntOrNull() ?: 0)
-            .putInt("laste:" + item.storeKey, Regex("[Ee](\\d{1,3})").find(name)?.groupValues?.get(1)?.toIntOrNull() ?: 0)
+            .putInt("lasts:" + item.storeKey, nums?.first ?: 0)
+            .putInt("laste:" + item.storeKey, nums?.second ?: 0)
             .apply()
     }
 
