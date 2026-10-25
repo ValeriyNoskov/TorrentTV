@@ -352,6 +352,10 @@ object KinopoiskClient {
 
     fun topRatedTv(page: Int = 1): List<MediaItem> = collection("TOP_250_TV_SHOWS", page)
 
+    /** Сортировка на сервере: order = YEAR (новинки) / RATING (рейтинг) / NUM_VOTE. */
+    fun ordered(page: Int, type: String, order: String, genreId: Int? = null): List<MediaItem> =
+        byType(page, type = type, order = order, genreId = genreId)
+
     fun moviesByGenre(genreId: Int, page: Int = 1): List<MediaItem> =
         byType(page, type = "FILM", order = "RATING", genreId = genreId)
 

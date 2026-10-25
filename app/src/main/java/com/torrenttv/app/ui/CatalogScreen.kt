@@ -38,6 +38,15 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit) {
     val noun = when (mode) { "movies" -> "фильмы"; "shows" -> "шоу"; else -> "сериалы" }
     val title = when (mode) { "movies" -> "Фильмы"; "shows" -> "Шоу"; else -> "Сериалы" }
 
+    // Сортировка: «полки» (по умолчанию) / поступившие / по году / по рейтингу.
+    // Выбор запоминается отдельно для каждой вкладки.
+    val sortOptions = listOf(
+        "shelves" to "📚 Полки",
+        "posted" to "📥 Поступившие",
+        "year" to "🆕 Новинки",
+        "rating" to "⭐ По рейтингу",
+    )
+    var sort by remember { mutableStateOf(store.lastCatalogSort(mode)) }
     var genres by remember { mutableStateOf<List<Genre>>(emptyList()) }
     // Жанр запоминается: выход из карточки не сбрасывает выбор (как в «Торрентах»)
     var selected by remember { mutableStateOf<Genre?>(null) }
@@ -80,69 +89,106 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit) {
             }
         }
         item {
-            GenreChips(genres, selected) {
-                selected = it
-                store.saveCatalogGenre(mode, it?.id ?: 0)
+            SortChips(sortOptions, sort) {
+                sort = it
+                store.saveCatalogSort(mode, it)
             }
         }
-        selected?.let { g ->
+        // «Поступившие» — лента трекера, жанровых фильтров у неё нет
+        if (sort != "posted") {
             item {
+                GenreChips(genres, selected) {
+                    selected = it
+                    store.saveCatalogGenre(mode, it?.id ?: 0)
+                }
+            }
+        }
+        if (sort != "shelves") {
+            item {
+                val sortTitle = sortOptions.firstOrNull { it.first == sort }?.second.orEmpty()
                 PagedMediaRow(
-                    title = "$title · ${g.name}",
+                    title = "$title · $sortTitle",
                     loader = { page ->
-                        if (mode == "movies") MediaApi.moviesByGenre(g.id, page)
-                        else MediaApi.tvByGenre(g.id, page)
+                        when {
+                            sort == "posted" -> MediaApi.postedItems(
+                                page,
+                                if (mode == "movies") "movie" else "tv",
+                            )
+                            else -> MediaApi.orderedMoviesTv(
+                                page,
+                                if (sort == "year") "YEAR" else "RATING",
+                                shows = mode == "shows",
+                                movies = mode == "movies",
+                                genreId = selected?.id,
+                            )
+                        }
                     },
                     onOpen = onOpenDetails,
-                    keyTag = g.id,
+                    keyTag = "${sort}-${selected?.id ?: 0}",
                     filterFn = { store.isAllowed(it) },
                 )
             }
         }
-        item {
-            // Новинки — первыми: свежие релизы, на них сразу есть раздачи
-            PagedMediaRow(
-                title = "🆕 Новинки",
-                loader = { page ->
-                    if (mode == "movies") MediaApi.newMovies(page) else MediaApi.newTv(page)
-                },
-                onOpen = onOpenDetails,
-                filterFn = { store.isAllowed(it) },
-            )
-        }
-        item {
-            PagedMediaRow(
-                title = "🔥 Популярные $noun",
-                loader = { page ->
-                    when (mode) {
-                        "movies" -> MediaApi.popularMovies(page)
-                        "shows" -> MediaApi.popularShows(page)
-                        else -> MediaApi.popularTv(page)
-                    }
-                },
-                onOpen = onOpenDetails,
-                filterFn = { store.isAllowed(it) },
-            )
-        }
-        item {
-            PagedMediaRow(
-                title = "🇷🇺 Русские $noun",
-                loader = { page ->
-                    if (mode == "movies") MediaApi.russianMovies(page) else MediaApi.russianTv(page)
-                },
-                onOpen = onOpenDetails,
-                filterFn = { store.isAllowed(it) },
-            )
-        }
-        item {
-            PagedMediaRow(
-                title = "🌍 Зарубежные $noun",
-                loader = { page ->
-                    if (mode == "movies") MediaApi.foreignMovies(page) else MediaApi.foreignTv(page)
-                },
-                onOpen = onOpenDetails,
-                filterFn = { store.isAllowed(it) },
-            )
+        if (sort == "shelves") {
+            selected?.let { g ->
+                item {
+                    PagedMediaRow(
+                        title = "$title · ${g.name}",
+                        loader = { page ->
+                            if (mode == "movies") MediaApi.moviesByGenre(g.id, page)
+                            else MediaApi.tvByGenre(g.id, page)
+                        },
+                        onOpen = onOpenDetails,
+                        keyTag = g.id,
+                        filterFn = { store.isAllowed(it) },
+                    )
+                }
+            }
+            item {
+                // Новинки — первыми: свежие релизы, на них сразу есть раздачи
+                PagedMediaRow(
+                    title = "🆕 Новинки",
+                    loader = { page ->
+                        if (mode == "movies") MediaApi.newMovies(page) else MediaApi.newTv(page)
+                    },
+                    onOpen = onOpenDetails,
+                    filterFn = { store.isAllowed(it) },
+                )
+            }
+            item {
+                PagedMediaRow(
+                    title = "🔥 Популярные $noun",
+                    loader = { page ->
+                        when (mode) {
+                            "movies" -> MediaApi.popularMovies(page)
+                            "shows" -> MediaApi.popularShows(page)
+                            else -> MediaApi.popularTv(page)
+                        }
+                    },
+                    onOpen = onOpenDetails,
+                    filterFn = { store.isAllowed(it) },
+                )
+            }
+            item {
+                PagedMediaRow(
+                    title = "🇷🇺 Русские $noun",
+                    loader = { page ->
+                        if (mode == "movies") MediaApi.russianMovies(page) else MediaApi.russianTv(page)
+                    },
+                    onOpen = onOpenDetails,
+                    filterFn = { store.isAllowed(it) },
+                )
+            }
+            item {
+                PagedMediaRow(
+                    title = "🌍 Зарубежные $noun",
+                    loader = { page ->
+                        if (mode == "movies") MediaApi.foreignMovies(page) else MediaApi.foreignTv(page)
+                    },
+                    onOpen = onOpenDetails,
+                    filterFn = { store.isAllowed(it) },
+                )
+            }
         }
         item { Spacer(Modifier.height(24.dp)) }
     }

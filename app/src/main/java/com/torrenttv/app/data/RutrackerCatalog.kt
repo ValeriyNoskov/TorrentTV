@@ -18,6 +18,15 @@ object RutrackerrCatalog {
     /** Новинки (дата добавления). */
     fun newItems(page: Int = 1): List<MediaItem> = category("$BASE/index.php?do=lastnews", page)
 
+    /**
+     * Поступившие с пагинацией для раздела «Торренты»: DLE-параметр cstart —
+     * иначе подстановка «/page/N/» в URL с query-параметром даёт битые ссылки.
+     */
+    fun lastnews(page: Int = 1): List<MediaItem> {
+        val url = if (page > 1) "$BASE/index.php?do=lastnews&cstart=$page" else "$BASE/index.php?do=lastnews"
+        return category(url, 1)
+    }
+
     /** Популярные фильмы: главная-подобные списки фильмов. */
     fun popularMovies(page: Int = 1): List<MediaItem> =
         category("$BASE/filmy/", page).ifEmpty { newItems(page) }

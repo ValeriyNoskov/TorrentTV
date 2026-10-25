@@ -650,6 +650,23 @@ fun GenreChips(
     }
 }
 
+/**
+ * Полоса сортировки каталога (пары: ключ → подпись). Тот же стиль, что жанры.
+ */
+@Composable
+fun SortChips(
+    options: List<Pair<String, String>>,
+    selected: String,
+    onSelect: (String) -> Unit,
+) {
+    LazyRow(contentPadding = PaddingValues(horizontal = 28.dp)) {
+        items(options.size) { i ->
+            val (key, label) = options[i]
+            GenreChip(label, selected == key) { onSelect(key) }
+        }
+    }
+}
+
 /** Мульти-выбор жанров (для настроек: выделено = исключено). */
 @Composable
 fun GenreChipsMulti(

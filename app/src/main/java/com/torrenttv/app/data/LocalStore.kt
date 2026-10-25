@@ -655,6 +655,20 @@ class LocalStore(context: Context) {
     }
 
     fun lastCatalogGenre(mode: String): Int = prefs.getInt("cataloggenre:$mode", 0)
+/** Выбранная сортировка каталога («полки» / «поступившие» / «год» / «рейтинг»). */
+    fun lastCatalogSort(mode: String): String = prefs.getString("catalogsort:$mode", "shelves") ?: "shelves"
+
+    fun saveCatalogSort(mode: String, sort: String) {
+        prefs.edit().putString("catalogsort:$mode", sort).apply()
+    }
+/** Сортировка раздела «Торренты»: «popular» (по умолчанию) / «posted». */
+    fun lastTorrentsSort(): String = prefs.getString("torrentssort", "popular") ?: "popular"
+
+    fun saveTorrentsSort(sort: String) {
+        prefs.edit().putString("torrentssort", sort).apply()
+    }
+
+
 
     // ---------- Каталог «Торренты»: сохранение фильтров ----------
 

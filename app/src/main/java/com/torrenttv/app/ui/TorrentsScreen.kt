@@ -69,6 +69,7 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
     var years by remember { mutableStateOf(savedFilters.years) }        // «2024», «2010-е»
     var showFilters by remember { mutableStateOf(false) }
 
+
     androidx.compose.runtime.SideEffect {
         AppLog.log(
             "torrents",
@@ -85,6 +86,15 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
     var page by remember { mutableStateOf(1) }
     var endReached by remember { mutableStateOf(false) }
     var reloadTick by remember { mutableStateOf(0) }
+    // Сортировка: «Популярное» (по умолчанию) / «Поступившие» (дата появления
+    // раздач на трекере). Выбор запоминается.
+    var sort by remember { mutableStateOf(store.lastTorrentsSort()) }
+    fun changeSort(v: String) {
+        if (sort == v) return
+        sort = v
+        store.saveTorrentsSort(v)
+        reloadTick++
+    }
     var updatedAt by remember { mutableStateOf(0L) }
     var loadError by remember { mutableStateOf("") }
     var offlineSince by remember { mutableStateOf(0L) }
@@ -225,11 +235,14 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
         if (searchMode) {
             return@withContext if (p > 1) emptyList() else searchCards(searchQ).filter { matches(it) }
         }
+        if (sort == "posted") {
+            return@withContext RutrackerrCatalog.lastnews(p).filter { matches(it) }
+        }
         val url = sourceUrl(p) ?: return@withContext emptyList()
         RutrackerrCatalog.categoryByUrl(url).filter { matches(it) }
     }
 
-    LaunchedEffect(types, genres, countries, years, reloadTick, searchMode) {
+    LaunchedEffect(types, genres, countries, years, reloadTick, searchMode, sort) {
         loading = true
         loadError = ""
         page = 0
@@ -343,6 +356,10 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(horizontal = 32.dp, vertical = 2.dp),
             ) {
+                ActionPill(text = "📥 Поступившие", active = sort == "posted") { changeSort("posted") }
+                Spacer(Modifier.width(6.dp))
+                ActionPill(text = "🔥 Популярное", active = sort == "popular") { changeSort("popular") }
+                Spacer(Modifier.width(10.dp))
                 ActionPill(
                     text = "⚙ Фильтры" + if (filters.count > 0) " · ${filters.count}" else "",
                     active = showFilters || filters.count > 0,

@@ -106,7 +106,18 @@ object MediaApi {
         if (poster.isBlank()) {
             poster = runCatching { WikipediaClient.poster(item.title) }.getOrNull().orEmpty()
         }
-        // Фолбэк 2 — Рутуб: кадр и описание (подсказка владельца: «в рутубе
+        // Фолбэк 2 — IMDbOT: бесплатный IMDb-поиск без ключей и лимитов.
+        // Даёт точный IMDb ID (нужен и для разметки пропуска) и постер.
+        // Сервис периодически лежит — с кулдауном, лежащий не мешает остальным.
+        if (poster.isBlank() || (!imdbKnown && tmdbImdb.isBlank())) {
+            val imdb = runCatching { ImdbOtClient.search(item.title) }.getOrDefault(emptyList())
+            val iBest = if (imdb.isNotEmpty()) TitleMatch.best(item, imdb) else null
+            if (iBest != null) {
+                if (poster.isBlank()) poster = iBest.posterUrl
+                if (tmdbImdb.isBlank()) tmdbImdb = iBest.imdbId
+            }
+        }
+        // Фолбэк 3 — Рутуб: кадр и описание (подсказка владельца: «в рутубе
         // есть постеры и описание некоторых»)
         if (poster.isBlank() || overview.isBlank()) {
             val (rtThumb, rtDesc) = runCatching { RutubeService.searchMeta(item.title) }
@@ -159,6 +170,36 @@ object MediaApi {
     /** Новинки-фильмы (свежие релизы — на них сразу есть раздачи). */
     fun newMovies(page: Int = 1): List<MediaItem> =
         pick({ RutrackerrCatalog.newItems(page) }, { KinopoiskClient.popularMovies(page) }) ?: emptyList()
+
+    /**
+     * «Поступившие»: свежие раздачи на трекере (дата появления), без ключей
+     * и лимитов. type: "movie" — только фильмы, иначе сериалы/шоу.
+     */
+    fun postedItems(page: Int, type: String): List<MediaItem> =
+        RutrackerrCatalog.newItems(page).filter { if (type == "movie") it.type == "movie" else it.type != "movie" }
+
+    /** Сортировка по году (новинки) или рейтингу: серверная, с фолбэком на Рутрекер. */
+    fun orderedMovies(page: Int, order: String, genreId: Int? = null): List<MediaItem> =
+        pick(
+            { KinopoiskClient.ordered(page, "FILM", order, genreId) },
+            { RutrackerrCatalog.popularMovies(page) },
+        ) ?: emptyList()
+
+    /** Единая точка для полки сортировки в каталоге (год/рейтинг). */
+    fun orderedMoviesTv(
+        page: Int,
+        order: String,
+        movies: Boolean,
+        shows: Boolean = false,
+        genreId: Int? = null,
+    ): List<MediaItem> =
+        if (movies) orderedMovies(page, order, genreId) else orderedTv(page, order, shows, genreId)
+
+    fun orderedTv(page: Int, order: String, shows: Boolean = false, genreId: Int? = null): List<MediaItem> =
+        pick(
+            { KinopoiskClient.ordered(page, if (shows) "TV_SHOW" else "TV_SERIES", order, genreId) },
+            { if (shows) RutrackerrCatalog.popularShows(page) else RutrackerrCatalog.popularTv(page) },
+        ) ?: emptyList()
 
     /** Новинки-сериалы. */
     fun newTv(page: Int = 1): List<MediaItem> =
