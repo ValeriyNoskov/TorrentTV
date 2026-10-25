@@ -42,6 +42,24 @@ class EpisodesTest {
     }
 
     @Test
+    fun `season and episode helpers separate seasons`() {
+        // Регрессия v0.9.23: «Продолжить S05E06» запустила S01E06 из раздачи
+        // первого сезона — сезон должен читаться из имени явно
+        assertEquals(5, Episode.fileSeasonInName("06. Титаны.S05.2026.WEB-DL 720p.Files-x.mkv"))
+        assertEquals(1, Episode.fileSeasonInName("Титаны.S01.E06.2024.WEB.1080p-ylnian.mkv"))
+        assertEquals(3, Episode.fileSeasonInName("Titans.S03E06.1080p.rus.LostFilm.mkv"))
+        assertEquals(null, Episode.fileSeasonInName("03. Название серии.mkv"))
+
+        // Раздача без сезонной метки: номер в начале имени — это серия
+        assertEquals(3, Episode.fileEpisodeNoSeason("03. Название серии.mkv"))
+        assertEquals(null, Episode.fileEpisodeNoSeason("06. Титаны.S05.2026.WEB-DL 720p.Files-x.mkv"))
+
+        // Главное: файл S01 не матчится на запрос S05
+        assertTrue(Episode.fileMatches("06. Титаны.S05.2026.WEB-DL 720p.Files-x.mkv", 5, 6))
+        assertFalse(Episode.fileMatches("Титаны.S01.E06.2024.WEB.1080p-ylnian.mkv", 5, 6))
+    }
+
+    @Test
     fun `episode code and source suffix`() {
         val ep = Episode(season = 1, episode = 5)
         assertEquals("S01E05", ep.code)

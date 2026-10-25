@@ -48,6 +48,42 @@ data class Episode(
         }
 
         /**
+         * Сезон, если он явно указан в имени файла: «S05», «5 сезон», «s1e5».
+         * null — сезонной метки нет (тогда номер серии в начале имени можно
+         * трактовать как «сезон неизвестен»).
+         */
+        fun fileSeasonInName(name: String): Int? {
+            val n = name.substringAfterLast('/').substringBeforeLast('.')
+            Regex("""s(\d{1,2})""", RegexOption.IGNORE_CASE).find(n)?.let {
+                return it.groupValues[1].toInt()
+            }
+            Regex("""(\d{1,2})\s*[сС]езон""").find(n)?.let {
+                return it.groupValues[1].toInt()
+            }
+            Regex("""(\d{1,2})x(\d{1,3})""", RegexOption.IGNORE_CASE).find(n)?.let {
+                return it.groupValues[1].toInt()
+            }
+            return null
+        }
+
+        /**
+         * Номер серии в начале имени — для раздач БЕЗ сезонной метки
+         * («03. Название.mkv»). null, если сезон в имени есть.
+         */
+        fun fileEpisodeNoSeason(name: String): Int? {
+            if (fileSeasonInName(name) != null) return null
+            val n = name.substringAfterLast('/').substringBeforeLast('.')
+            Regex("""^(\d{1,3})(\D|$)""").find(n)?.let {
+                val ep = it.groupValues[1].toInt()
+                if (ep in 1..99) return ep
+            }
+            Regex("""[._ -]e(\d{1,3})(\D|$)""", RegexOption.IGNORE_CASE).find(n)?.let {
+                return it.groupValues[1].toInt()
+            }
+            return null
+        }
+
+        /**
          * Совпадает ли имя файла с эпизодом: S01E05, s1e5, 1x05,
          * «03. Название.S05…». Для пачек сезона — чтобы плеер включил
          * нужную серию независимо от раздачи.

@@ -345,13 +345,11 @@ object TorrServeService {
                 lastLogAt = now
             }
             if (pb >= threshold) {
-                if (firstCheck) {
-                    AppLog.log(
-                        "player",
-                        "preload: файл уже скачан на сервере (${pb / 1024 / 1024} МБ ≥ ${threshold / 1024 / 1024}) — мгновенно",
-                    )
-                }
-                firstCheck = false
+                // ВАЖНО: preloaded_bytes — это прогресс ВСЕГО торрента, а не
+                // файла (в раздаче на 12 серий 100 МБ «общего» прогресса не
+                // значит, что нужная серия скачана). Раньше здесь писалось
+                // «файл уже скачан — мгновенно» и это было ложью в логе
+                // (v0.9.23: 101 МБ ≥ 32 МБ у нескачанного файла).
                 return true
             }
             firstCheck = false
