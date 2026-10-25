@@ -71,8 +71,6 @@ private val SECTIONS = listOf(
     Triple("update", "⬆ Обновление", "Проверить и установить новую версию"),
     Triple("search", "🔍 Поиск и фильтры", "Что скрывать из каталогов и поиска"),
     Triple("tv", "📡 ТВ-каналы", "Свой плейлист добавляется к встроенному списку"),
-    Triple("stats", "📊 Статистика", "Сколько смотрите: время, серии, топ"),
-    Triple("jackett", "🔗 Jackett", "Дополнительный провайдер автопоиска торрентов"),
     Triple("netcheck", "🩺 Проверка сети", "Какие источники доступны с этого устройства"),
     Triple("logs", "📝 Логи", "Запись событий и выгрузка лога в Gist"),
     Triple("torrserve", "🚀 TorrServe", "Внешний движок торрентов — надёжнее внутреннего"),
@@ -94,8 +92,6 @@ fun SettingsScreen(onBack: () -> Unit) {
     var movieGenres by remember { mutableStateOf<List<Genre>>(emptyList()) }
     var tvGenres by remember { mutableStateOf<List<Genre>>(emptyList()) }
     var countries by remember { mutableStateOf<List<Genre>>(emptyList()) }
-    var jackettUrl by remember { mutableStateOf(store.jackettUrl()) }
-    var jackettKey by remember { mutableStateOf(store.jackettApiKey()) }
     var extPlayer by remember { mutableStateOf(store.useExternalPlayer()) }
     var extKb by remember { mutableStateOf(store.useExternalKeyboard()) }
 
@@ -120,8 +116,6 @@ fun SettingsScreen(onBack: () -> Unit) {
         val t = editTarget ?: return
         if (editTmp.isNotBlank()) {
             when (t) {
-                "jurl" -> { store.setJackettUrl(editTmp); jackettUrl = editTmp }
-                "jkey" -> { store.setJackettApiKey(editTmp); jackettKey = editTmp }
                 "ts" -> store.setTorrServeHost(editTmp)
                 "kpkey" -> { store.setKpApiKey(editTmp); kpKey = editTmp }
                 "tmdbkey" -> { store.setTmdbApiKey(editTmp); tmdbKey = editTmp }
@@ -269,31 +263,6 @@ fun SettingsScreen(onBack: () -> Unit) {
                             "Телепрограмма берётся из открытого источника teleguide.info " +
                                 "и обновляется сама раз в 12 часов.",
                         )
-                    }
-
-                    "stats" -> {
-                        StatsPanel(store)
-                    }
-
-                    "jackett" -> {
-                        SettingsRow(
-                            title = "Адрес сервера",
-                            value = jackettUrl.ifBlank { "Не задан" },
-                            valueOk = jackettUrl.isNotBlank(),
-                            modifier = Modifier.focusRequester(contentFocus),
-                        ) { openEdit("jurl", jackettUrl, "Адрес Jackett") }
-                        SettingsRow(
-                            title = "API-ключ",
-                            value = if (jackettKey.isNotBlank()) "••••••••" else "Не задан",
-                            valueOk = jackettKey.isNotBlank(),
-                        ) { openEdit("jkey", jackettKey, "API-ключ Jackett") }
-                        if (jackettUrl.isNotBlank() || jackettKey.isNotBlank()) {
-                            SettingsRow(title = "🗑 Отключить Jackett", value = "", danger = true) {
-                                jackettUrl = ""; jackettKey = ""
-                                store.setJackettUrl(""); store.setJackettApiKey("")
-                            }
-                        }
-                        SettingsNote("Без Jackett работают встроенные apibay и Torrentio.")
                     }
 
                     "update" -> {
@@ -1246,101 +1215,3 @@ private fun KeywordChip(word: String, onRemove: () -> Unit) {
     }
 }
 
-/**
- * Статистика просмотра: время, серии, активность по месяцам и топ.
- * Считается из уже сохранённых записей (LocalStore.watchStats) — сеть не нужна.
- */
-@Composable
-private fun StatsPanel(store: com.torrenttv.app.data.LocalStore) {
-    val stats = remember { store.watchStats() }
-    val hours = stats.totalSeconds / 3600
-    val minutes = (stats.totalSeconds % 3600) / 60
-
-    Column(
-        Modifier.fillMaxWidth().padding(bottom = 12.dp),
-        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
-    ) {
-        // Главные цифры — плитками
-        Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
-            StatTile(
-                if (hours > 0) "$hours ч $minutes мин" else "$minutes мин",
-                "всего просмотрено",
-                Color(0xFFF5B942),
-            )
-            StatTile("${stats.episodes}", "записей о сериях", Color(0xFF7FC8A9))
-            StatTile("${stats.watched}", "отмечено просмотренным", Color(0xFF9FB0C0))
-        }
-        Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
-            StatTile("${stats.last7}", "за 7 дней", Color(0xFFB8C0CC))
-            StatTile("${stats.last30}", "за 30 дней", Color(0xFFB8C0CC))
-            StatTile("${stats.inHistory}", "в истории", Color(0xFFB8C0CC))
-        }
-
-        if (stats.byMonth.isNotEmpty() && stats.byMonth.any { it.second > 0 }) {
-            Text(
-                "АКТИВНОСТЬ ПО МЕСЯЦАМ",
-                color = Color(0xFF8B95A7),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 10.dp, start = 4.dp),
-            )
-            val maxMonth = stats.byMonth.maxOf { it.second }.coerceAtLeast(1)
-            for ((month, count) in stats.byMonth) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(month, color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp, modifier = Modifier.width(78.dp))
-                    Box(
-                        Modifier
-                            .height(12.dp)
-                            .fillMaxWidth(count.toFloat() / maxMonth * 0.75f)
-                            .background(Color(0xFFF5B942), RoundedCornerShape(6.dp)),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("$count", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
-                }
-            }
-        }
-
-        if (stats.top.isNotEmpty()) {
-            Text(
-                "БОЛЬШЕ ВСЕГО ВРЕМЕНИ",
-                color = Color(0xFF8B95A7),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 10.dp, start = 4.dp),
-            )
-            for ((title, mins) in stats.top) {
-                Row(
-                    Modifier.fillMaxWidth().background(Color(0xFF1A1F29), RoundedCornerShape(8.dp)).padding(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        title,
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        maxLines = 1,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Text("$mins мин", color = Color(0xFFF5B942), fontSize = 13.sp)
-                }
-            }
-        }
-
-        if (stats.totalSeconds == 0L && stats.inHistory == 0) {
-            SettingsNote("Пока пусто: посмотрите что-нибудь — статистика появится здесь.")
-        }
-    }
-}
-
-/** Плитка с цифрой и подписью. */
-@Composable
-private fun StatTile(value: String, label: String, accent: Color) {
-    Column(
-        Modifier
-            .background(Color(0xFF1A1F29), RoundedCornerShape(10.dp))
-            .padding(horizontal = 14.dp, vertical = 10.dp)
-            .width(165.dp),
-    ) {
-        Text(value, color = accent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        Text(label, color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
-    }
-}
