@@ -83,7 +83,7 @@ fun PlayerScreen(
     var itemState by remember(item.storeKey) { mutableStateOf(item) }
     LaunchedEffect(item.storeKey) {
         if (itemState.posterUrl.isBlank() || itemState.imdbId.isBlank()) {
-            val en = withContext(Dispatchers.IO) { MediaApi.enrich(itemState) }
+            val en = withContext(Dispatchers.IO) { MediaApi.enrich(itemState, store) }
             if (en.posterUrl.isNotBlank() || en.imdbId.isNotBlank()) itemState = en
         }
     }
@@ -729,6 +729,8 @@ private fun VideoPlayer(
         while (true) {
             delay(5000)
             if (player.duration > 0) {
+                // Карточка сюда приходит уже обогащённая (PlayerScreen передаёт
+                // itemState): постер/описание попадают в «Продолжить»
                 store.saveProgress(
                     item,
                     positionSec = (player.currentPosition / 1000).toInt(),

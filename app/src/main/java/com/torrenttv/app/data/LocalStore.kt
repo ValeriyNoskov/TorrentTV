@@ -210,6 +210,26 @@ class LocalStore(context: Context) {
             .apply()
     }
 
+    // ---------- Мета-кеш обогащения карточек ----------
+
+    /**
+     * Сохранённая мета карточки (постер/описание/год/IMDb/рейтинг).
+     * Обогащение делается один раз — дальше мгновенно из хранилища:
+     * без повторных запросов к КП и без траты дневной квоты.
+     */
+    fun metaCacheGet(storeKey: String): MediaItem? {
+        val raw = prefs.getString("meta:$storeKey", null) ?: return null
+        return runCatching { MediaItem.fromJson(org.json.JSONObject(raw)) }.getOrNull()
+    }
+
+    fun metaCachePut(storeKey: String, m: MediaItem) {
+        // Пустое обогащение не запоминаем: завтра квота КП обновится — попробуем снова
+        if (m.posterUrl.isBlank() && m.overview.isBlank() && m.imdbId.isBlank()) return
+        runCatching {
+            prefs.edit().putString("meta:$storeKey", m.toJson().toString()).apply()
+        }
+    }
+
     // ---------- Magnet-ссылки (источник видео для карточки) ----------
 
     /**

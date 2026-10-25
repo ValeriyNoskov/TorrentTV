@@ -85,7 +85,7 @@ fun DetailsScreen(
     var itemState by remember(item.storeKey) { mutableStateOf(item) }
     LaunchedEffect(item.storeKey) {
         if (itemState.posterUrl.isBlank()) {
-            val en = withContext(Dispatchers.IO) { MediaApi.enrich(itemState) }
+            val en = withContext(Dispatchers.IO) { MediaApi.enrich(itemState, store) }
             if (en.posterUrl.isNotBlank()) itemState = en
         }
     }

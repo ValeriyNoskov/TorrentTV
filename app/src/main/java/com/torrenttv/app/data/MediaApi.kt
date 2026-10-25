@@ -62,8 +62,25 @@ object MediaApi {
      * id/type НЕ меняем — storeKey записи «Продолжить» должен остаться тем же,
      * иначе история развалится на две карточки.
      */
-    fun enrich(item: MediaItem): MediaItem {
+    /**
+     * @param store если передан — мета-кеш: успешное обогащение делается один
+     * раз, дальше мгновенно из хранилища (без сети и траты квоты КП).
+     */
+    fun enrich(item: MediaItem, store: LocalStore? = null): MediaItem {
         if (item.title.isBlank()) return item
+        // Уже обогащали? Мгновенно из хранилища, ноль запросов
+        if (store != null) {
+            val cached = store.metaCacheGet(item.storeKey)
+            if (cached != null) {
+                return item.copy(
+                    posterUrl = cached.posterUrl.ifBlank { item.posterUrl },
+                    overview = cached.overview.ifBlank { item.overview },
+                    year = cached.year.ifBlank { item.year },
+                    imdbId = cached.imdbId.ifBlank { item.imdbId },
+                    rating = if (cached.rating > 0) cached.rating else item.rating,
+                )
+            }
+        }
         val cards = try { KinopoiskClient.search(item.title) } catch (e: Exception) { emptyList() }
         // Сопоставление по баллам (эвристика cinesta): точное название + год ±1
         // проходит, «похожее» название без года — нет. Чужой постер хуже, чем
@@ -98,13 +115,15 @@ object MediaApi {
             if (overview.isBlank()) overview = rtDesc
         }
         if (poster.isBlank() && overview.isBlank() && card == null) return item
-        return item.copy(
+        val enriched = item.copy(
             posterUrl = poster.ifBlank { item.posterUrl },
             year = card?.year?.ifBlank { item.year } ?: item.year,
             imdbId = (card?.imdbId ?: "").ifBlank { tmdbImdb.ifBlank { item.imdbId } },
             overview = overview.ifBlank { item.overview },
             rating = if ((card?.rating ?: 0.0) > 0) card!!.rating else item.rating,
         )
+        store?.metaCachePut(item.storeKey, enriched)
+        return enriched
     }
 
     fun trending(page: Int = 1): List<MediaItem> =

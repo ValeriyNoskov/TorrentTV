@@ -131,7 +131,7 @@ fun OnlinePlayerScreen(
     var itemState by remember(item.storeKey) { mutableStateOf(item) }
     LaunchedEffect(item.storeKey) {
         if (itemState.posterUrl.isBlank() || itemState.imdbId.isBlank()) {
-            val en = withContext(Dispatchers.IO) { MediaApi.enrich(itemState) }
+            val en = withContext(Dispatchers.IO) { MediaApi.enrich(itemState, store) }
             if (en.posterUrl.isNotBlank() || en.imdbId.isNotBlank()) itemState = en
         }
     }
