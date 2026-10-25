@@ -151,6 +151,13 @@ object TorrServeService {
             disable()
             return null
         }
+        // Что вернул сервер: stat/пиры видны сразу после add — если торрент
+        // уже есть в сессии, состояние видно без догадок (полное логирование)
+        AppLog.log(
+            "player",
+            "torrserve: add → hash=${ts.hash.take(12)}… stat=${ts.stat}, пиров=${ts.peers}, " +
+                "preloaded=${ts.preloadedBytes / 1024 / 1024} МБ, файлов=${ts.files.size}",
+        )
 
         // preload в отдельном потоке: соединение держится, сервер качает метаданные
         val preloadTitle = ts.title.ifBlank { title }
@@ -253,18 +260,33 @@ object TorrServeService {
         val threshold = minOf(32L * 1024 * 1024, maxOf(4L * 1024 * 1024, file.length / 20))
         val deadline = System.currentTimeMillis() + timeoutMs
         var lastProgress = -1L
+        var lastLogAt = 0L
         var stalled = 0
         while (System.currentTimeMillis() < deadline) {
             Thread.sleep(1500)
             val t = get(host, hash) ?: continue
             val pb = t.preloadedBytes
             onStatus("Буферизация TorrServe… ${pb / 1024 / 1024} МБ из ~${threshold / 1024 / 1024}")
+            // Детальный лог прогресса раз в ~7 с: качается ли файл вообще,
+            // сколько пиров — по нему отличаем «медленно» от «неоткуда»
+            val now = System.currentTimeMillis()
+            if (now - lastLogAt >= 7000) {
+                val speed = if (lastProgress >= 0 && now > lastLogAt) (pb - lastProgress) * 1000 / (now - lastLogAt) / 1024 else -1
+                AppLog.log(
+                    "player",
+                    "preload «${file.path.substringAfterLast('/').take(50)}»: ${pb / 1024 / 1024}/" +
+                        "${threshold / 1024 / 1024} МБ, скорость ~${if (speed >= 0) "$speed КБ/с" else "?"}, " +
+                        "пиров=${t.peers}, stat=${t.stat}",
+                )
+                lastLogAt = now
+            }
             if (pb >= threshold) return true
             // Нет прогресса 4 замера подряд — скорость нулевая, выходим раньше
             stalled = if (pb > lastProgress) 0 else stalled + 1
             lastProgress = pb
             if (stalled >= 4 && pb > 0) return pb >= threshold
         }
+        AppLog.log("player", "preload FAIL: за ${timeoutMs / 1000} с не набрано ${threshold / 1024 / 1024} МБ (последнее: ${lastProgress / 1024 / 1024} МБ)")
         return false
     }
 

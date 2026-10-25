@@ -27,6 +27,11 @@ data class Episode(
             Regex("""[._ -]e(\d{1,3})(\D|$)""", RegexOption.IGNORE_CASE).find(n)?.let {
                 return 1 to it.groupValues[1].toInt()
             }
+            // «07. Название серии» — номер с ведущим нулём в начале имени
+            // (ведущий ноль отличает серию от года «2026 …»)
+            Regex("""^0(\d)(\D|$)""").find(n)?.let {
+                return 1 to it.groupValues[1].toInt()
+            }
             return null
         }
 

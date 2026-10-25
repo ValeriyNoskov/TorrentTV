@@ -1,6 +1,8 @@
 package com.torrenttv.app.data
 
 import android.content.Context
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
@@ -31,13 +33,28 @@ object SelfTest {
         -1
     }
 
-    suspend fun run(context: Context, store: LocalStore): List<Result> {
+    /** Оценка длительности каждого кейса (сек, порядок = порядок кейсов) — для «осталось ~…». */
+    private val EST_SEC = intArrayOf(1, 1, 1, 1, 2, 5, 5, 5, 60, 1)
+
+    /**
+     * Прогон тест-кейсов. onStep — прогресс после каждого кейса:
+     * (пройдено, всего, осталось ~сек, текущий кейс) — для экрана «не висит ли».
+     */
+    suspend fun run(
+        context: Context,
+        store: LocalStore,
+        onStep: (done: Int, total: Int, etaSec: Int, current: String) -> Unit = { _, _, _, _ -> },
+    ): List<Result> {
         val results = mutableListOf<Result>()
 
         suspend fun check(name: String, block: suspend () -> String) {
+            val idx = results.size
+            // ETA включая текущий кейс; блок — в IO: HTTP в main-потоке даёт
+            // NetworkOnMainThreadException и ложные FAIL (проверено отчётом с ТВ)
+            onStep(idx, EST_SEC.size, EST_SEC.drop(idx).sum(), name)
             AppLog.log("selftest", "▶ $name")
             val t0 = System.currentTimeMillis()
-            val r = runCatching { block() }
+            val r = withContext(Dispatchers.IO) { runCatching { block() } }
             val detail = r.getOrElse { "FAIL: ${it.message}" }
             val ok = r.isSuccess && !detail.startsWith("FAIL")
             val res = Result(name, ok, detail, System.currentTimeMillis() - t0)
@@ -48,7 +65,7 @@ object SelfTest {
         // ---------- 1. Настройки: запись/чтение/удаление ----------
         check("Хранилище настроек (prefs)") {
             val k = "selftest_probe"
-            store.setFallbackInternalWriteProbe(k)
+            store.setFallbackInternalWriteProbe("ok")
             val v = store.readProbe(k)
             store.debugRemoveKeys(k)
             if (v == "ok") "запись/чтение/удаление работают" else "FAIL: прочитано «$v»"

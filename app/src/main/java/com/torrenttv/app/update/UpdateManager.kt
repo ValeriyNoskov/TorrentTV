@@ -42,6 +42,9 @@ object UpdateManager {
     // «Обновить» тогда ставит его мгновенно, без ожидания.
     @Volatile private var downloaded: Pair<UpdateInfo, File>? = null
     @Volatile private var downloading: Boolean = false
+    // Прогресс текущей закачки в %: его читает ожидающий поток («Обновить»,
+    // нажатое во время фоновой скачки) — вместо мёртвой надписи «идёт в фоне»
+    @Volatile private var progressPct: Int = -1
 
     /** APK уже скачан и ждёт установки? */
     fun readyToInstall(info: UpdateInfo): Boolean =
@@ -53,12 +56,16 @@ object UpdateManager {
             .ifBlank { com.torrenttv.app.BuildConfig.GH_EMBEDDED_TOKEN }
 
     /**
-     * Тихо скачать APK в кеш (если ещё не скачан). Ничего не показывает
-     * и не устанавливает — результат ждёт в readyToInstall().
+     * ЕДИНЫЙ процесс закачки APK. И фоновая скачка с главного экрана, и кнопка
+     * «Обновить» качают только через него: поток всегда один, параллельная
+     * скачка в один файл невозможна по построению (downloading + readyToInstall).
+     * Прогресс публикуется в progressPct — кто хочет, тот его показывает.
+     * Ничего не устанавливает — результат ждёт в readyToInstall().
      */
-    fun startBackgroundDownload(context: Context, info: UpdateInfo) {
+    private fun startDownload(context: Context, info: UpdateInfo) {
         if (downloading || readyToInstall(info)) return
         downloading = true
+        progressPct = 0
         Thread {
             try {
                 val request = Request.Builder().url(info.apkUrl)
@@ -67,20 +74,50 @@ object UpdateManager {
                 http.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}")
                     val apkFile = File(context.cacheDir, "update-${info.version}.apk")
-                    response.body!!.byteStream().use { input ->
+                    val body = response.body!!
+                    val total = body.contentLength()
+                    com.torrenttv.app.data.AppLog.log(
+                        "update",
+                        "скачивание v${info.version}: ${if (total > 0) "${total / 1024 / 1024} МБ" else "размер неизвестен"}",
+                    )
+                    body.byteStream().use { input ->
                         apkFile.outputStream().use { output ->
-                            input.copyTo(output, bufferSize = 64 * 1024)
+                            val buf = ByteArray(64 * 1024)
+                            var read: Int
+                            var done = 0L
+                            var lastPct = -1
+                            while (input.read(buf).also { read = it } != -1) {
+                                output.write(buf, 0, read)
+                                done += read
+                                if (total > 0) {
+                                    val pct = (done * 100 / total).toInt()
+                                    if (pct != lastPct) {
+                                        lastPct = pct
+                                        progressPct = pct
+                                        // В лог — каждые 10%: по нему видно темп и где встало
+                                        if (pct % 10 == 0) {
+                                            com.torrenttv.app.data.AppLog.log("update", "скачивание v${info.version}: $pct%")
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                     downloaded = info to apkFile
-                    com.torrenttv.app.data.AppLog.log("update", "background download ok: v${info.version}")
+                    com.torrenttv.app.data.AppLog.log("update", "скачивание v${info.version}: готово")
                 }
             } catch (e: Exception) {
-                com.torrenttv.app.data.AppLog.log("update", "background download FAIL: ${e.message}")
+                com.torrenttv.app.data.AppLog.log("update", "скачивание v${info.version} FAIL: ${e.message}")
             } finally {
                 downloading = false
+                progressPct = -1
             }
         }.start()
+    }
+
+    /** Тихо скачать APK в кеш (если ещё не качается / не скачан). Фон с главного экрана. */
+    fun startBackgroundDownload(context: Context, info: UpdateInfo) {
+        startDownload(context, info)
     }
 
     /**
@@ -170,83 +207,61 @@ object UpdateManager {
 
     /** Скачать APK в кеш и запустить установку. */
     /**
-     * Скачать и установить. Если закачка УЖЕ идёт (фоном с главного экрана
-     * или с другого экрана) — НЕ запускаем вторую параллельную: оба потока
-     * писали в один apk-файл, канал делился пополам и прогресс «прыгал»
-     * (10% → 20% → 10%). Ждём текущую закачку и ставим её результат;
-     * если фоновая упала — качаем сами.
+     * Установить обновление с экрана «Обновить». Сам не качает: подключается
+     * к единому процессу startDownload (свой не плодим) и ждёт, показывая
+     * его проценты. Если процесс упал — одна повторная попытка.
      */
     fun downloadAndInstall(context: Context, info: UpdateInfo, onProgress: (String) -> Unit, onError: (String) -> Unit) {
-        // Уже скачано в фоне — ставим сразу, без скачивания
+        // Уже скачано — ставим сразу
         if (readyToInstall(info)) {
             onProgress("Установка v${info.version}…")
             installApk(context, downloaded!!.second)
             return
         }
-        if (downloading) {
-            Thread {
-                mainHandler.post { onProgress("Скачивание v${info.version}… (идёт в фоне)") }
-                val deadline = System.currentTimeMillis() + 15 * 60_000L
-                while (System.currentTimeMillis() < deadline) {
-                    if (readyToInstall(info)) {
-                        mainHandler.post { onProgress("Установка v${info.version}…") }
-                        installApk(context, downloaded!!.second)
-                        return@Thread
-                    }
-                    // Фоновая закачка упала — выходим из ожидания, скачаем сами
-                    if (!downloading) break
-                    Thread.sleep(1000)
-                }
-                if (!readyToInstall(info)) {
-                    downloadAndInstall(context, info, onProgress, onError)
-                }
-            }.start()
-            return
-        }
-        downloading = true
+        startDownload(context, info)
+        waitAndInstall(context, info, onProgress, onError, retried = false)
+    }
+
+    /** Ждать окончания единой закачки, публикуя её проценты, затем установить. */
+    private fun waitAndInstall(
+        context: Context,
+        info: UpdateInfo,
+        onProgress: (String) -> Unit,
+        onError: (String) -> Unit,
+        retried: Boolean,
+    ) {
         Thread {
-            try {
-                mainHandler.post { onProgress("Скачивание v${info.version}…") }
-                val request = Request.Builder().url(info.apkUrl)
-                    .apply { val t = ghToken(context); if (t.isNotBlank()) header("Authorization", "Bearer $t") }
-                    .build()
-                http.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}")
-                    val apkFile = File(context.cacheDir, "update-${info.version}.apk")
-                    val body = response.body!!
-                    val total = body.contentLength()
-                    com.torrenttv.app.data.AppLog.log("update", "скачивание v${info.version}: ${if (total > 0) "${total / 1024 / 1024} МБ" else "размер неизвестен"}")
-                    body.byteStream().use { input ->
-                        apkFile.outputStream().use { output ->
-                            // Прогресс в процентах: без него «Скачивание…»
-                            // неотличимо от зависания (проверено на ТВ)
-                            val buf = ByteArray(64 * 1024)
-                            var read: Int
-                            var done = 0L
-                            var lastPct = -1
-                            while (input.read(buf).also { read = it } != -1) {
-                                output.write(buf, 0, read)
-                                done += read
-                                if (total > 0) {
-                                    val pct = (done * 100 / total).toInt()
-                                    if (pct != lastPct) {
-                                        lastPct = pct
-                                        mainHandler.post { onProgress("Скачивание v${info.version}… $pct%") }
-                                        // В лог — каждые 10%: по нему видно темп и где встало
-                                        if (pct % 10 == 0) com.torrenttv.app.data.AppLog.log("update", "скачивание v${info.version}: $pct%")
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    com.torrenttv.app.data.AppLog.log("update", "скачивание v${info.version}: готово, запуск установки")
+            var lastShown = -1
+            val deadline = System.currentTimeMillis() + 15 * 60_000L
+            while (System.currentTimeMillis() < deadline) {
+                if (readyToInstall(info)) {
                     mainHandler.post { onProgress("Установка v${info.version}…") }
-                    installApk(context, apkFile)
+                    installApk(context, downloaded!!.second)
+                    return@Thread
                 }
-            } catch (e: Exception) {
-                mainHandler.post { onError("Ошибка обновления: ${e.message}") }
-            } finally {
-                downloading = false
+                // Процесс закончился, а файла нет — упал
+                if (!downloading) break
+                val pct = progressPct
+                if (pct != lastShown) {
+                    lastShown = pct
+                    mainHandler.post {
+                        onProgress(
+                            if (pct >= 0) "Скачивание v${info.version}… $pct%"
+                            else "Скачивание v${info.version}…",
+                        )
+                    }
+                }
+                Thread.sleep(1000)
+            }
+            if (!readyToInstall(info)) {
+                if (!retried) {
+                    // Одна повторная попытка: закачка могла упасть (сеть и т.п.)
+                    mainHandler.post { onProgress("Скачивание не удалось — пробую ещё раз…") }
+                    startDownload(context, info)
+                    waitAndInstall(context, info, onProgress, onError, retried = true)
+                } else {
+                    mainHandler.post { onError("Не удалось скачать обновление — проверьте сеть и попробуйте позже") }
+                }
             }
         }.start()
     }

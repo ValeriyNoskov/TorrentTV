@@ -210,6 +210,11 @@ fun FilterListDialog(
 
     androidx.activity.compose.BackHandler { onClose() }
 
+    // Забрать фокус в модалку СРАЗУ: без этого на ТВ фокус остаётся на полках
+    // каталога ПОД модалкой — DPAD листает задний экран, в фильтр «не попасть»
+    // (на эмуляторе проверялось тапами мыши — и баг не был виден)
+    LaunchedEffect(Unit) { runCatching { listFocus.requestFocus() } }
+
     // Затемнение поверх каталога; сам каталог виден по краям
     Box(
         Modifier

@@ -29,6 +29,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -632,6 +633,12 @@ private fun FiltersOverlay(
     onClose: () -> Unit,
 ) {
     val total = types.size + genres.size + countries.size + years.size
+    // Фокус внутрь модалки СРАЗУ и выход по «Назад»: без этого на ТВ фокус
+    // остаётся на кнопках заднего экрана («Поступившие»/«Популярное») и
+    // DPAD переключает их под оверлеем — в фильтры «не попасть»
+    val applyFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    androidx.activity.compose.BackHandler { onClose() }
+    LaunchedEffect(Unit) { runCatching { applyFocus.requestFocus() } }
     Box(
         Modifier
             .fillMaxSize()
@@ -653,7 +660,11 @@ private fun FiltersOverlay(
                     onCountries(emptySet()); onYears(emptySet())
                 }
                 Spacer(Modifier.width(8.dp))
-                ActionPill(text = "✓ Применить", active = true) { onClose() }
+                ActionPill(
+                    text = "✓ Применить",
+                    active = true,
+                    modifier = Modifier.focusRequester(applyFocus),
+                ) { onClose() }
                 Spacer(Modifier.width(8.dp))
                 ActionPill(text = "✕ Закрыть", active = false) { onClose() }
             }

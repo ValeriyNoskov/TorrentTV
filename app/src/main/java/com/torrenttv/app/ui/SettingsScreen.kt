@@ -1419,13 +1419,20 @@ private fun SelfTestScreen(onClose: () -> Unit) {
     var results by remember { mutableStateOf<List<com.torrenttv.app.data.SelfTest.Result>>(emptyList()) }
     var running by remember { mutableStateOf(false) }
     var current by remember { mutableStateOf("") }
+    var progressText by remember { mutableStateOf("") }
     var reportUrl by remember { mutableStateOf("") }
     var uploadState by remember { mutableStateOf("") }
+
+    fun fmtEta(sec: Int): String = if (sec >= 60) "~${sec / 60} мин ${sec % 60} с" else "~$sec с"
 
     LaunchedEffect(Unit) {
         running = true
         com.torrenttv.app.data.AppLog.log("selftest", "=== старт самотеста ===")
-        results = com.torrenttv.app.data.SelfTest.run(context, store)
+        results = com.torrenttv.app.data.SelfTest.run(context, store) { done, total, etaSec, name ->
+            // Прогресс и оценка времени: без них «то ли висит, то ли делает»
+            current = name
+            progressText = "Проверка ${done + 1} из $total (${done * 100 / total}%) · осталось ${fmtEta(etaSec)}"
+        }
         val fails = results.count { !it.ok }
         com.torrenttv.app.data.AppLog.log(
             "selftest", "готово: ${results.size - fails}/${results.size} пройдено",
@@ -1457,6 +1464,9 @@ private fun SelfTestScreen(onClose: () -> Unit) {
         Spacer(Modifier.height(14.dp))
         if (running && results.isEmpty()) {
             Text(current.ifBlank { "Запускаю проверки…" }, color = Color(0xFFBFE3F7), fontSize = 17.sp)
+            if (progressText.isNotBlank()) {
+                Text(progressText, color = Color.White.copy(alpha = 0.55f), fontSize = 14.sp)
+            }
         }
         for (r in results) {
             Column(Modifier.padding(vertical = 5.dp)) {

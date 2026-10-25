@@ -28,6 +28,16 @@ class TorrentTVApp : Application(), ImageLoaderFactory {
                     .build()
             }
             .respectCacheHeaders(false)
+            // Лог ошибок ВСЕХ картинок (постеры/бэкдропы/логотипы): без него
+            // «слетел постер» не диагностируется — в логе просто тишина
+            .eventListener(object : coil.EventListener {
+                override fun onError(request: coil.request.ImageRequest, result: coil.request.ErrorResult) {
+                    com.torrenttv.app.data.AppLog.log(
+                        "posters",
+                        "картинка FAIL: ${request.data} — ${result.throwable?.message ?: "без ошибки"}",
+                    )
+                }
+            })
             .crossfade(true)
             .build()
 }
