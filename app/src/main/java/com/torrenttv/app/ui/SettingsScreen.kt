@@ -5,8 +5,6 @@ package com.torrenttv.app.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -53,20 +51,11 @@ import androidx.tv.material3.Text
 import com.torrenttv.app.data.Genre
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaApi
-import com.torrenttv.app.data.PrivateTrackers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-/**
- * Настройки — по образцу лучших TV-приложений (OTT Navigator, Kodi):
- *  слева — разделы, справа — строки параметров (название · значение · описание).
- * ОК на строке — действие: редактирование открывается отдельным полноэкранным
- * шагом с клавиатурой и кнопкой «Сохранить».
- */
-private const val COUNTRIES_PAGE = 12
 
 /**
  * Разделы настроек: id, заголовок, краткое описание.

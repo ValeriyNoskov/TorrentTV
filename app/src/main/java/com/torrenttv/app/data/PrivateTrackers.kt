@@ -43,8 +43,6 @@ object PrivateTrackers {
         val isConfigured: Boolean get() = cookie.isNotBlank()
     }
 
-    private val CP1251: Charset = Charset.forName("windows-1251")
-
     /** Общие заголовки: без браузерного User-Agent многие трекеры отдают заглушку. */
     private fun headers(auth: TrackerAuth, referer: String): Map<String, String> = buildMap {
         put("Cookie", auth.cookie.trim().removePrefix("Cookie:").trim())

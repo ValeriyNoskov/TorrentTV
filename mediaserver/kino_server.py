@@ -421,7 +421,13 @@ td,th{padding:5px 8px;border-bottom:1px solid #1e2531;text-align:left}
 th{color:#8b98a8;font-weight:500}.chip{display:inline-block;background:#1f2430;border-radius:8px;
 padding:3px 9px;margin:2px 3px;font-size:12px}.ok{color:#7fd}.warn{color:#f2c14e}
 .del{color:#f2777a}.btn{display:inline-block;background:#1f2430;border:1px solid #2b3444;
-border-radius:8px;padding:3px 10px;margin:0 4px}"""
+border-radius:8px;padding:3px 10px;margin:0 4px}
+/* ТВ-пульт: фокус должно быть видно издалека */
+a:focus,.chip:focus,.btn:focus{outline:4px solid #5fe3b0;outline-offset:2px;
+background:#243043;color:#fff}
+.chip{padding:7px 12px;font-size:14px}
+@media (min-width:1000px){body{font-size:18px}.chip{font-size:19px;padding:10px 16px}
+h1{font-size:30px}h2{font-size:24px}td,th{font-size:17px}}"""
 
 
 def page(api, cache_dir, max_gb):
@@ -480,12 +486,45 @@ def page(api, cache_dir, max_gb):
 <meta name=viewport content="width=device-width,initial-scale=1"><style>%s</style></head>
 <body><h1>🍿 КиноСервер</h1>
 <div class="s">Библиотека: %d тайтлов · кеш %s ГБ (лимит %d) · свободно %s ГБ ·
-TorrServe %d раздач</div>
+TorrServe %d раздач · <b>пульт: стрелки — выбор, OK — смотреть</b></div>
 <h2>Библиотека</h2>%s
 <h2>Раздачи на сервере</h2>
 <table><tr><th>Название</th><th>Скачано</th><th>Пиры</th><th>Статус</th><th></th></tr>%s</table>
 <h2>Очередь</h2>%s
 <h2>События</h2><div class="s">%s</div>
+<script>
+/* Управление с ТВ-пульта: стрелки — по ссылкам, OK — открыть.
+   Без этого в ТВ-браузере серии не выбирались пультом. */
+(function(){
+  function items(){
+    return Array.prototype.slice.call(
+      document.querySelectorAll('a[href]')).filter(function(a){
+        return a.offsetParent !== null;
+      });
+  }
+  function focusAt(i){
+    var a = items();
+    if(!a.length) return;
+    if(i < 0) i = a.length - 1;
+    if(i >= a.length) i = 0;
+    a[i].focus();
+    try{ a[i].scrollIntoView({block:'center'}); }catch(e){ a[i].scrollIntoView(); }
+  }
+  document.addEventListener('keydown', function(e){
+    var a = items(), i = a.indexOf(document.activeElement);
+    if(e.key==='ArrowRight' || e.key==='ArrowDown'){
+      e.preventDefault(); focusAt(i < 0 ? 0 : i + 1);
+    } else if(e.key==='ArrowLeft' || e.key==='ArrowUp'){
+      e.preventDefault(); focusAt(i < 0 ? 0 : i - 1);
+    } else if(e.key==='Enter' && i >= 0){
+      e.preventDefault(); a[i].click();
+    } else if(e.key==='Home'){
+      e.preventDefault(); focusAt(0);
+    }
+  });
+  setTimeout(function(){ focusAt(0); }, 150);
+})();
+</script>
 </body></html>""" % (CSS, len(lib), cache_gb, max_gb, free, len(lst),
                     blocks or "<div class='s'>пока пусто</div>", rows, queue_rows, log_rows)
 

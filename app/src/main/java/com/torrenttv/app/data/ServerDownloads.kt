@@ -87,8 +87,6 @@ object ServerDownloads {
         return j.state == "качаю" || j.state == "в очереди"
     }
 
-    fun queuedCount(): Int = queue.size
-
     /** Остановить текущую качалку (поток завершится на следующей проверке). */
     fun stop() {
         stopRequested = true
@@ -217,7 +215,6 @@ object ServerDownloads {
                 var allWatched = true
                 var continuePoint: Pair<Int, Int>? = null
                 if (spec.item.type != "movie") {
-                    val normPrefix = "norm:" + spec.item.title.lowercase().filter { it.isLetterOrDigit() } + ":"
                     val watchedSet = store.watchedKeys()
                     val points = watchedSet.mapNotNull { k ->
                         Regex(":s(\\d+)e(\\d+)$").find(k)?.let { m ->

@@ -82,7 +82,6 @@ data class OnlineLink(
     val season: Int = 0,
     val episode: Int = 0,
     val quality: String = "",
-    val translation: String = "",
     /** Referer для CDN-плеера (нужен для онлайн-источников, TorrServe — без). */
     val referer: String = "",
 )

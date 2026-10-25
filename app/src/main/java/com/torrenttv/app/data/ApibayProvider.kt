@@ -1,6 +1,5 @@
 package com.torrenttv.app.data
 
-import org.json.JSONObject
 import java.net.URLEncoder
 
 /**
@@ -57,13 +56,4 @@ object ApibayProvider {
     /** Служебное: извлечь info_hash из magnet-ссылки. */
     fun hashFromMagnet(magnet: String): String? =
         Regex("urn:btih:([0-9a-fA-F]{40})").find(magnet)?.groupValues?.get(1)?.lowercase()
-
-    /** Извлечь имя раздачи из magnet (dn=), для отображения. */
-    fun nameFromMagnet(magnet: String): String? =
-        Regex("[?&]dn=([^&]+)").find(magnet)?.groupValues?.get(1)?.let {
-            java.net.URLDecoder.decode(it, "UTF-8")
-        }
-
-    /** Отладочная печать JSON-объекта (не используется в рантайме UI). */
-    fun debugJson(o: JSONObject): String = o.toString()
 }

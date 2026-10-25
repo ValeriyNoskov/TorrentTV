@@ -39,33 +39,6 @@ object TorrentSearch {
         "https://tracker.nanoha.org:443/announce",
     )
 
-    /**
-     * Найти раздачи у всех доступных провайдеров параллельно.
-     * @param query    основной запрос (оригинальное название + год)
-     * @param altQuery альтернативный запрос (русское название) — тоже отдаётся apibay
-     * @param imdbId   IMDb id карточки (для Torrentio), может быть пустым
-     * @param season   сезон (для Torrentio series endpoint), 0 — фильм
-     * @param episode  эпизод (для Torrentio series endpoint)
-     * @param jackett  конфигурация Jackett из настроек, null если выключена
-     * @param excludedKeywords стоп-слова из настроек (блокируют раздачу по названию)
-     */
-    suspend fun searchAll(
-        query: String,
-        altQuery: String? = null,
-        isTvShow: Boolean,
-        imdbId: String = "",
-        season: Int = 0,
-        episode: Int = 0,
-        jackett: JackettProvider.Config? = null,
-        privateTrackers: List<PrivateTrackers.TrackerAuth> = emptyList(),
-        excludedKeywords: Set<String> = emptySet(),
-        limit: Int = 50,
-    ): List<TorrentResult> =
-        searchDetailed(
-            query, altQuery, isTvShow, imdbId, season, episode,
-            jackett, privateTrackers, excludedKeywords, limit,
-        ).first
-
     /** Статистика одного провайдера для диагностики («apibay:20 · torrentio:35 · jackett:—»). */
     data class ProviderStat(
         val name: String,

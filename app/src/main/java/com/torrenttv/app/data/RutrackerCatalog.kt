@@ -167,10 +167,6 @@ object RutrackerrCatalog {
         return category("$BASE/$slug/", page)
     }
 
-    /** Каталог по году: серверный xfsearch трекера (/xfsearch/year/2024/). */
-    fun byYear(year: String, page: Int): List<MediaItem> =
-        if (year.isBlank()) emptyList() else category("$BASE/xfsearch/year/$year/", page)
-
     /** Разбор страницы категории/подобного списка: карточки rutef_movie. */
     private fun category(url: String, page: Int): List<MediaItem> {
         val full = if (page > 1) url.trimEnd('/') + "/page/$page/" else url

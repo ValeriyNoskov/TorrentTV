@@ -438,27 +438,5 @@ fun LivePlayerScreen(
         }
     }
 }
-
-@Composable
-private fun LiveButton(
-    text: String,
-    focus: androidx.compose.ui.focus.FocusRequester? = null,
-    onClick: () -> Unit,
-) {
-    androidx.tv.material3.Surface(
-        onClick = onClick,
-        modifier = if (focus != null) Modifier.focusRequester(focus) else Modifier,
-        shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
-        colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
-            containerColor = Color(0xFF1F2430),
-            contentColor = Color.White,
-            focusedContainerColor = Color(0xFFE8ECF4),
-            focusedContentColor = Color(0xFF0E1116),
-        ),
-    ) {
-        Text(text, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
-    }
-}
-
 private fun hhmm(ms: Long): String =
     java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(ms))

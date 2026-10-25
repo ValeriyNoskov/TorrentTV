@@ -13,7 +13,6 @@ object TorrentFileParser {
     data class Info(
         val hash: String,      // 40 hex-символов
         val name: String,
-        val lengthBytes: Long,
     )
 
     fun parse(bytes: ByteArray): Info? = runCatching {
@@ -38,7 +37,7 @@ object TorrentFileParser {
         } ?: ""
         val length = Regex("6:lengthi(\\d+)e").find(info)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
 
-        if (hash.length != 40) null else Info(hash, name, length)
+        if (hash.length != 40) null else Info(hash, name)
     }.getOrNull()
 
     /** Magnet для движка: стандартные публичные трекеры — как у apibay. */

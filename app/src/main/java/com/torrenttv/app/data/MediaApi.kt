@@ -140,10 +140,6 @@ object MediaApi {
     fun trending(page: Int = 1): List<MediaItem> =
         pick({ RutrackerrCatalog.trending(page) }, { KinopoiskClient.trending(page) }, { TmdbClient.trending(page) })
             ?: emptyList()
-
-    /** Новинки/премьеры: свежее Рутрекера → КП премьеры → тренды. */
-    fun newReleases(): List<MediaItem> =
-        pick({ RutrackerrCatalog.newItems(1) }, { KinopoiskClient.premieres() }, { trending(1) })
             ?: emptyList()
 
     fun popularMovies(page: Int = 1): List<MediaItem> =

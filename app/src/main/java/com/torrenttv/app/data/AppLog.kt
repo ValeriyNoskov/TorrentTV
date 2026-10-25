@@ -130,7 +130,6 @@ object AppLog {
         if (!githubToken.isNullOrBlank()) {
             runCatching {
                 val stamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm").format(java.util.Date())
-                val fileContent = org.json.JSONObject.quote(String(content, Charsets.UTF_8))
                 val payload = org.json.JSONObject()
                     .put("description", (overrideTitle ?: "ВНосКино лог") + " $stamp")
                     .put("public", false)
