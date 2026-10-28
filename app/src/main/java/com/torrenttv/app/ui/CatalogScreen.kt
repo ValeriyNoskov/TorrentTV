@@ -52,9 +52,8 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: ()
         "rating" to "★︎ По рейтингу",
     )
     var sort by remember { mutableStateOf(store.lastCatalogSort(mode)) }
-    var genres by remember { mutableStateOf<List<Genre>>(emptyList()) }
-    // Жанр запоминается: выход из карточки не сбрасывает выбор (как в «Торрентах»)
-    var selected by remember { mutableStateOf<Genre?>(null) }
+    // Полоса чипов жанров убрана (v0.9.30): дублировала модалку «🎭 Жанр»,
+    // причём с другим хранилищем — до карточек стало на одну строку меньше
     var movieGenresAll by remember { mutableStateOf<List<Genre>>(emptyList()) }
     var tvGenresAll by remember { mutableStateOf<List<Genre>>(emptyList()) }
     var countriesAll by remember { mutableStateOf<List<Genre>>(emptyList()) }
@@ -93,19 +92,6 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: ()
         return listOf(preset, yearsTxt).filter { it.isNotBlank() }.joinToString(", ")
     }
 
-
-    LaunchedEffect(mode) {
-        genres = withContext(Dispatchers.IO) {
-            when (mode) {
-                "movies" -> MediaApi.movieGenres()
-                "shows" -> emptyList()
-                else -> MediaApi.tvGenres()
-            }
-        }
-        // Восстановить последний выбранный жанр этой вкладки
-        val savedId = store.lastCatalogGenre(mode)
-        if (selected == null && savedId != 0) selected = genres.firstOrNull { it.id == savedId }
-    }
 
     Box {
     LazyColumn(
@@ -270,15 +256,7 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: ()
                 store.saveCatalogSort(mode, it)
             }
         }
-        // «Поступившие» — лента трекера, жанровых фильтров у неё нет
-        if (sort != "posted") {
-            item {
-                GenreChips(genres, selected) {
-                    selected = it
-                    store.saveCatalogGenre(mode, it?.id ?: 0)
-                }
-            }
-        }
+        // Полоса чипов жанров убрана (v0.9.30): жанр — через модалку «🎭 Жанр»
         if (sort != "shelves") {
             item {
                 val sortTitle = sortOptions.firstOrNull { it.first == sort }?.second.orEmpty()
@@ -295,31 +273,15 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: ()
                                 if (sort == "year") "YEAR" else "RATING",
                                 shows = mode == "shows",
                                 movies = mode == "movies",
-                                genreId = selected?.id,
                             )
                         }
                     },
                     onOpen = onOpenDetails,
-                    keyTag = "${sort}-${selected?.id ?: 0}",
                     filterFn = { store.isAllowed(it) && store.passesFilters(it) },
                 )
             }
         }
         if (sort == "shelves") {
-            selected?.let { g ->
-                item {
-                    PagedMediaRow(
-                        title = "$title · ${g.name}",
-                        loader = { page ->
-                            if (mode == "movies") MediaApi.moviesByGenre(g.id, page)
-                            else MediaApi.tvByGenre(g.id, page)
-                        },
-                        onOpen = onOpenDetails,
-                        keyTag = g.id,
-                        filterFn = { store.isAllowed(it) && store.passesFilters(it) },
-                    )
-                }
-            }
             item {
                 // Новинки — первыми: свежие релизы, на них сразу есть раздачи
                 PagedMediaRow(

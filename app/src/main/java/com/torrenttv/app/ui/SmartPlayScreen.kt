@@ -241,9 +241,9 @@ fun SmartPlayScreen(
 
             if (failed) {
                 Row {
-                    Button(onClick = onBack) { Text("← Назад") }
+                    AppButton(onClick = onBack) { Text("← Назад") }
                     Spacer(Modifier.width(16.dp))
-                    Button(
+                    AppButton(
                         onClick = {
                             if (!uploading) {
                                 uploading = true
@@ -358,7 +358,7 @@ fun SmartPlayScreen(
                     }
                 }
                 Spacer(Modifier.height(10.dp))
-                Button(onClick = onBack) { Text("← Назад к карточке") }
+                AppButton(onClick = onBack) { Text("← Назад к карточке") }
             }
         }
     }

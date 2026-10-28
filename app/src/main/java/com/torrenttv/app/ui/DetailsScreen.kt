@@ -305,7 +305,7 @@ fun DetailsScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.padding(top = 16.dp),
             ) {
-                Button(
+                AppButton(
                     onClick = {
                         com.torrenttv.app.data.AppLog.log(
                             "ui",
@@ -320,14 +320,16 @@ fun DetailsScreen(
                     },
                     modifier = Modifier.focusRequester(watchFocus),
                 ) { Text("▶︎ Смотреть") }
-                Button(onClick = {
+                AppButton(onClick = {
                     fav = store.toggleFavorite(item)
                     com.torrenttv.app.data.AppLog.log(
                         "ui",
                         "нажал: «${if (fav) "В избранном" else "В избранное"}» «${item.title}»",
                     )
                 }) { Text(if (fav) "★︎ В избранном" else "☆ В избранное") }
-                MiniButton("🔍 Раздача") { onManualSearch() }
+                // «🔍 Раздача» убрана из главной панели (v0.9.30): дублировала
+                // «🧲 Раздача» у каждой серии и умный подбор «Смотреть».
+                // Переезжает вниз, к кнопкам Rutube (второстепенные источники).
                 // ▶︎ Трейлер — ищем на Rutube и играем встроенным плеером
                 MiniButton("🎬 Трейлер") {
                     com.torrenttv.app.data.AppLog.log(
@@ -364,18 +366,27 @@ fun DetailsScreen(
                 )
             }
 
-            // Бесплатный легальный стрим Rutube
-            if (rutubeFree.isNotEmpty()) {
+            // Второстепенные источники: легальный Rutube и ручной поиск раздач.
+            // Раздача — реже используемое действие: не в главной панели.
+            if (rutubeFree.isNotEmpty() || !magnet) {
                 Spacer(Modifier.height(10.dp))
-                Text(
-                    "📺 Бесплатно на Rutube (легально, с рекламой):",
-                    color = Color(0xFF9FB0C0),
-                    fontSize = 14.sp,
-                )
-                Spacer(Modifier.height(6.dp))
+                if (rutubeFree.isNotEmpty()) {
+                    Text(
+                        "📺 Бесплатно на Rutube (легально, с рекламой):",
+                        color = Color(0xFF9FB0C0),
+                        fontSize = 14.sp,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                }
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (!magnet) {
+                        MiniButton("🔍 Раздача в трекере") {
+                            com.torrenttv.app.data.AppLog.log("ui", "нажал: «Раздача в трекере» «${item.title}»")
+                            onManualSearch()
+                        }
+                    }
                     for (v in rutubeFree.take(3)) {
-                        Button(onClick = {
+                        AppButton(onClick = {
                             com.torrenttv.app.data.AppLog.log("nav", "нажал: «Rutube бесплатно» «${v.title}»")
                             onWatchRutube(v.id, v.title, v.thumb)
                         }) {
@@ -617,7 +628,7 @@ fun DetailsScreen(
             }
         }
 
-        Button(onClick = onBack) { Text("← Назад") }
+        AppButton(onClick = onBack) { Text("← Назад") }
     }
 }
 
@@ -627,9 +638,9 @@ fun DetailsScreen(
  */
 @Composable
 private fun MiniButton(text: String, onClick: () -> Unit) {
-    Button(
+    AppButton(
         onClick = onClick,
-        modifier = Modifier.height(34.dp),
+        heightDp = 34.dp,
     ) {
         Text(text, fontSize = 13.sp, maxLines = 1)
     }

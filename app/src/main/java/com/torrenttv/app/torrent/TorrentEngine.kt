@@ -55,46 +55,54 @@ object TorrentEngine {
         if (session.isRunning) return
         // Настройки как в открытых стримерах (LibreTorrent/TorrServe): больше
         // соединений и активных загрузок — быстрее находят пиры и качают
-        try {
-            val sp = com.frostwire.jlibtorrent.SettingsPack()
-                .connectionsLimit(300)
-                .activeDownloads(-1)
-                .activeSeeds(-1)
-            // Тюнинг под стриминг на ТВ: быстрее находить пиры за NAT провайдера
-            // и собирать пиров со ВСЕХ трекеров раздачи, а не одного
-            runCatching {
-                sp.setBoolean(
-                    com.frostwire.jlibtorrent.swig.settings_pack.bool_types.announce_to_all_trackers.swigValue(),
-                    true,
-                )
-                sp.setBoolean(
-                    com.frostwire.jlibtorrent.swig.settings_pack.bool_types.announce_to_all_tiers.swigValue(),
-                    true,
-                )
-                sp.setBoolean(
-                    com.frostwire.jlibtorrent.swig.settings_pack.bool_types.enable_upnp.swigValue(),
-                    true,
-                )
-                sp.setBoolean(
-                    com.frostwire.jlibtorrent.swig.settings_pack.bool_types.enable_natpmp.swigValue(),
-                    true,
-                )
-            }            // Широкий список DHT-роутеров: холодная сессия находит первый
-            // пир быстрее, метаданные магнита не «висят» по 90 секунд
-            runCatching {
-                sp.setDhtBootstrapNodes(
-                    "router.bittorrent.com:6881," +
-                        "router.utorrent.com:6881," +
-                        "router.bitcomet.com:6881," +
-                        "dht.transmissionbt.com:6881," +
-                        "dht.libtorrent.org:25401," +
-                        "dht.aelitis.com:6881",
-                )
-            }
-            session.applySettings(sp)
-        } catch (_: Exception) {
+        val sp = com.frostwire.jlibtorrent.SettingsPack()
+            .connectionsLimit(300)
+            .activeDownloads(-1)
+            .activeSeeds(-1)
+        // Тюнинг под стриминг на ТВ: быстрее находить пиры за NAT провайдера
+        // и собирать пиров со ВСЕХ трекеров раздачи, а не одного
+        runCatching {
+            sp.setBoolean(
+                com.frostwire.jlibtorrent.swig.settings_pack.bool_types.announce_to_all_trackers.swigValue(),
+                true,
+            )
+            sp.setBoolean(
+                com.frostwire.jlibtorrent.swig.settings_pack.bool_types.announce_to_all_tiers.swigValue(),
+                true,
+            )
+            sp.setBoolean(
+                com.frostwire.jlibtorrent.swig.settings_pack.bool_types.enable_upnp.swigValue(),
+                true,
+            )
+            sp.setBoolean(
+                com.frostwire.jlibtorrent.swig.settings_pack.bool_types.enable_natpmp.swigValue(),
+                true,
+            )
         }
-        session.start()
+        // Широкий список DHT-роутеров: холодная сессия находит первый
+        // пир быстрее, метаданные магнита не «висят» по 90 секунд
+        runCatching {
+            sp.setDhtBootstrapNodes(
+                "router.bittorrent.com:6881," +
+                    "router.utorrent.com:6881," +
+                    "router.bitcomet.com:6881," +
+                    "dht.transmissionbt.com:6881," +
+                    "dht.libtorrent.org:25401," +
+                    "dht.aelitis.com:6881",
+            )
+        }
+        // Настройки передаются В start() через SessionParams: applySettings
+        // до старта сессии мог молча теряться (native-сессии ещё нет)
+        try {
+            session.start(com.frostwire.jlibtorrent.SessionParams(sp))
+            com.torrenttv.app.data.AppLog.log(
+                "engine",
+                "сессия запущена: порт=${session.listenEndpoints()}, DHT=${session.isDhtRunning()}",
+            )
+        } catch (e: Exception) {
+            runCatching { session.start() }
+            com.torrenttv.app.data.AppLog.log("engine", "сессия запущена с дефолтными настройками: ${e.message}")
+        }
     }
 
     /**

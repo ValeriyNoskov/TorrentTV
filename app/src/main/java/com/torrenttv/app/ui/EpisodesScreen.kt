@@ -366,7 +366,7 @@ fun EpisodesScreen(
         }
 
         Spacer(Modifier.padding(top = 10.dp))
-        Button(onClick = onBack) { Text("← Назад") }
+        AppButton(onClick = onBack) { Text("← Назад") }
     }
 }
 

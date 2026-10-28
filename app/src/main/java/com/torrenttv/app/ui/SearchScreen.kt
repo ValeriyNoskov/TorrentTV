@@ -322,7 +322,7 @@ fun SearchScreen(
     ) {
         // ---------- Верхняя строка ----------
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = onBack) { Text("← Назад") }
+            AppButton(onClick = onBack) { Text("← Назад") }
             Spacer(Modifier.width(16.dp))
             Text(
                 text = if (query.isBlank()) "Введите название…" else query,
@@ -331,14 +331,14 @@ fun SearchScreen(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f),
             )
-            Button(onClick = { startVoice() }) { Text("🎤 Голос") }
+            AppButton(onClick = { startVoice() }) { Text("🎤 Голос") }
             Spacer(Modifier.width(10.dp))
-            Button(onClick = {
+            AppButton(onClick = {
                 showKb = !showKb
                 runCatching { if (!showKb) findFocus.requestFocus() }
             }) { Text(if (showKb) "⌨ Скрыть ввод" else "⌨ Ввод") }
             Spacer(Modifier.width(10.dp))
-            Button(onClick = { searchTickForce++ }, modifier = Modifier.focusRequester(findFocus)) {
+            AppButton(onClick = { searchTickForce++ }, modifier = Modifier.focusRequester(findFocus)) {
                 Text("🔍 Найти")
             }
         }
@@ -361,7 +361,7 @@ fun SearchScreen(
                     fontSize = 15.sp,
                     modifier = Modifier.weight(1f),
                 )
-                Button(onClick = {
+                AppButton(onClick = {
                     store.clearRecentQueries()
                     recents = emptyList()
                 }) { Text("✕ Очистить") }
@@ -371,7 +371,7 @@ fun SearchScreen(
             ) {
                 items(recents.size) { i ->
                     val q = recents[i]
-                    Button(
+                    AppButton(
                         onClick = { query = q },
                         modifier = Modifier.padding(end = 8.dp),
                         shape = androidx.tv.material3.ButtonDefaults.shape(RoundedCornerShape(20.dp)),
@@ -407,7 +407,7 @@ fun SearchScreen(
                     fontSize = 15.sp,
                     modifier = Modifier.weight(1f),
                 )
-                Button(onClick = {
+                AppButton(onClick = {
                     val anyCard = results.firstOrNull { it.posterUrl.isNotBlank() }
                     onOpenResults(
                         anyCard ?: MediaItem(id = query.hashCode(), type = "movie", title = query),
@@ -488,14 +488,14 @@ fun SearchScreen(
                 modifier = Modifier.padding(top = 10.dp),
             )
             Row(Modifier.padding(top = 8.dp)) {
-                Button(onClick = { searchTickForce++ }) { Text("🔄 Повторить") }
+                AppButton(onClick = { searchTickForce++ }) { Text("🔄 Повторить") }
                 Spacer(Modifier.width(12.dp))
-                Button(onClick = { onTorrentSearch(query) }) { Text("🧲 Искать в торрентах") }
+                AppButton(onClick = { onTorrentSearch(query) }) { Text("🧲 Искать в торрентах") }
             }
         } else if (query.length >= 2) {
             // Ничего не найдено по фильму — всегда предложим торренты напрямую
             Text("Фильмов не найдено.", color = Color.White.copy(alpha = 0.5f), fontSize = 15.sp, modifier = Modifier.padding(top = 10.dp))
-            Button(onClick = { onTorrentSearch(query) }, modifier = Modifier.padding(top = 8.dp)) {
+            AppButton(onClick = { onTorrentSearch(query) }, modifier = Modifier.padding(top = 8.dp)) {
                 Text("🧲 Искать «$query» в торрентах")
             }
         }

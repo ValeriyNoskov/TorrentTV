@@ -159,7 +159,7 @@ fun TorrentResultsScreen(
             }
         }
         Spacer(Modifier.height(10.dp))
-        Button(onClick = onBack) { Text("← Назад") }
+        AppButton(onClick = onBack) { Text("← Назад") }
     }
 }
 
@@ -276,7 +276,7 @@ fun TorrentFilesScreen(
                 fontSize = 15.sp,
             )
             Spacer(Modifier.height(12.dp))
-            Button(onClick = onBack) { Text("← Назад") }
+            AppButton(onClick = onBack) { Text("← Назад") }
         } else {
             Text(
                 if (groups.size > 1) "Сезонов: ${groups.count { it.first > 0 }} — выберите сезон и серию:"
@@ -368,7 +368,7 @@ fun TorrentFilesScreen(
                 }
             }
             Spacer(Modifier.height(10.dp))
-            Button(onClick = onBack) { Text("← Назад") }
+            AppButton(onClick = onBack) { Text("← Назад") }
         }
     }
 }

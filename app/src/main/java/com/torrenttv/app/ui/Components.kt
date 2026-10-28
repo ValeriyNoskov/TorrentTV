@@ -515,10 +515,35 @@ fun FilterPicker(
     }
 }
 
+/**
+ * Компактная кнопка (v0.9.30): у дефолтной androidx.tv.material3.Button большой
+ * внутренний отступ (24dp×18dp) — кнопки высокие, экраны скроллятся. Здесь
+ * фиксированная высота и узкие отступы; дальше по всему UI используется она.
+ */
+@Composable
+fun AppButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    heightDp: androidx.compose.ui.unit.Dp = 38.dp,
+    shape: androidx.tv.material3.ButtonShape = androidx.tv.material3.ButtonDefaults.shape(),
+    colors: androidx.tv.material3.ButtonColors = androidx.tv.material3.ButtonDefaults.colors(),
+    content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit,
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.height(heightDp),
+        enabled = enabled,
+        shape = shape,
+        colors = colors,
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
+        content = content,
+    )
+}
+
 /** Единая форма для всех состояний кликабельного Surface (tv-material 1.0.0 требует обёртку). */
 @Composable
-fun clickableSurfaceShape(shape: Shape): ClickableSurfaceShape =
-    ClickableSurfaceDefaults.shape(shape, shape, shape, shape)
+fun clickableSurfaceShape(shape: Shape): ClickableSurfaceShape = ClickableSurfaceDefaults.shape(shape, shape, shape, shape)
 
 /**
  * Touch-обработка для tv-material Surface: тот кликается только с пульта (D-pad),
@@ -798,7 +823,7 @@ fun PagedMediaRow(
                     fontSize = 15.sp,
                     modifier = Modifier.padding(horizontal = 32.dp),
                 )
-                Button(
+                AppButton(
                     onClick = { retry() },
                     modifier = Modifier.padding(horizontal = 32.dp, vertical = 8.dp),
                 ) { Text("🔄 Повторить") }
@@ -891,9 +916,9 @@ fun SideNav(active: Screen, onTab: (Screen) -> Unit, restoreFocusTick: Int = 0) 
             .fillMaxHeight()
             .background(Color(0xFF12161F))
             .verticalScroll(rememberScrollState())
-            .padding(vertical = 14.dp),
+            .padding(vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         if (expanded) {
             Text(
@@ -976,11 +1001,11 @@ fun SideBarButton(
             verticalAlignment = Alignment.CenterVertically,
             // В свёрнутом баре иконка — по центру кнопки, иначе прижата влево
             horizontalArrangement = if (expanded) Arrangement.Start else Arrangement.Center,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp, horizontal = if (expanded) 12.dp else 0.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp, horizontal = if (expanded) 12.dp else 0.dp),
         ) {
             Text(
                 text = icon,
-                fontSize = 21.sp,
+                fontSize = 18.sp,
                 modifier = if (expanded) Modifier.padding(end = 10.dp) else Modifier,
             )
             if (expanded) {

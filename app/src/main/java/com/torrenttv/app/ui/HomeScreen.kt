@@ -84,7 +84,9 @@ fun HomeScreen(
                     )
                 }
             }
-            // 🎲 Случайный фильм: один OK — открыт случайный тайтл из трендов
+            // Продолжить смотреть — первым (как в стримингах):
+            // один OK — и ты на месте остановки. «🎲 Случайный фильм» —
+            // маленькой кнопкой в заголовке, а не первой строкой экрана
             item {
                 var randomTick by remember { mutableStateOf(0) }
                 LaunchedEffect(randomTick) {
@@ -97,26 +99,26 @@ fun HomeScreen(
                         onOpenDetails(pick)
                     }
                 }
-                Button(
-                    onClick = {
-                        com.torrenttv.app.data.AppLog.log("ui", "нажал: «Случайный фильм»")
-                        randomTick++
-                    },
-                    modifier = Modifier.padding(horizontal = 32.dp, vertical = 2.dp),
-                ) { Text("🎲 Случайный фильм") }
-            }
-            // Продолжить смотреть — самым первым (как в стримингах):
-            // один OK — и ты на месте остановки
-            item {
                 val continueEntries = remember(favTick) { store.continueWatching() }
                 if (continueEntries.isNotEmpty()) {
-                    Text(
-                        "▶️ Продолжить смотреть",
-                        color = Color.White,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.SemiBold,
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(horizontal = 32.dp, vertical = 6.dp),
-                    )
+                    ) {
+                        Text(
+                            "▶️ Продолжить смотреть",
+                            color = Color.White,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        AppButton(
+                            onClick = {
+                                com.torrenttv.app.data.AppLog.log("ui", "нажал: «Случайный фильм»")
+                                randomTick++
+                            },
+                        ) { Text("🎲") }
+                    }
                     androidx.compose.foundation.lazy.LazyRow(
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 32.dp, vertical = 6.dp),
                         horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp),
@@ -183,7 +185,7 @@ fun HomeScreen(
                             fontWeight = FontWeight.SemiBold,
                         )
                         Spacer(Modifier.padding(horizontal = 8.dp))
-                        Button(onClick = onOpenTv) { Text("Все каналы →") }
+                        AppButton(onClick = onOpenTv) { Text("Все каналы →") }
                     }
                     androidx.compose.foundation.lazy.LazyRow(
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 32.dp, vertical = 6.dp),
@@ -222,8 +224,8 @@ fun HomeScreen(
                     }
                 }
             }
-            // Русское — первыми: раньше на Главной были только мировые
-            // тренды, и выглядело как «одна иностранщина»
+            // Три полки вместо шести (v0.9.30): сериалы/шоу легко доступны
+            // из каталога по клику на заголовок — Главная не перегружена
             item {
                 PagedMediaRow(
                     title = "🇷🇺 Русские фильмы",
@@ -231,15 +233,6 @@ fun HomeScreen(
                     onOpen = onOpenDetails,
                     filterFn = { store.isAllowed(it) },
                     onTitleClick = { onOpenCatalog("movies") },
-                )
-            }
-            item {
-                PagedMediaRow(
-                    title = "🇷🇺 Русские сериалы",
-                    loader = { page -> MediaApi.russianTv(page) },
-                    onOpen = onOpenDetails,
-                    filterFn = { store.isAllowed(it) },
-                    onTitleClick = { onOpenCatalog("tv") },
                 )
             }
             // Тренды — витрина мира
@@ -259,24 +252,6 @@ fun HomeScreen(
                     onOpen = onOpenDetails,
                     filterFn = { store.isAllowed(it) },
                     onTitleClick = { onOpenCatalog("movies") },
-                )
-            }
-            item {
-                PagedMediaRow(
-                    title = "🆕 Новинки сериалов",
-                    loader = { page -> MediaApi.newTv(page) },
-                    onOpen = onOpenDetails,
-                    filterFn = { store.isAllowed(it) },
-                    onTitleClick = { onOpenCatalog("tv") },
-                )
-            }
-            item {
-                PagedMediaRow(
-                    title = "🎪 Новинки шоу",
-                    loader = { page -> MediaApi.popularShows(page) },
-                    onOpen = onOpenDetails,
-                    filterFn = { store.isAllowed(it) },
-                    onTitleClick = { onOpenCatalog("shows") },
                 )
             }
             item { Spacer(Modifier.height(24.dp)) }
@@ -329,7 +304,7 @@ fun HomeScreen(
                             Text(updateStatus, color = Color(0xFFBFE3F7), fontSize = 13.sp)
                         }
                     }
-                    Button(
+                    AppButton(
                         onClick = {
                             UpdateManager.downloadAndInstall(
                                 context,

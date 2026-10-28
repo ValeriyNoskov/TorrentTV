@@ -246,17 +246,24 @@ fun PlayerScreen(
             bufferedPct = ((st.readyFraction(startPos, threshold) * 100).toInt()).coerceIn(0, 100)
             val mb = st.headBytes() / 1024 / 1024
             val speed = st.speedBps() / 1024
-            netInfo = if (st.peers() > 0) {
-                "Пиры: ${st.peers()} · Скачано: $mb МБ · ${speed} КБ/с"
-            } else {
-                "Пиры не найдены — трекеры/DHT недоступны из этой сети"
+            val dht = TorrentEngine.session.dhtNodes()
+            netInfo = when {
+                st.peers() > 0 -> "Пиры: ${st.peers()} · Скачано: $mb МБ · ${speed} КБ/с"
+                // DHT-узлы = 0 значит UDP-обмен вообще не идёт (сеть режет
+                // BitTorrent); узлы есть, а пиров нет — мёртвая раздача
+                dht > 0 -> "Пиры не найдены · DHT жив ($dht узлов) — ждём сидов раздачи"
+                else -> "Пиры не найдены · DHT пуст — сеть блокирует BitTorrent"
             }
             if (System.currentTimeMillis() > deadline) {
                 status = "Раздача не отвечает: пиры недоступны из вашей сети. " +
                     "Попробуйте другую раздачу, VPN или Jackett"
                 return@LaunchedEffect
             }
-            delay(500)
+            com.torrenttv.app.data.AppLog.log(
+                "player",
+                "буферизация: peers=${st.peers()} dht=$dht speed=${speed}КБ/с head=${mb}МБ ready=${bufferedPct}%",
+            )
+            delay(5000)
         }
         bufferedPct = 100
     }
@@ -362,7 +369,7 @@ fun PlayerScreen(
             }
 
             Spacer(Modifier.height(24.dp))
-            Button(onClick = onBack) { Text("← Назад") }
+            AppButton(onClick = onBack) { Text("← Назад") }
         }
     }
 }
@@ -1010,12 +1017,12 @@ private fun VideoPlayer(
                 )
                 Spacer(Modifier.height(14.dp))
                 Row {
-                    Button(
+                    AppButton(
                         onClick = { nextCountdown = null },
                         modifier = Modifier.focusRequester(cancelFocus),
                     ) { Text("✕ Отмена") }
                     Spacer(Modifier.width(12.dp))
-                    Button(onClick = { nextCountdown = 0 }) { Text("▶︎ Сейчас") }
+                    AppButton(onClick = { nextCountdown = 0 }) { Text("▶︎ Сейчас") }
                 }
             }
         }
@@ -1066,7 +1073,7 @@ private fun VideoPlayer(
         // «⏭︎ Пропустить» по разметке баз (титры/анонс) — точные границы
         val segSkip = segButton
         if (segSkip != null) {
-            Button(
+            AppButton(
                 onClick = {
                     segButton = null
                     val target = segSkip.endMs
@@ -1106,7 +1113,7 @@ private fun VideoPlayer(
                     kotlinx.coroutines.delay(60)
                 }
             }
-            Button(
+            AppButton(
                 onClick = {
                     showSkip = false
                     player.seekTo((player.duration - 3000).coerceAtLeast(0))
@@ -1291,7 +1298,8 @@ private fun VideoPlayer(
                         ),
                     ) { Text("${speeds[speedIdx]}×", fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
                     Spacer(Modifier.weight(1f))
-                    // ♪ Аудио — дорожки из mkv (как кнопка аудио в MX)
+                    // 🎵 Дорожки — аудио и субтитры в одном меню (раньше было
+                    // ДВЕ кнопки, обе открывали один и тот же TrackMenuOverlay)
                     androidx.tv.material3.Surface(
                         onClick = { showTrackMenu = true },
                         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
@@ -1301,19 +1309,7 @@ private fun VideoPlayer(
                             focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
                         ),
-                    ) { Text("♪ Аудио", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
-                    Spacer(Modifier.width(8.dp))
-                    // 💬 Субтитры — те же дорожки, вкладка субтитров
-                    androidx.tv.material3.Surface(
-                        onClick = { showTrackMenu = true },
-                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Color(0xFF1F2430),
-                            contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFE8ECF4),
-                            focusedContentColor = Color.Black,
-                        ),
-                    ) { Text("💬 Субтитры", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
+                    ) { Text("🎵 Дорожки", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
                     Spacer(Modifier.width(8.dp))
                     // ⛶ Масштаб картинки: Вписать → Растянуть → Заполнить (кнопка scale в MX)
                     androidx.tv.material3.Surface(

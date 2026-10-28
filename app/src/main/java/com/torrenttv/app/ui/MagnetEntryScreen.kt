@@ -72,7 +72,7 @@ fun MagnetEntryScreen(item: MediaItem, onDone: () -> Unit, onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(top = 10.dp),
         ) {
-            Button(
+            AppButton(
                 onClick = {
                     val t = magnet.trim()
                     when {
@@ -101,9 +101,9 @@ fun MagnetEntryScreen(item: MediaItem, onDone: () -> Unit, onBack: () -> Unit) {
             ) { Text("Сохранить и смотреть") }
             Spacer(Modifier.width(16.dp))
             Spacer(Modifier.width(16.dp))
-        Button(onClick = { showKb = true }) { Text("⌨ Ввести") }
+        AppButton(onClick = { showKb = true }) { Text("⌨ Ввести") }
         Spacer(Modifier.width(16.dp))
-        Button(onClick = onBack) { Text("← Назад") }
+        AppButton(onClick = onBack) { Text("← Назад") }
         }
 
         Spacer(Modifier.height(8.dp))

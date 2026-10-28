@@ -59,15 +59,14 @@ import kotlinx.coroutines.withContext
 
 /**
  * Разделы настроек: id, заголовок, краткое описание.
- * Пользовательские видны всем; разделы разработки спрятаны за пунктом
- * «🛠 Для разработчика» (код 0301) — пользователю для просмотра не нужны.
+ * Пользовательские видны всем; разделы разработки скрыты за пунктом
+ * «🛠 Для разработчика» (открывается сразу, без кода).
  */
 private val USER_SECTIONS = listOf(
     Triple("update", "⬆ Обновление", "Проверить и установить новую версию"),
     Triple("keywords", "🚫 Стоп-слова", "Слова-исключения для поиска раздач"),
     Triple("tv", "📡 ТВ-каналы", "Свой плейлист добавляется к встроенному списку"),
-    Triple("player", "📺 Плеер", "Встроенный или внешний плеер (VLC, MX Player)"),
-    Triple("input", "⌨ Ввод", "Клавиатура: внешняя (системная) или встроенная"),
+    Triple("player", "📺 Плеер", "Встроенный или внешний плеер (VLC, MX Player), клавиатура"),
 )
 
 /** Только для разработчика: диагностика, логи, ключи, расход лимитов. */
@@ -79,9 +78,6 @@ private val DEV_SECTIONS = listOf(
 )
 
 private val SECTIONS = USER_SECTIONS + DEV_SECTIONS
-
-/** Код входа в режим разработчика (запрашивается при каждом открытии). */
-private const val DEV_CODE = "0301"
 
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
@@ -220,10 +216,13 @@ fun SettingsScreen(onBack: () -> Unit) {
                         fontSize = 12.sp,
                         modifier = Modifier.padding(start = 14.dp, top = 8.dp, bottom = 2.dp),
                     )
-                    // «🛠 Для разработчика»: открывает ввод кода, разделом не становится
+                    // «🛠 Для разработчика»: блок открывается сразу (ввод кода
+                    // убран — с пульта набирать 0301 было неудобно)
                     id == "devtool" -> SectionItem(title, false, sectionMod(i + 1)) {
-                        com.torrenttv.app.data.AppLog.log("ui", "нажал: «Для разработчика» — запрос кода")
-                        subscreen = "devcode"
+                        com.torrenttv.app.data.AppLog.log("ui", "нажал: «Для разработчика» — блок открыт")
+                        devMode = true
+                        section = DEV_SECTIONS.first().first
+                        store.setLastSettingsSection(section)
                     }
                     // «🙈 Скрыть разработчика»: спрятать блок обратно
                     id == "devhide" -> SectionItem(title, false, sectionMod(i + 1)) {
@@ -241,10 +240,10 @@ fun SettingsScreen(onBack: () -> Unit) {
                     }
                 }
             }
-            SectionItem("⛔ Выход", false, sectionMod(menuItems.size + 1)) {
-                (context as? android.app.Activity)?.finishAffinity()
-            }
         }
+        // «⛔ Выход» убран (v0.9.30): дублировал выход в боковом меню, причём
+        // срабатывал мгновенно без подтверждения — случайное нажатие закрывало
+        // приложение. Выход — только через боковое меню (там есть диалог).
 
         Spacer(Modifier.width(24.dp))
 
@@ -410,6 +409,17 @@ fun SettingsScreen(onBack: () -> Unit) {
                             store.setSkipDbEnabled(skipDb)
                         }
                         SettingsNote("Точные таймкоды из открытых баз разметки (SkipDB/IntroDB) по IMDb — то, что знает сообщество. Не перемотка по догадкам.")
+                        // Внешняя клавиатура: раньше был целый раздел «⌨ Ввод»
+                        // ради одного тумблера — теперь рядок здесь
+                        SettingsRow(
+                            title = if (extKb) "✅ Внешняя клавиатура" else "⬜ Внешняя клавиатура",
+                            value = if (extKb) "ВКЛ — текст вводится с клавиатуры/пульта" else "ВЫКЛ — встроенная экранная клавиатура",
+                            valueOk = extKb,
+                        ) {
+                            extKb = !extKb
+                            store.setUseExternalKeyboard(extKb)
+                        }
+                        SettingsNote("Включите, если пульт/аэромышь с клавиатурой — текст вводится напрямую.")
                     }
 
 
@@ -662,17 +672,6 @@ fun SettingsScreen(onBack: () -> Unit) {
             "netcheck" -> NetCheckScreen(onClose = { subscreen = null })
             "selftest" -> SelfTestScreen(onClose = { subscreen = null })
 
-            // Ввод кода разработчика: 4 цифры с пульта, верно — показать блок
-            "devcode" -> DevCodeScreen(
-                onOk = {
-                    devMode = true
-                    section = DEV_SECTIONS.first().first
-                    subscreen = null
-                    com.torrenttv.app.data.AppLog.log("ui", "код принят — режим разработчика включён")
-                },
-                onClose = { subscreen = null },
-            )
-
             "genres" -> FilterPicker(
                 title = "Скрытые жанры",
                 groups = listOf("Фильмы:" to movieGenres, "Сериалы:" to tvGenres),
@@ -776,9 +775,9 @@ private fun SectionItem(
     ) {
         Text(
             text = (if (selected) "▸ " else "") + title,
-            fontSize = 17.sp,
+            fontSize = 15.sp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
         )
     }
 }
@@ -797,7 +796,7 @@ private fun SettingsRow(
         onClick = onClick,
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 3.dp)
+            .padding(vertical = 2.dp)
             .mouseClick { onClick() },
         shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
         colors = ClickableSurfaceDefaults.colors(
@@ -812,19 +811,19 @@ private fun SettingsRow(
         ),
     ) {
         Row(
-            Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = title,
-                fontSize = 16.sp,
+                fontSize = 14.5.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f),
             )
             if (value.isNotBlank()) {
                 Text(
                     text = value,
-                    fontSize = 16.sp,
+                    fontSize = 14.5.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.width(240.dp),
@@ -846,8 +845,9 @@ private fun SettingsNote(text: String) {
     Text(
         text = text,
         color = Color.White.copy(alpha = 0.45f),
-        fontSize = 16.sp,
-        modifier = Modifier.padding(horizontal = 6.dp, vertical = 10.dp),
+        fontSize = 13.5.sp,
+        lineHeight = 18.sp,
+        modifier = Modifier.padding(horizontal = 6.dp, vertical = 5.dp),
     )
 }
 
@@ -883,11 +883,11 @@ private fun EditScreen(
                 .padding(top = 10.dp, bottom = 4.dp),
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = onSave) { Text("💾 Сохранить") }
+            AppButton(onClick = onSave) { Text("💾 Сохранить") }
             Spacer(Modifier.width(12.dp))
-            Button(onClick = { showKb = true }) { Text("⌨ Ввести") }
+            AppButton(onClick = { showKb = true }) { Text("⌨ Ввести") }
             Spacer(Modifier.width(16.dp))
-            Button(onClick = onCancel) { Text("Отмена") }
+            AppButton(onClick = onCancel) { Text("Отмена") }
         }
         if (externalKb) {
             // Ретраи: узел не готов мгновенно; runCatching только внутри
@@ -1016,7 +1016,7 @@ private fun NetCheckScreen(onClose: () -> Unit) {
     // Автопроверка идёт при открытии экрана; кнопка — для повторного прогона
     if (!running && rows.isNotEmpty()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = {
+            AppButton(onClick = {
                 com.torrenttv.app.data.AppLog.log("ui", "нажал: «Проверить снова» (Проверка сети)")
                 kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch { checkAll() }
             }) { Text("🔄 Проверить снова") }
@@ -1031,7 +1031,7 @@ private fun NetCheckScreen(onClose: () -> Unit) {
             .padding(28.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = onClose) { Text("← Готово") }
+            AppButton(onClick = onClose) { Text("← Готово") }
             Spacer(Modifier.width(16.dp))
             Text(
                 "Проверка сети",
@@ -1095,7 +1095,7 @@ private fun NetCheckScreen(onClose: () -> Unit) {
         )
         Spacer(Modifier.height(14.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(
+            AppButton(
                 onClick = {
                     if (!uploading) {
                         uploading = true
@@ -1150,7 +1150,7 @@ private fun SubscreenKeywords(
             .padding(28.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = onClose) { Text("← Готово") }
+            AppButton(onClick = onClose) { Text("← Готово") }
             Spacer(Modifier.width(16.dp))
             Text(
                 "Стоп-слова (нажмите на слово — удалится)",
@@ -1174,9 +1174,9 @@ private fun SubscreenKeywords(
             )
         }
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 12.dp)) {
-            Button(onClick = { showKb = true }) { Text("⌨ Ввести слово") }
+            AppButton(onClick = { showKb = true }) { Text("⌨ Ввести слово") }
             Spacer(Modifier.width(12.dp))
-            Button(onClick = onClearAll, enabled = keywords.isNotEmpty()) { Text("🗑 Удалить все") }
+            AppButton(onClick = onClearAll, enabled = keywords.isNotEmpty()) { Text("🗑 Удалить все") }
         }
         KeyboardSheet(
             value = draft,
@@ -1214,139 +1214,6 @@ private fun KeywordChip(word: String, onRemove: () -> Unit) {
             fontSize = 17.sp,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
         )
-    }
-}
-
-
-/**
- * Ввод кода разработчика (DEV_CODE): экранная цифровая панель, управляемая
- * стрелками пульта (у ТВ-пульта цифровых кнопок нет), плюс поддержка
- * аппаратных цифр — если клавиатура/пульт с цифрами подключены.
- * Верно — onOk (блок «разработка» появляется в меню), иначе «Неверный код»
- * и очистка. Код запрашивается при каждом открытии — не запоминаем.
- */
-@Composable
-private fun DevCodeScreen(onOk: () -> Unit, onClose: () -> Unit) {
-    var code by remember { mutableStateOf("") }
-    var wrong by remember { mutableStateOf(false) }
-    // Панель на экране — только при встроенном вводе; внешняя клавиатура
-    // (галочка в «⌨ Ввод») — цифры напрямую с неё
-    val externalKb = LocalContext.current.let {
-        remember { com.torrenttv.app.data.LocalStore(it).useExternalKeyboard() }
-    }
-    // Общий обработчик цифры: экранная панель и аппаратные клавиши ведут одинаково
-    fun press(d: String) {
-        when {
-            d == "⌫" -> { code = code.dropLast(1); wrong = false }
-            d != "OK" && code.length < 4 -> {
-                code += d
-                if (code.length == 4) {
-                    if (code == DEV_CODE) onOk()
-                    else { wrong = true; code = "" }
-                }
-            }
-        }
-    }
-    BackHandler { onClose() }
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(Color(0xFF0E1116))
-            // Аппаратные цифры (внешняя клавиатура / пульт с цифрами)
-            .onPreviewKeyEvent { e ->
-                if (e.type != androidx.compose.ui.input.key.KeyEventType.KeyUp) return@onPreviewKeyEvent false
-                val digit = when (e.key) {
-                    androidx.compose.ui.input.key.Key.Zero, androidx.compose.ui.input.key.Key.NumPad0 -> "0"
-                    androidx.compose.ui.input.key.Key.One, androidx.compose.ui.input.key.Key.NumPad1 -> "1"
-                    androidx.compose.ui.input.key.Key.Two, androidx.compose.ui.input.key.Key.NumPad2 -> "2"
-                    androidx.compose.ui.input.key.Key.Three, androidx.compose.ui.input.key.Key.NumPad3 -> "3"
-                    androidx.compose.ui.input.key.Key.Four, androidx.compose.ui.input.key.Key.NumPad4 -> "4"
-                    androidx.compose.ui.input.key.Key.Five, androidx.compose.ui.input.key.Key.NumPad5 -> "5"
-                    androidx.compose.ui.input.key.Key.Six, androidx.compose.ui.input.key.Key.NumPad6 -> "6"
-                    androidx.compose.ui.input.key.Key.Seven, androidx.compose.ui.input.key.Key.NumPad7 -> "7"
-                    androidx.compose.ui.input.key.Key.Eight, androidx.compose.ui.input.key.Key.NumPad8 -> "8"
-                    androidx.compose.ui.input.key.Key.Nine, androidx.compose.ui.input.key.Key.NumPad9 -> "9"
-                    androidx.compose.ui.input.key.Key.Backspace -> "⌫"
-                    else -> null
-                }
-                if (digit != null && code.length <= 4) { press(digit); true } else false
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("🔒 Код доступа", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-            Text(
-                if (externalKb) "Введите 4 цифры на клавиатуре" else "Стрелками выберите 4 цифры, OK — ввести",
-                color = Color.White.copy(alpha = 0.55f),
-                fontSize = 16.sp,
-                modifier = Modifier.padding(top = 6.dp),
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 20.dp)) {
-                repeat(4) { i ->
-                    Box(
-                        Modifier
-                            .size(width = 56.dp, height = 64.dp)
-                            .background(Color(0xFF1F2430), RoundedCornerShape(10.dp)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            if (i < code.length) "●" else "",
-                            color = Color.White,
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                }
-            }
-            if (wrong) {
-                Text(
-                    "Неверный код",
-                    color = Color(0xFFE57373),
-                    fontSize = 15.sp,
-                    modifier = Modifier.padding(top = 12.dp),
-                )
-            }
-            // Экранная панель 0–9 + ⌫ — только при встроенном вводе
-            if (!externalKb) {
-                // Фокус — сразу на «1»: без этого фокус непредсказуем и код
-                // «не набирается» (проверено на эмуляторе)
-                val padFocus = remember { FocusRequester() }
-                LaunchedEffect(Unit) { runCatching { padFocus.requestFocus() } }
-                val digits = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "OK")
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(top = 20.dp),
-                ) {
-                    for (row in digits.chunked(3)) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 10.dp)) {
-                            for (d in row) {
-                                androidx.tv.material3.Surface(
-                                    onClick = { press(d) },
-                                    modifier = if (d == "1") Modifier.focusRequester(padFocus) else Modifier,
-                                    shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
-                                    colors = ClickableSurfaceDefaults.colors(
-                                        containerColor = Color(0xFF1F2430),
-                                        contentColor = Color.White,
-                                        focusedContainerColor = Color(0xB3FFFFFF),
-                                        focusedContentColor = Color(0xFF0E1116),
-                                        pressedContainerColor = Color(0xFF273548),
-                                        pressedContentColor = Color.White,
-                                    ),
-                                ) {
-                                    Text(
-                                        d,
-                                        fontSize = 20.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 22.dp, vertical = 12.dp),
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            Button(onClick = onClose, modifier = Modifier.padding(top = 24.dp)) { Text("← Отмена") }
-        }
     }
 }
 
@@ -1446,6 +1313,6 @@ private fun SelfTestScreen(onClose: () -> Unit) {
             if (uploadState.isNotBlank()) SettingsNote(uploadState)
         }
         Spacer(Modifier.height(24.dp))
-        Button(onClick = onClose, enabled = !running) { Text(if (running) "Идёт проверка…" else "← Назад") }
+        AppButton(onClick = onClose, enabled = !running) { Text(if (running) "Идёт проверка…" else "← Назад") }
     }
 }
