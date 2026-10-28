@@ -99,18 +99,37 @@ object TorrentEngine {
         }
         // Настройки передаются В start() через SessionParams: applySettings
         // до старта сессии мог молча теряться (native-сессии ещё нет).
-        // Состояние прошлой сессии (DHT-кеш, пиры) ускоряет тёплый старт
+        // Состояние прошлой сессии (DHT-кеш, пиры) ускоряет тёплый старт,
+        // но несёт СВОИ настройки — наш тюнинг (порт, лимиты) применяем
+        // поверх восстановленного, иначе порт и лимиты терялись
         val stateF = stateFile
         try {
             val params = if (stateF != null && stateF.exists() && stateF.length() > 0) {
-                runCatching { com.frostwire.jlibtorrent.SessionParams(stateF.readBytes()) }.getOrNull()
+                runCatching {
+                    com.frostwire.jlibtorrent.SessionParams(stateF.readBytes()).apply { setSettings(sp) }
+                }.getOrNull()
             } else null
             session.start(params ?: com.frostwire.jlibtorrent.SessionParams(sp))
             com.torrenttv.app.data.AppLog.log(
                 "engine",
-                "сессия запущена: порт=${session.listenEndpoints()}, DHT=${session.isDhtRunning()}" +
+                "сессия запущена: DHT=${session.isDhtRunning()}" +
                     (if (params != null) ", состояние восстановлено" else ""),
             )
+            installDiagnostics()
+            // Привязка listen-порта асинхронна: сразу после старта endpoints
+            // пустые (в логе v0.9.32 было «порт=[]») — логируем с задержкой
+            Thread {
+                runCatching {
+                    Thread.sleep(3000)
+                    if (session.isRunning) {
+                        com.torrenttv.app.data.AppLog.log(
+                            "engine",
+                            "порт через 3с: endpoints=${session.listenEndpoints()}, " +
+                                "DHT-узлов=${session.dhtNodes()}",
+                        )
+                    }
+                }
+            }.apply { isDaemon = true; start() }
         } catch (e: Exception) {
             runCatching { session.start() }
             com.torrenttv.app.data.AppLog.log(
@@ -118,6 +137,69 @@ object TorrentEngine {
                 "сессия запущена с дефолтными настройками (тюнинг не применился!): ${e.message}",
             )
         }
+    }
+
+    /**
+     * Диагностика «пиры не найдены» по alert'ам libtorrent (v0.9.33).
+     * По логу теперь видно: привязался ли порт, пробросил ли UPnP,
+     * ответили ли трекеры/DHT по хешу раздачи и почему нет.
+     * types()==null — все типы (так работает AlertMulticaster).
+     */
+    private fun installDiagnostics() {
+        session.addListener(object : com.frostwire.jlibtorrent.AlertListener {
+            override fun types(): IntArray? = null
+
+            override fun alert(a: com.frostwire.jlibtorrent.alerts.Alert<*>) {
+                try {
+                    when (a.type()) {
+                        com.frostwire.jlibtorrent.alerts.AlertType.LISTEN_SUCCEEDED -> {
+                            val al = a as com.frostwire.jlibtorrent.alerts.ListenSucceededAlert
+                            com.torrenttv.app.data.AppLog.log(
+                                "engine",
+                                "порт привязан: ${al.address()}:${al.port()} (${al.socketType()})",
+                            )
+                        }
+                        com.frostwire.jlibtorrent.alerts.AlertType.LISTEN_FAILED -> {
+                            val al = a as com.frostwire.jlibtorrent.alerts.ListenFailedAlert
+                            com.torrenttv.app.data.AppLog.log(
+                                "engine",
+                                "порт НЕ привязан: ${al.listenInterface()} — ${al.error().message()} " +
+                                    "(входящие соединения работать не будут)",
+                            )
+                        }
+                        com.frostwire.jlibtorrent.alerts.AlertType.PORTMAP_ERROR ->
+                            com.torrenttv.app.data.AppLog.log("engine", "UPnP/NAT-PMP: проброс порта не удался")
+                        com.frostwire.jlibtorrent.alerts.AlertType.TRACKER_REPLY -> {
+                            val al = a as com.frostwire.jlibtorrent.alerts.TrackerReplyAlert
+                            // Ответы без пиров не логируем — шум; важно, где ЕСТЬ пиры
+                            if (al.numPeers() > 0) {
+                                com.torrenttv.app.data.AppLog.log(
+                                    "engine",
+                                    "трекер ${al.trackerUrl()} отдал ${al.numPeers()} пиров",
+                                )
+                            }
+                        }
+                        com.frostwire.jlibtorrent.alerts.AlertType.TRACKER_ERROR -> {
+                            val al = a as com.frostwire.jlibtorrent.alerts.TrackerErrorAlert
+                            com.torrenttv.app.data.AppLog.log(
+                                "engine",
+                                "трекер ${al.trackerUrl()} FAIL: ${al.errorMessage()} (${al.timesInRow()} раз подряд)",
+                            )
+                        }
+                        com.frostwire.jlibtorrent.alerts.AlertType.DHT_REPLY -> {
+                            val al = a as com.frostwire.jlibtorrent.alerts.DhtReplyAlert
+                            com.torrenttv.app.data.AppLog.log(
+                                "engine",
+                                "DHT отдала ${al.numPeers()} пиров по хешу раздачи",
+                            )
+                        }
+                        else -> {}
+                    }
+                } catch (_: Exception) {
+                    // alert-диагностика не должна ронять движок
+                }
+            }
+        })
     }
 
     /** Куда сохранять состояние сессии; выставляет MainActivity при старте. */
