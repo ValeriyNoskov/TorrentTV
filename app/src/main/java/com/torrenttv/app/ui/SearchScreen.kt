@@ -86,11 +86,14 @@ fun SearchScreen(
     onOpenResults: (MediaItem, String, List<com.torrenttv.app.data.TorrentResult>, Map<String, String>) -> Unit = { _, _, _, _ -> },
     /** Выбрано видео с Rutube — открыть экран просмотра. */
     onWatchRutube: (String, String, String) -> Unit = { _, _, _ -> },
+    /** Начальный запрос (голосовой поиск с пульта/ассистента). */
+    initialQuery: String = "",
 ) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
     val scope = rememberCoroutineScope()
-    var query by remember { mutableStateOf("") }
+    // remember(initialQuery): новый голосовой запрос перезапускает поиск
+    var query by remember(initialQuery) { mutableStateOf(initialQuery) }
     var searchNote by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var torrents by remember { mutableStateOf<List<com.torrenttv.app.data.TorrentResult>>(emptyList()) }

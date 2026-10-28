@@ -1,5 +1,7 @@
 package com.torrenttv.app.data
 
+import kotlin.random.Random
+
 /**
  * Единая точка доступа к метаданным фильмов/сериалов.
  *
@@ -141,6 +143,25 @@ object MediaApi {
         pick({ RutrackerrCatalog.trending(page) }, { KinopoiskClient.trending(page) }, { TmdbClient.trending(page) })
             ?: emptyList()
             ?: emptyList()
+
+    /**
+     * Случайный фильм (как у Zona/Lampa): берём из уже кешируемых списков
+     * трендов/популярного (случайная страница 1..5) — отдельный API-запрос
+     * не нужен, дневная квота не тратится. Фильтр владельца обязателен:
+     * кнопка не должна подсовывать запрещённое. До 3 попыток — страница
+     * может целиком отсеться фильтром или экранными качествами.
+     */
+    fun randomItem(allowed: (MediaItem) -> Boolean = { true }): MediaItem? {
+        repeat(3) {
+            val list = when (Random.nextInt(0, 3)) {
+                0 -> trending(Random.nextInt(1, 6))
+                1 -> popularMovies(Random.nextInt(1, 6))
+                else -> newMovies(Random.nextInt(1, 6))
+            }.filter { allowed(it) && it.type == "movie" && it.rating > 0.0 }
+            if (list.isNotEmpty()) return list.random()
+        }
+        return null
+    }
 
     fun popularMovies(page: Int = 1): List<MediaItem> =
         pick({ RutrackerrCatalog.popularMovies(page) }, { KinopoiskClient.popularMovies(page) }, { TmdbClient.popularMovies(page) })

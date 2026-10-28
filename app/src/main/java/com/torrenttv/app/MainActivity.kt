@@ -100,6 +100,36 @@ class MainActivity : ComponentActivity() {
         @Volatile var remoteKeyHandler: ((Int) -> Boolean)? = null
     }
 
+    // Голосовой поиск с пульта/ассистента: запрос приходит интентом
+    // (ACTION_SEARCH / ACTION_WEB_SEARCH), Compose-состояние — мост в App()
+    private val voiceQuery = androidx.compose.runtime.mutableStateOf("")
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        val q = extractVoiceQuery(intent)
+        if (q.isNotBlank()) {
+            com.torrenttv.app.data.AppLog.log("app", "голосовой поиск (пульт): $q")
+            voiceQuery.value = q
+        }
+    }
+
+    private fun extractVoiceQuery(intent: android.content.Intent?): String {
+        if (intent == null) return ""
+        val isVoice = when (intent.action) {
+            android.content.Intent.ACTION_SEARCH,
+            android.speech.RecognizerIntent.ACTION_WEB_SEARCH,
+            android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH,
+            "android.speech.action.VOICE_SEARCH_HANDS_FREE",
+            -> true
+            else -> false
+        }
+        if (!isVoice) return ""
+        return (
+            intent.getStringExtra(android.app.SearchManager.QUERY)
+                ?: intent.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+            ).orEmpty().trim()
+    }
+
     /** Уход из приложения — фиксируем настройки в облачном бэкапе (экономно, при изменениях). */
     override fun onPause() {
         super.onPause()
@@ -151,20 +181,32 @@ class MainActivity : ComponentActivity() {
         com.torrenttv.app.data.TmdbClient.overrideApiKey = store0.tmdbApiKey()
         // Размер карточек из настроек (Настройки → Плеер → «Размер карточек»)
         com.torrenttv.app.ui.cardWidthDp = store0.cardWidthDp()
+        // Разбор интента запуска (голосовой поиск из ассистента при холодном старте)
+        val startupVoiceQuery = extractVoiceQuery(intent)
+        if (startupVoiceQuery.isNotBlank()) {
+            com.torrenttv.app.data.AppLog.log("app", "голосовой поиск (запуск): $startupVoiceQuery")
+            voiceQuery.value = startupVoiceQuery
+        }
         setContent {
             MaterialTheme(typography = AppTypography) {
-                App()
+                App(voiceQuery)
             }
         }
     }
 }
 
 @Composable
-private fun App() {
-    var screen by remember { mutableStateOf<Screen>(Screen.Home) }
+private fun App(voiceQuery: androidx.compose.runtime.State<String>) {
+    var screen by remember { mutableStateOf<Screen>(if (voiceQuery.value.isNotBlank()) Screen.Search else Screen.Home) }
     // Последняя открытая вкладка: из карточки/плеера BACK возвращает СЮДА,
     // а не на «Главную» (жалоба: вышел из «Спецов» — выкинуло с «Торрентов»)
     var lastTab by remember { mutableStateOf<Screen>(Screen.Home) }
+
+    // Голосовой запрос с пульта: открыть поиск с готовым текстом.
+    // key() пересоздаёт SearchScreen при новом запросе, даже если поиск уже открыт
+    LaunchedEffect(voiceQuery.value) {
+        if (voiceQuery.value.isNotBlank()) screen = Screen.Search
+    }
 
     // «Что нового» (ROADMAP B): один раз после обновления показываем список
     // изменений из GitHub Release. При первой установке не показываем —
@@ -294,23 +336,26 @@ private fun App() {
                 Screen.Torrents -> TorrentsScreen(onOpenDetails = { screen = Screen.Details(it) })
                 Screen.Favorites -> FavoritesScreen(onOpenDetails = { screen = Screen.Details(it) })
                 Screen.Continue -> ContinueScreen(onOpenDetails = { screen = Screen.Details(it) })
-                Screen.Search -> SearchScreen(
-                    onBack = { screen = Screen.Home },
-                    onOpenDetails = { screen = Screen.Details(it) },
-                    onOpenResults = { card, q, list, pmap ->
-                        screen = Screen.TorrentResults(card, q, list, poster = card.posterUrl, posterMap = pmap)
-                    },
-                    onWatchRutube = { vid, title, thumb ->
-                        screen = Screen.RutubeWatch(vid, title, thumb)
-                    },
-                    onTorrentSearch = { q ->
-                        // Прямой торрент-поиск по запросу: фиктивная карточка
-                        screen = Screen.TorrentSearch(
-                            MediaItem(id = q.hashCode(), type = "movie", title = q),
-                            autoStart = false,
-                        )
-                    },
-                )
+                Screen.Search -> androidx.compose.runtime.key(voiceQuery.value) {
+                    SearchScreen(
+                        initialQuery = voiceQuery.value,
+                        onBack = { screen = Screen.Home },
+                        onOpenDetails = { screen = Screen.Details(it) },
+                        onOpenResults = { card, q, list, pmap ->
+                            screen = Screen.TorrentResults(card, q, list, poster = card.posterUrl, posterMap = pmap)
+                        },
+                        onWatchRutube = { vid, title, thumb ->
+                            screen = Screen.RutubeWatch(vid, title, thumb)
+                        },
+                        onTorrentSearch = { q ->
+                            // Прямой торрент-поиск по запросу: фиктивная карточка
+                            screen = Screen.TorrentSearch(
+                                MediaItem(id = q.hashCode(), type = "movie", title = q),
+                                autoStart = false,
+                            )
+                        },
+                    )
+                }
                 Screen.Settings -> SettingsScreen(
                     onBack = { screen = Screen.Home },
                 )

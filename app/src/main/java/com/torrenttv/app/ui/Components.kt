@@ -598,19 +598,38 @@ fun PosterCard(item: MediaItem, onClick: () -> Unit) {
                         contentScale = ContentScale.Crop,
                     )
                 }
-                // Заметный бейдж рейтинга поверх постера
-                if (item.rating > 0.0) {
-                    Text(
-                        text = "★︎ ${"%.1f".format(item.rating)}",
-                        color = Color(0xFF0E1116),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
+                // Заметный бейдж рейтинга поверх постера: КП + IMDb рядом
+                // (двойной бейдж, как у Lampa — сразу видно, «стоит ли»)
+                if (item.rating > 0.0 || item.ratingImdb > 0.0) {
+                    Row(
                         modifier = Modifier
                             .align(Alignment.TopStart)
-                            .padding(8.dp)
-                            .background(Color(0xFFA9D7F5), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 8.dp, vertical = 3.dp),
-                    )
+                            .padding(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        if (item.rating > 0.0) {
+                            Text(
+                                text = "★︎ ${"%.1f".format(item.rating)}",
+                                color = Color(0xFF0E1116),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .background(Color(0xFFA9D7F5), RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                            )
+                        }
+                        if (item.ratingImdb > 0.0) {
+                            Text(
+                                text = "IMDb ${"%.1f".format(item.ratingImdb)}",
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .background(Color(0xB315181F), RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                            )
+                        }
+                    }
                 }
                 // 🟢 Бейдж новых серий: «+2 сер.» — появились в кеше после
                 // последнего открытия списка серий

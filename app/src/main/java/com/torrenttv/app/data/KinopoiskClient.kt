@@ -282,6 +282,8 @@ object KinopoiskClient {
         val rating = o.optDouble("ratingKinopoisk", 0.0).takeIf { it > 0 }
             ?: o.optDouble("ratingImdb", 0.0).takeIf { it > 0 }
             ?: 0.0
+        // IMDb отдельно для двойного бейджа на карточке (v2.2 отдаёт оба)
+        val ratingImdb = o.optDouble("ratingImdb", 0.0).takeIf { it > 0 } ?: 0.0
 
         val genreNames = mutableListOf<String>()
         o.optJSONArray("genres")?.let { garr ->
@@ -319,6 +321,7 @@ object KinopoiskClient {
             originalTitle = sequenceOf("nameOriginal", "nameEn")
                 .map { o.optString(it, "") }
                 .firstOrNull { it.isNotBlank() && !it.equals("null", true) } ?: "",
+            ratingImdb = ratingImdb,
         )
     }
 

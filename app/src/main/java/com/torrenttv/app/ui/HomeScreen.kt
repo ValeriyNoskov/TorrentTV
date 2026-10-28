@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -81,6 +82,82 @@ fun HomeScreen(
                         fontSize = 14.sp,
                         modifier = Modifier.padding(horizontal = 32.dp),
                     )
+                }
+            }
+            // 🎲 Случайный фильм: один OK — открыт случайный тайтл из трендов
+            item {
+                var randomTick by remember { mutableStateOf(0) }
+                LaunchedEffect(randomTick) {
+                    if (randomTick == 0) return@LaunchedEffect
+                    val pick = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        MediaApi.randomItem { store.isAllowed(it) }
+                    }
+                    if (pick != null) {
+                        com.torrenttv.app.data.AppLog.log("home", "случайный фильм: ${pick.title}")
+                        onOpenDetails(pick)
+                    }
+                }
+                Button(
+                    onClick = {
+                        com.torrenttv.app.data.AppLog.log("ui", "нажал: «Случайный фильм»")
+                        randomTick++
+                    },
+                    modifier = Modifier.padding(horizontal = 32.dp, vertical = 2.dp),
+                ) { Text("🎲 Случайный фильм") }
+            }
+            // Продолжить смотреть — самым первым (как в стримингах):
+            // один OK — и ты на месте остановки
+            item {
+                val continueEntries = remember(favTick) { store.continueWatching() }
+                if (continueEntries.isNotEmpty()) {
+                    Text(
+                        "▶️ Продолжить смотреть",
+                        color = Color.White,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 32.dp, vertical = 6.dp),
+                    )
+                    androidx.compose.foundation.lazy.LazyRow(
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 32.dp, vertical = 6.dp),
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp),
+                    ) {
+                        items(continueEntries.size) { i ->
+                            val e = continueEntries[i]
+                            Column {
+                                PosterCard(e.item) { onOpenDetails(e.item) }
+                                // Прогресс-полоска под постером — как в «Продолжить»
+                                if (e.durationSec > 0) {
+                                    Box(
+                                        Modifier
+                                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                                            .fillMaxWidth()
+                                            .height(4.dp)
+                                            .background(Color(0xFF2A3648)),
+                                    ) {
+                                        Box(
+                                            Modifier
+                                                .fillMaxWidth(
+                                                    (e.positionSec.toFloat() / e.durationSec).coerceIn(0f, 1f),
+                                                )
+                                                .height(4.dp)
+                                                .background(Color(0xFFA9D7F5)),
+                                        )
+                                    }
+                                    Text(
+                                        text = buildString {
+                                            if (e.episodeLabel.isNotBlank()) append(e.episodeLabel + " · ")
+                                            val left = (e.durationSec - e.positionSec) / 60
+                                            if (left > 0) append("осталось ~$left мин") else append("почти досмотрено")
+                                        },
+                                        color = Color.White.copy(alpha = 0.5f),
+                                        fontSize = 12.sp,
+                                        maxLines = 1,
+                                        modifier = Modifier.padding(horizontal = 4.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
             // Живое ТВ — сразу с главной: каналы открываются одним нажатием.

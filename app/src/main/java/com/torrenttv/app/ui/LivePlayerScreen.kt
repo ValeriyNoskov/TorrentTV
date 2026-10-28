@@ -138,6 +138,16 @@ fun LivePlayerScreen(
         programNext = list.firstOrNull { it.start > now }
     }
 
+    // Тикающее «сейчас» раз в минуту: полоса прогресса передачи двигается,
+    // пока панель открыта; при смене часа — перепроверка EPG
+    var epgNow by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(current.name) {
+        while (true) {
+            delay(60_000)
+            epgNow = System.currentTimeMillis()
+        }
+    }
+
     // Автоскрытие панели (как в остальных плеерах)
     LaunchedEffect(panelTick, showPanel) {
         if (showPanel) {
@@ -309,6 +319,24 @@ fun LivePlayerScreen(
                             "  ${hhmm(p.start)}–${hhmm(p.end)}",
                             color = Color(0xFFE8ECF4),
                             fontSize = 14.sp,
+                        )
+                    }
+                    // Полоса прогресса передачи (как у OTT Navigator): видно,
+                    // сколько осталось до следующей программы
+                    val nowTick = epgNow
+                    val frac = ((nowTick - p.start).toFloat() / (p.end - p.start)).coerceIn(0f, 1f)
+                    Spacer(Modifier.height(4.dp))
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(3.dp)
+                            .background(Color(0xFF2A3648)),
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth(frac)
+                                .height(3.dp)
+                                .background(Color(0xFFA9D7F5)),
                         )
                     }
                 }

@@ -19,6 +19,8 @@ data class MediaItem(
     val originalTitle: String = "",
     /** Страна производства текстом («США, Великобритания») — Рутрекер-каталог. */
     val country: String = "",
+    /** Рейтинг IMDb отдельно (двойной бейдж КП+IMDb на карточке). */
+    val ratingImdb: Double = 0.0,
     /** Slug'и жанров Рутрекера (/boeviki/, /serialy/…) для фильтров каталога. */
     val rtGenres: List<String> = emptyList(),
     /** Оригинальный язык (tmdb original_language): «ru» — русское производство. */
@@ -88,6 +90,7 @@ data class MediaItem(
         .put("country", country)
         .put("rtGenres", JSONArray(rtGenres))
         .put("originalLanguage", originalLanguage)
+        .put("ratingImdb", ratingImdb)
 
     companion object {
         fun fromJson(o: JSONObject): MediaItem = MediaItem(
@@ -112,6 +115,7 @@ data class MediaItem(
                 (0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }
             } ?: emptyList(),
             originalLanguage = o.safeString("originalLanguage"),
+            ratingImdb = o.optDouble("ratingImdb", 0.0),
         )
     }
 }
