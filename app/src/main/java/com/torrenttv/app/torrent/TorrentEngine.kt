@@ -373,6 +373,16 @@ object TorrentEngine {
             } catch (_: Exception) {
             }
         }
+
+        /** Приостановить докачку (приложение свернуто, внешний плеер не открыт). */
+        fun pauseDownload() {
+            runCatching { handle.pause() }
+        }
+
+        /** Возобновить докачку после возврата приложения. */
+        fun resumeDownload() {
+            runCatching { handle.resume() }
+        }
     }
 
     /**

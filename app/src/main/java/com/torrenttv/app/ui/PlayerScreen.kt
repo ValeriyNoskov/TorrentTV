@@ -289,10 +289,38 @@ fun PlayerScreen(
     }
 
     val st = stream
+    // Жив ли экран: если пользователь вышел (BACK) или свернул приложение,
+    // отложенный запуск внешнего плеера отменяется — раньше фоновый поток
+    // дозревал 25 с и внезапно открывал VLC поверх меню (жалоба «вышел,
+    // а через какое-то время включается внешний плеер»)
+    val screenAlive = remember { java.util.concurrent.atomic.AtomicBoolean(true) }
+    DisposableEffect(Unit) {
+        onDispose { screenAlive.set(false) }
+    }
     // Внешний плеер (Настройки → Плеер → «Всегда внешний плеер»): отдаём
     // файл через FileProvider — VLC/MX Player сами читают недокачанный файл,
     // а наш движок продолжает докачивать, пока открыт экран плеера
     var externalLaunched by remember(st) { mutableStateOf(false) }
+    // Свернули приложение, пока VLC не открыт — ставим докачку на паузу:
+    // «решил выйти — скачка останавливается». При возврате — продолжаем
+    if (st != null) {
+        val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+        DisposableEffect(st, externalLaunched, lifecycleOwner) {
+            val obs = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                when (event) {
+                    androidx.lifecycle.Lifecycle.Event.ON_STOP ->
+                        if (!externalLaunched) {
+                            st.pauseDownload()
+                            com.torrenttv.app.data.AppLog.log("player", "свернуто: докачка на паузе")
+                        }
+                    androidx.lifecycle.Lifecycle.Event.ON_RESUME -> st.resumeDownload()
+                    else -> {}
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(obs)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+        }
+    }
     if (st != null && bufferedPct >= 100 && store.useExternalPlayer() && !externalLaunched) {
         externalLaunched = true
         val ctx = context
@@ -310,6 +338,33 @@ fun PlayerScreen(
                 com.torrenttv.app.data.AppLog.log(
                     "player",
                     "внешний плеер: индекс ${if (waited < 25_000) "готов за ${waited / 1000}с" else "НЕ дождались (25с)"} — открываю",
+                )
+                // Экран закрыли/свернули, пока ждали индекс — VLC не открываем
+                val act = ctx as? androidx.activity.ComponentActivity
+                val screenOk = screenAlive.get() && (act == null || (
+                    !act.isFinishing && !act.isDestroyed &&
+                        act.lifecycle.currentState.isAtLeast(
+                            androidx.lifecycle.Lifecycle.State.RESUMED,
+                        )
+                    ))
+                if (!screenOk) {
+                    com.torrenttv.app.data.AppLog.log(
+                        "player",
+                        "внешний плеер отменён: экран закрыт, пока ждали индекс",
+                    )
+                    return@runCatching
+                }
+                // Карточка сразу попадает в «Продолжить»: встроенный плеер пишет
+                // прогресс сам, а VLC о нём не расскажет. Дальше позицию
+                // наращивает таймер ниже (примерно, по времени просмотра)
+                val watchKeyX = sourceKey + ":f" + st.fileIndex
+                val basePos = store.episodePosition(watchKeyX)
+                store.saveProgress(
+                    item,
+                    positionSec = basePos + 1,
+                    durationSec = 0,
+                    sourceKey = watchKeyX,
+                    episodeLabel = episode?.code ?: "",
                 )
                 val uri = androidx.core.content.FileProvider.getUriForFile(
                     ctx,
@@ -343,6 +398,26 @@ fun PlayerScreen(
                 mainHandler.post { status = "Не удалось открыть внешний плеер: ${e.message?.take(60)}" }
             }
         }.apply { isDaemon = true; start() }
+    }
+    // Прогресс для «Продолжить» при внешнем плеере: VLC свою позицию не
+    // отдаёт — наращиваем примерную (базовая resume-позиция + время с
+    // запуска VLC). Раз в 30 с, пока экран жив
+    LaunchedEffect(st, externalLaunched) {
+        if (st == null || !externalLaunched) return@LaunchedEffect
+        val watchKeyX = sourceKey + ":f" + st.fileIndex
+        val base = store.episodePosition(watchKeyX)
+        var elapsed = 0
+        while (screenAlive.get()) {
+            kotlinx.coroutines.delay(30_000)
+            elapsed += 30
+            store.saveProgress(
+                item,
+                positionSec = base + elapsed,
+                durationSec = 0,
+                sourceKey = watchKeyX,
+                episodeLabel = episode?.code ?: "",
+            )
+        }
     }
     if (st != null && bufferedPct >= 100 && !store.useExternalPlayer()) {
         VideoPlayer(
