@@ -103,9 +103,9 @@ fun TorrentSearchScreen(
 
     LaunchedEffect(item) {
         status = if (autoStart) "Подбираю лучшую раздачу…" else "Ищу торренты…"
-        val (found, st) = TorrentSearch.searchDetailed(
-            query = query,
-            altQuery = altQuery,
+        suspend fun doSearch(q: String, alt: String?) = TorrentSearch.searchDetailed(
+            query = q,
+            altQuery = alt,
             isTvShow = item.type != "movie",
             imdbId = item.imdbId,
             season = episode?.season ?: 0,
@@ -114,10 +114,45 @@ fun TorrentSearchScreen(
             privateTrackers = store.privateTrackers(),
             excludedKeywords = store.excludedKeywords().toSet(),
         )
+        var (found, st) = doSearch(query, altQuery)
+        // Фолбэк: rutrackerr и часть трекеров не ищут по «S05E07» — запрос
+        // возвращает 0, хотя пачка сезона («05x01-07») с этой серией есть.
+        // Повтор по названию без S/E; нужную серию потом выберет
+        // сопоставление по именам файлов (Episode.fileMatches)
+        if (found.isEmpty() && episode != null) {
+            com.torrenttv.app.data.AppLog.log(
+                "search",
+                "по «$query» пусто — ретрай по названию без $epCode",
+            )
+            status = "По эпизоду пусто, ищу пачку сезона…"
+            val (found2, st2) = doSearch(
+                query.removeSuffix(" $epCode"),
+                altQuery?.removeSuffix(" $epCode"),
+            )
+            found = found2
+            st = st2 + st
+        }
         results = found
         stats = st
         if (autoStart && found.isNotEmpty()) {
-            select(bestTorrent(found, store))
+            // Для эпизода: сначала раздачи, в имени которых есть точный
+            // эпизод (S05E07/E07), затем пачки с номером сезона (05x…, S05),
+            // и только потом общий bestTorrent — иначе по сидам выберет
+            // пачку чужого сезона (S01-03, 13 сидов) вместо нужной
+            val best = if (episode != null) {
+                fun seasonInName(name: String, s: Int): Boolean =
+                    Regex("(?i)S0?$s\\b|0?$s[xX]|Сезон[  ]?$s\\b").containsMatchIn(name)
+                val exact = found.filter {
+                    com.torrenttv.app.data.Episode.fileMatches(it.name, episode.season, episode.episode)
+                }
+                val seasonPool = found.filter { seasonInName(it.name, episode.season) }
+                when {
+                    exact.isNotEmpty() -> bestTorrent(exact, store)
+                    seasonPool.isNotEmpty() -> bestTorrent(seasonPool, store)
+                    else -> bestTorrent(found, store)
+                }
+            } else bestTorrent(found, store)
+            select(best)
             return@LaunchedEffect
         }
         status = if (found.isEmpty()) {
