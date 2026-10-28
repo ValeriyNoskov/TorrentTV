@@ -868,6 +868,11 @@ class LocalStore(context: Context) {
     /** Открывать видео во внешнем плеере (VLC, MX Player и т.п.) вместо встроенного. */
     fun useExternalPlayer(): Boolean = prefs.getBoolean("use_external_player", false)
 
+    /** API-ключ Real-Debrid (debrid-стрим: magnet → прямая ссылка без скачания). */
+    fun rdKey(): String = prefs.getString("rd_key", "") ?: ""
+
+    fun setRdKey(v: String) = prefs.edit().putString("rd_key", v.trim()).apply()
+
     fun setUseExternalPlayer(v: Boolean) {
         prefs.edit().putBoolean("use_external_player", v).apply()
     }

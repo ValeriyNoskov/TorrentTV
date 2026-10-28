@@ -114,6 +114,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     var kpKey by remember { mutableStateOf(store.kpApiKey()) }
     var tmdbKey by remember { mutableStateOf(store.tmdbApiKey()) }
     var ghToken by remember { mutableStateOf(store.githubToken()) }
+    var rdKey by remember { mutableStateOf(store.rdKey()) }
 
     fun openEdit(target: String, current: String, title: String) {
         editTmp = current
@@ -127,6 +128,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 "kpkey" -> { store.setKpApiKey(editTmp); kpKey = editTmp }
                 "tmdbkey" -> { store.setTmdbApiKey(editTmp); tmdbKey = editTmp }
                 "ghtoken" -> { store.setGithubToken(editTmp); ghToken = editTmp }
+                "rdkey" -> { store.setRdKey(editTmp); rdKey = editTmp }
                 "iptvurl" -> store.setIptvPlaylistUrl(editTmp)
             }
         }
@@ -608,6 +610,11 @@ fun SettingsScreen(onBack: () -> Unit) {
                             value = if (ghToken.isNotBlank()) "•••••••• (вписан)" else "Не задан — логи уходят на pastebin",
                             valueOk = ghToken.isNotBlank(),
                         ) { openEdit("ghtoken", ghToken, "GitHub токен (право Gists)") }
+                        SettingsRow(
+                            title = "Real-Debrid ключ (мгновенный просмотр)",
+                            value = if (rdKey.isNotBlank()) "•••••••• (вписан)" else "Не задан — торренты стримятся с ТВ",
+                            valueOk = rdKey.isNotBlank(),
+                        ) { openEdit("rdkey", rdKey, "Real-Debrid API ключ") }
                         if (kpKey.isNotBlank() || tmdbKey.isNotBlank()) {
                             SettingsRow(title = "🗑 Вернуть общие ключи", value = "", danger = true) {
                                 store.setKpApiKey(""); store.setTmdbApiKey("")
@@ -785,6 +792,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             "kpkey" -> "Ключ Кинопоиск API"
             "tmdbkey" -> "Ключ TMDB"
             "ghtoken" -> "GitHub токен (право Gists)"
+            "rdkey" -> "Real-Debrid API ключ"
             "rt" -> "Cookie для RuTracker"
             "kz" -> "Cookie для Kinozal"
             "nnm" -> "Cookie для NNM-Club"

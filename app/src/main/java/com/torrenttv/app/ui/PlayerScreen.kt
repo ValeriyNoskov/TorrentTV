@@ -144,7 +144,60 @@ fun PlayerScreen(
     // Колбэки движка приходят из IO/daemon-потоков — Compose-состояние пишем
     // только из главного потока (запись из фона ломает рекомпозицию)
     val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
-    LaunchedEffect(magnet, restartTick) {
+
+    // ---- Real-Debrid: настроен ключ — пробуем мгновенную прямую ссылку ----
+    // Успех → играем онлайн-плеером (без скачания, мгновенный старт);
+    // неудача/таймаут → фолбэк на торрент-движок, как раньше
+    val rdKey = remember { store.rdKey() }
+    var debridLink by remember(magnet) { mutableStateOf<com.torrenttv.app.ui.OnlineLink?>(null) }
+    var debridDone by remember(magnet) { mutableStateOf(rdKey.isBlank() || magnet == null) }
+    var debridFiles by remember(magnet) {
+        mutableStateOf<List<Pair<Int, String>>>(emptyList())
+    }
+    var debridCurrent by remember(magnet) { mutableStateOf(-1) }
+    var rdPick by remember(magnet) { mutableStateOf<Int?>(null) }
+    var rdTick by remember(magnet) { mutableStateOf(0) }
+
+    LaunchedEffect(magnet, rdTick) {
+        if (magnet == null || rdKey.isBlank()) return@LaunchedEffect
+        status = "Проверяю Real-Debrid…"
+        com.torrenttv.app.data.AppLog.log("player", "Real-Debrid: резолв магнита")
+        val res = withContext(Dispatchers.IO) {
+            runCatching {
+                com.torrenttv.app.data.RealDebrid.resolve(
+                    rdKey,
+                    magnet,
+                    pick = { fs ->
+                        val byStart = if (startIndex in fs.indices) startIndex else -1
+                        val byEp = episode?.let { ep ->
+                            fs.indexOfFirst {
+                                com.torrenttv.app.data.Episode.fileMatches(it.name, ep.season, ep.episode)
+                            }
+                        } ?: -1
+                        val bySaved = rdPick ?: -1
+                        listOf(bySaved, byStart, byEp).firstOrNull { it >= 0 } ?: -1
+                    },
+                )
+            }.onFailure {
+                com.torrenttv.app.data.AppLog.log(
+                    "player",
+                    "Real-Debrid FAIL: ${it.javaClass.simpleName}: ${it.message}",
+                )
+            }.getOrNull()
+        }
+        if (res != null) {
+            com.torrenttv.app.data.AppLog.log("player", "Real-Debrid: играю «${res.fileName}»")
+            debridFiles = res.files.mapIndexed { i, f -> i to f.name }
+            debridCurrent = res.fileIndex
+            debridLink = OnlineLink(url = res.url, label = "real-debrid")
+        } else {
+            com.torrenttv.app.data.AppLog.log("player", "Real-Debrid: не вышло — стримим торрентом")
+        }
+        debridDone = true
+    }
+
+    LaunchedEffect(magnet, restartTick, debridDone, debridLink, rdTick) {
+        if (!debridDone || debridLink != null) return@LaunchedEffect
         if (magnet == null) return@LaunchedEffect
 
         com.torrenttv.app.data.AppLog.log("player", "startStream: ${magnet.take(90)}")
@@ -419,6 +472,27 @@ fun PlayerScreen(
             )
         }
     }
+    // ---- Real-Debrid: играем онлайн-плеером, торрент-движок не трогаем ----
+    val dl = debridLink
+    if (dl != null) {
+        OnlinePlayerScreen(
+            link = dl,
+            item = item,
+            title = item.title + (episode?.let { " · ${it.code}" } ?: ""),
+            onBack = onBack,
+            files = debridFiles,
+            currentFile = debridCurrent,
+            onSelectFile = { i ->
+                // Переключение серии: новый резолв RD с выбранным файлом
+                rdPick = i
+                debridLink = null
+                debridDone = false
+                rdTick++
+            },
+        )
+        return
+    }
+
     if (st != null && bufferedPct >= 100 && !store.useExternalPlayer()) {
         VideoPlayer(
             stream = st,
