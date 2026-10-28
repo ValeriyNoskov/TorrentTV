@@ -32,10 +32,22 @@ class TorrentDataSource(private val st: TorrentEngine.StreamSession) : DataSourc
     override fun open(dataSpec: DataSpec): Long {
         pieceAbs = st.fileOffset + dataSpec.position
         filePos = dataSpec.position
+        // Подробный лог: сразу видно, в каких координатах открывается файл
+        com.torrenttv.app.data.AppLog.log(
+            "player",
+            "источник открыт: файл=${st.videoFile.name.take(40)} размер=${st.fileSize / 1024 / 1024}МБ " +
+                "fileOffset=${st.fileOffset / 1024 / 1024}МБ pos=${dataSpec.position / 1024 / 1024}МБ " +
+                "кусок#${pieceAbs / 1024 / 1024}МБ",
+        )
         // Seek в середину: поднимаем приоритет кусков вокруг новой позиции,
         // иначе sequential-загрузка будет ползти с начала и read заблокируется
         if (dataSpec.position > 0) st.boostPiecesAround(pieceAbs)
-        raf = RandomAccessFile(st.videoFile, "r")
+        raf = try {
+            RandomAccessFile(st.videoFile, "r")
+        } catch (e: Exception) {
+            com.torrenttv.app.data.AppLog.log("player", "источник FAIL: файл не открыт: ${e.message}")
+            throw e
+        }
         return if (dataSpec.length != C.LENGTH_UNSET.toLong()) {
             dataSpec.length
         } else {
@@ -50,9 +62,26 @@ class TorrentDataSource(private val st: TorrentEngine.StreamSession) : DataSourc
         // Ждём, пока будут скачаны ВСЕ куски запрошенного диапазона.
         // Таймаут 90 с: без него заблокированный поток ExoPlayer зависает
         // молча (чёрный экран)
-        val end = (pieceAbs + length).coerceAtMost(st.fileOffset + st.fileSize)
+        // ВАЖНО: isRangeReady ждёт позицию ВНУТРИ файла и сам добавляет
+        // fileOffset (абсолютный кусок). Передача абсолютной pieceAbs давала
+        // двойное fileOffset (~4-5 ГБ) — готовность всегда false, ExoPlayer
+        // висел в read() без READY и без ошибки (лог v0.9.42: ни «плеер
+        // готов», ни playback error — пользователь выходил с чёрного экрана)
+        val waitLen = minOf(length.toLong(), st.fileSize - filePos).coerceAtLeast(0)
         val deadline = System.currentTimeMillis() + 90_000
-        while (!st.isRangeReady(pieceAbs, end - pieceAbs)) {
+        var lastWaitLog = 0L
+        while (waitLen > 0 && !st.isRangeReady(filePos, waitLen)) {
+            // Ожидание кусков дольше 5 с — в лог: видно, движется ли готовность
+            val now = System.currentTimeMillis()
+            if (now - lastWaitLog > 5_000) {
+                lastWaitLog = now
+                com.torrenttv.app.data.AppLog.log(
+                    "player",
+                    "чтение ждёт куски: файлПоз=${filePos / 1024 / 1024}МБ " +
+                        "готовность=${(st.readyFraction(filePos, waitLen) * 100).toInt()}% " +
+                        "peers=${st.peers()} head=${st.headBytes() / 1024 / 1024}МБ",
+                )
+            }
             if (!TorrentEngine.session.isRunning) throw IOException("Торрент-сессия остановлена")
             if (System.currentTimeMillis() > deadline) {
                 throw IOException("Куски не загружаются — пиры недоступны")
@@ -70,6 +99,11 @@ class TorrentDataSource(private val st: TorrentEngine.StreamSession) : DataSourc
             // Конец файла — только если действительно конец. Иначе это ошибка
             // чтения (кусок есть в памяти, но не сброшен): END_OF_INPUT здесь
             // означал бы «фильм кончился» в середине — ложный STATE_ENDED
+            com.torrenttv.app.data.AppLog.log(
+                "player",
+                "чтение вернуло $n: файлПоз=$filePos размер=${st.fileSize} → " +
+                    if (filePos < st.fileSize) "ОШИБКА (не конец файла)" else "конец файла",
+            )
             if (filePos < st.fileSize) throw IOException("Кусок скачан, но не читается с диска")
             return C.RESULT_END_OF_INPUT
         }
@@ -84,11 +118,28 @@ class TorrentDataSource(private val st: TorrentEngine.StreamSession) : DataSourc
             val limit = minOf(length.toLong(), st.fileSize - filePos).toInt().coerceAtLeast(0)
             if (limit == 0) -1 else f.read(target, offset, limit).also { n ->
                 if (n > 0) {
+                    // Первое успешное чтение — в лог с hex первых байтов:
+                    // валидный MKV начинается 1A 45 DF A3
+                    if (filePos == 0L || (filePos - n) == 0L) {
+                        val hex = target.drop(offset).take(8.coerceAtMost(n))
+                            .joinToString(" ") { "%02X".format(it) }
+                        com.torrenttv.app.data.AppLog.log(
+                            "player",
+                            "первое чтение ок: $n байт, начало: $hex",
+                        )
+                    }
                     pieceAbs += n
                     filePos += n
+                } else if (n < 0) {
+                    com.torrenttv.app.data.AppLog.log(
+                        "player",
+                        "read EOF: файлПоз=$filePos лимит=$limit размер=${st.fileSize}",
+                    )
                 }
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            // Раньше исключение глоталось молча — теперь видно причину
+            com.torrenttv.app.data.AppLog.log("player", "readOnce FAIL: ${e.javaClass.simpleName}: ${e.message}")
             -1
         }
     }
