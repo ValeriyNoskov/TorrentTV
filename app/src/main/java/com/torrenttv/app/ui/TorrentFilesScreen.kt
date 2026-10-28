@@ -184,13 +184,19 @@ fun TorrentFilesScreen(
     androidx.activity.compose.BackHandler { onBack() }
 
     LaunchedEffect(magnet) {
+        // Статус движок шлёт из СВОИХ потоков: Compose-стейт пишем только из
+        // главного потока (запись из IO ломала рекомпозицию и роняла процесс)
+        val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+        var metaTitle: String? = null
         val res = withContext(Dispatchers.IO) {
             runCatching {
                 val saveDir = File(context.filesDir, "downloads/" + item.storeKey)
-                val ti = TorrentEngine.fetchMetadata(magnet, saveDir) { s -> status = s }
+                val ti = TorrentEngine.fetchMetadata(magnet, saveDir) { s ->
+                    mainHandler.post { status = s }
+                }
                     ?: return@runCatching emptyList<Triple<Int, String, Long>>()
                 if (magnetTitle.isBlank() || magnetTitle == "—") {
-                    ti.name().let { if (it.isNotBlank()) magnetTitle = it }
+                    ti.name().let { if (it.isNotBlank()) metaTitle = it }
                 }
                 val fs = ti.files()
                 (0 until fs.numFiles()).mapNotNull { i ->
@@ -201,6 +207,7 @@ fun TorrentFilesScreen(
                 }.sortedWith { a, b -> TorrentEngine.naturalCompare(a.second, b.second) }
             }.getOrDefault(emptyList())
         }
+        metaTitle?.let { magnetTitle = it }
         files = res
         loading = false
         // В раздаче один видеофайл (фильм) — не показываем список, сразу запускаем

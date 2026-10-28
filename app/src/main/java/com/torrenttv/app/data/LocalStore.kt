@@ -66,7 +66,9 @@ class LocalStore(context: Context) {
                 else -> o.put(k, v.toString().filter { it >= ' ' })
             }
             if (v is String) {
-                val clean = v.filter { it >= ' ' || it == '\n' || it == '\r' || it == '\t' }
+                // \u0001 — служебный разделитель истории поисков; если его
+                // вырезать, после бэкапа вся история склеится в один запрос
+                val clean = v.filter { it >= ' ' || it == '\n' || it == '\r' || it == '\t' || it == '' }
                 if (clean != v) o.put(k, clean)
             }
         }
@@ -145,7 +147,8 @@ class LocalStore(context: Context) {
         val arr = runCatching { JSONArray(prefs.getString("progress", "[]")) }
             .getOrDefault(JSONArray())
         return (0 until arr.length())
-            .map { WatchEntry.fromJson(arr.getJSONObject(it)) }
+            // Один битый элемент не должен ломать всю ленту (ревью данных)
+            .mapNotNull { i -> runCatching { WatchEntry.fromJson(arr.getJSONObject(i)) }.getOrNull() }
             .sortedByDescending { it.updatedAt }
             // Дедуп на чтение: чистит старые дубли серий одного сериала,
             // оставляя самую свежую запись
@@ -922,6 +925,8 @@ class LocalStore(context: Context) {
     private fun readList(key: String): List<MediaItem> {
         val arr = runCatching { JSONArray(prefs.getString(key, "[]")) }
             .getOrDefault(JSONArray())
-        return (0 until arr.length()).map { MediaItem.fromJson(arr.getJSONObject(it)) }
+        return (0 until arr.length())
+            // Один битый элемент не должен ломать всё избранное (ревью данных)
+            .mapNotNull { i -> runCatching { MediaItem.fromJson(arr.getJSONObject(i)) }.getOrNull() }
     }
 }

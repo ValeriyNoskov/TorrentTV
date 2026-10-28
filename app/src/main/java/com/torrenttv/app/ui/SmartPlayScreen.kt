@@ -204,9 +204,11 @@ fun SmartPlayScreen(
             .map { SmartChoice.Torrent(it) }
 
         val resumeList = if (savedMagnet != null) listOf(SmartChoice.Resume) else emptyList()
+        // choices здесь может содержать Resume (поставлен в ветке savedMagnet) —
+        // иначе пункт «Продолжить» дублировался в списке дважды (ревью)
         choices = resumeList +
             (best?.let { listOf(SmartChoice.Instant(it)) } ?: emptyList()) +
-            choices + torrentChoices
+            torrentChoices
         done = choices.isNotEmpty()
         failed = choices.isEmpty()
         status = if (failed) {

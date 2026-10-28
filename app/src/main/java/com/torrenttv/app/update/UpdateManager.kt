@@ -42,6 +42,8 @@ object UpdateManager {
     // «Обновить» тогда ставит его мгновенно, без ожидания.
     @Volatile private var downloaded: Pair<UpdateInfo, File>? = null
     @Volatile private var downloading: Boolean = false
+    // Атомарный флаг закачки: guard от параллельного старта двух потоков
+    private val downloadingCAS = java.util.concurrent.atomic.AtomicBoolean(false)
     // Прогресс текущей закачки в %: его читает ожидающий поток («Обновить»,
     // нажатое во время фоновой скачки) — вместо мёртвой надписи «идёт в фоне»
     @Volatile private var progressPct: Int = -1
@@ -63,7 +65,10 @@ object UpdateManager {
      * Ничего не устанавливает — результат ждёт в readyToInstall().
      */
     private fun startDownload(context: Context, info: UpdateInfo) {
-        if (downloading || readyToInstall(info)) return
+        // CAS вместо check-then-set: два потока («Обновить» + фоновая скачка)
+        // иначе могли оба пройти проверку и писать в один файл двумя потоками
+        if (!downloadingCAS.compareAndSet(false, true)) return
+        if (readyToInstall(info)) { downloadingCAS.set(false); return }
         downloading = true
         progressPct = 0
         Thread {
@@ -73,15 +78,18 @@ object UpdateManager {
                     .build()
                 http.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}")
+                    // Пишем во временный файл: убитый посреди закачки процесс
+                    // не оставит «битый» APK под финальным именем
+                    val tmpFile = File(context.cacheDir, "update-${info.version}.apk.part")
                     val apkFile = File(context.cacheDir, "update-${info.version}.apk")
-                    val body = response.body!!
+                    val body = response.body ?: throw IllegalStateException("пустой ответ сервера")
                     val total = body.contentLength()
                     com.torrenttv.app.data.AppLog.log(
                         "update",
                         "скачивание v${info.version}: ${if (total > 0) "${total / 1024 / 1024} МБ" else "размер неизвестен"}",
                     )
                     body.byteStream().use { input ->
-                        apkFile.outputStream().use { output ->
+                        tmpFile.outputStream().use { output ->
                             val buf = ByteArray(64 * 1024)
                             var read: Int
                             var done = 0L
@@ -101,7 +109,21 @@ object UpdateManager {
                                     }
                                 }
                             }
+                            // Целостность: APK — это ZIP; размер сверяем с сервером
+                            if (total > 0 && done != total) {
+                                throw IllegalStateException("файл скачан не полностью: $done из $total")
+                            }
                         }
+                    }
+                    if (tmpFile.length() < 4 || tmpFile.inputStream().use { s ->
+                        ByteArray(2).also { s.read(it) }.toString(Charsets.ISO_8859_1) != "PK"
+                    }) {
+                        tmpFile.delete()
+                        throw IllegalStateException("файл не похож на APK (нет ZIP-сигнатуры)")
+                    }
+                    tmpFile.renameTo(apkFile) || run {
+                        tmpFile.delete()
+                        throw IllegalStateException("не удалось переименовать временный файл")
                     }
                     downloaded = info to apkFile
                     com.torrenttv.app.data.AppLog.log("update", "скачивание v${info.version}: готово")
@@ -110,6 +132,7 @@ object UpdateManager {
                 com.torrenttv.app.data.AppLog.log("update", "скачивание v${info.version} FAIL: ${e.message}")
             } finally {
                 downloading = false
+                downloadingCAS.set(false)
                 progressPct = -1
             }
         }.start()
@@ -141,7 +164,7 @@ object UpdateManager {
                     .build()
                 http.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}")
-                    val json = JSONObject(response.body!!.string())
+                    val json = JSONObject(response.body?.string() ?: throw IllegalStateException("пустой ответ сервера"))
 
                     val tag = json.optString("tag_name", "").removePrefix("v")
                     // Ищем первый .apk-ассет
@@ -186,7 +209,7 @@ object UpdateManager {
                 .build()
             http.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return null
-                JSONObject(response.body!!.string()).optString("body", "").take(1500)
+                JSONObject(response.body?.string() ?: throw IllegalStateException("пустой ответ сервера")).optString("body", "").take(1500)
             }
         } catch (e: Exception) {
             null

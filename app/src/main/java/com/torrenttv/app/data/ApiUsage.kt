@@ -112,7 +112,8 @@ object ApiUsage {
         runCatching {
             val kpObj = JSONObject()
             for ((i, c) in kp) kpObj.put(i.toString(), c.get())
-            java.io.File(d, "api_usage.json").writeText(
+            writeAtomic(
+                java.io.File(d, "api_usage.json"),
                 JSONObject()
                     .put("day", day)
                     .put("kp", kpObj)

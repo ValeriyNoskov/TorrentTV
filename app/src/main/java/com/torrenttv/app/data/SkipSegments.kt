@@ -33,6 +33,8 @@ object SkipSegments {
         store.skipCacheGet(key)?.let { return it }
 
         val found = mutableListOf<SkipSeg>()
+        // Хоть один источник ответил? (отличаем «база пуста» от «сеть лежала»)
+        var responded = false
 
         // --- IntroDB ---
         runCatching {
@@ -42,6 +44,7 @@ object SkipSegments {
                 else append("&is_movie=true")
             }
             val body = TorrentHttp.getFast(url) ?: return@runCatching
+            responded = true
             val o = JSONObject(body)
             for (kind in listOf("intro", "recap", "outro")) {
                 // no_intro=true — сообщество подтвердило: сегмента нет, не ищем дальше
@@ -59,6 +62,7 @@ object SkipSegments {
         if (episode != null) runCatching {
             val url = "$SKIPDB?imdb_id=$id&season=$season&episode=$episode"
             val body = TorrentHttp.getFast(url) ?: return@runCatching
+            responded = true
             val segs = JSONObject(body).optJSONObject("segments") ?: return@runCatching
             for (kind in listOf("intro", "recap", "outro", "preview")) {
                 val s = segs.optJSONObject(kind) ?: continue
@@ -75,7 +79,11 @@ object SkipSegments {
             list.maxByOrNull { it.confidence } ?: list.first()
         }.filter { it.endMs - it.startMs >= 5_000L } // короче 5 сек — шум
 
-        store.skipCachePut(key, best)
+        // Пустой результат кешируем ТОЛЬКО если хоть один запрос ответил:
+        // иначе один обрыв сети отключит пропуск заставок на весь TTL кеша
+        if (best.isNotEmpty() || responded) {
+            store.skipCachePut(key, best)
+        }
         return best
     }
 

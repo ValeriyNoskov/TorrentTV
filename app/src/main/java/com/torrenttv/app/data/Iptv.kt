@@ -87,7 +87,7 @@ object Iptv {
         val fresh = if (cacheFresh) null else runCatching { TorrentHttp.get(ownUrl) }.getOrNull()
         val own = when {
             !fresh.isNullOrBlank() -> {
-                runCatching { cacheFile.writeText(fresh) }
+                runCatching { writeAtomic(cacheFile, fresh) }
                 parse(fresh)
             }
             cached.isNotBlank() -> parse(cached)

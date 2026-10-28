@@ -132,7 +132,10 @@ fun PlayerScreen(
     var stream by remember { mutableStateOf<TorrentEngine.StreamSession?>(null) }
     // Серии внутри торрента: (файл, имя) + выбор другой серии
     var torrentFiles by remember { mutableStateOf<List<Pair<Int, String>>>(emptyList()) }
-    var restartFileIndex by remember { mutableStateOf<Int?>(null) }
+    // Перезапуск серии: индекс + счётчик-триггер. Ключ effect'а только по
+    // magnet был МЁРТВЫЙ: выбор серии в «☰ Серии» не перезапускал стрим
+    var pendingFileIndex by remember { mutableStateOf<Int?>(null) }
+    var restartTick by remember { mutableStateOf(0) }
     // Оверлеи объявлены заранее: состояние нужно уже в LaunchedEffect старта
     var showFiles by remember { mutableStateOf(false) }
     var showPanel by remember { mutableStateOf(true) }
@@ -141,25 +144,26 @@ fun PlayerScreen(
     // Колбэки движка приходят из IO/daemon-потоков — Compose-состояние пишем
     // только из главного потока (запись из фона ломает рекомпозицию)
     val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
-    LaunchedEffect(magnet) {
+    LaunchedEffect(magnet, restartTick) {
         if (magnet == null) return@LaunchedEffect
 
         com.torrenttv.app.data.AppLog.log("player", "startStream: ${magnet.take(90)}")
 
-        // Перезапуск выбранной серии: гасим текущий стрим, стартуем с выбранного файла
-        if (restartFileIndex != null) {
+        // Перезапуск выбранной серии: гасим текущий стрим, стартуем с выбранного
+        // файла (restartTick>0 — пользователь выбрал серию в «☰ Серии»)
+        if (restartTick > 0 && pendingFileIndex != null) {
             stream?.stop()
             stream = null
             bufferedPct = 0
+            val idx = pendingFileIndex!!
             val st2 = withContext(Dispatchers.IO) {
                 TorrentEngine.startStream(
                     source = magnet,
                     saveDir = File(context.filesDir, "downloads/" + item.storeKey),
                     onStatus = { s -> mainHandler.post { status = s } },
-                    fileIndex = restartFileIndex!!,
+                    fileIndex = idx,
                 )
             }
-            restartFileIndex = null
             if (st2 == null) {
                 status = "Не удалось переключить серию"
                 return@LaunchedEffect
@@ -231,24 +235,29 @@ fun PlayerScreen(
             }
         }
 
-        // Порог старта: 12 МБ или ~5% файла — заголовки, индекс и запас кадров,
-        // чтобы первые минуты не спотыкались. Debug-сборка: 256 КБ (проверка
-        // кнопок на эмуляторе без реальных пиров)
+        // Порог старта: заголовки, индекс и запас кадров. Верхний предел 24 МБ
+        // (было 96): на медленной раздаче 96 МБ не набраться за 3-минутный
+        // дедлайн — ложное «Раздача не отвечает» на живой раздаче (ревью)
         val threshold = if (com.torrenttv.app.BuildConfig.DEBUG) 256L * 1024
-            else minOf(maxOf(12L * 1024 * 1024, st.fileSize / 20), 96L * 1024 * 1024)
+            else minOf(maxOf(12L * 1024 * 1024, st.fileSize / 20), 24L * 1024 * 1024)
         // Диагностика и таймаут: если за 3 минуты не скачалось — говорим прямо,
         // вместо вечного «Буферизация». Прогресс — по готовности кусков вокруг
         // стартовой позиции (havePiece), а не по общей скачанной голове: при
         // возобновлении с середины голова файла ни при чём
         val startPos = if (resumeSec > 30 && durationSec > 0) st.fileSize * resumeSec / durationSec else 0L
         val deadline = System.currentTimeMillis() + 180_000
+        // Зомби-торренты: при таймауте или отмене (BACK во время буферизации)
+        // торрент оставался в сессии навсегда — качал, занимал слоты соединений
+        // и душил следующие попытки (главная гипотеза «пиров не найдено»)
+        var buffered = false
+        try {
         while (!st.isRangeReady(startPos, threshold)) {
             bufferedPct = ((st.readyFraction(startPos, threshold) * 100).toInt()).coerceIn(0, 100)
             val mb = st.headBytes() / 1024 / 1024
             val speed = st.speedBps() / 1024
             val dht = TorrentEngine.session.dhtNodes()
             netInfo = when {
-                st.peers() > 0 -> "Пиры: ${st.peers()} · Скачано: $mb МБ · ${speed} КБ/с"
+                st.peers() > 0 -> "Пиры: ${st.peers()} (сидов ${st.seeds()}) · Скачано: $mb МБ · ${speed} КБ/с"
                 // DHT-узлы = 0 значит UDP-обмен вообще не идёт (сеть режет
                 // BitTorrent); узлы есть, а пиров нет — мёртвая раздача
                 dht > 0 -> "Пиры не найдены · DHT жив ($dht узлов) — ждём сидов раздачи"
@@ -257,6 +266,7 @@ fun PlayerScreen(
             if (System.currentTimeMillis() > deadline) {
                 status = "Раздача не отвечает: пиры недоступны из вашей сети. " +
                     "Попробуйте другую раздачу, VPN или Jackett"
+                com.torrenttv.app.data.AppLog.log("player", "буферизация FAIL: ${netInfo}; торрентов в сессии=${TorrentEngine.session.swig().get_torrents().size}")
                 return@LaunchedEffect
             }
             com.torrenttv.app.data.AppLog.log(
@@ -265,7 +275,12 @@ fun PlayerScreen(
             )
             delay(5000)
         }
+        buffered = true
         bufferedPct = 100
+        } finally {
+            // Отмена корутины (BACK) или таймаут — убираем торрент из сессии
+            if (!buffered) runCatching { st.stop() }
+        }
     }
 
     val st = stream
@@ -276,6 +291,9 @@ fun PlayerScreen(
             episode = episode,
             store = store,
             onBack = onBack,
+            // Zona-стиль: при первом запуске сериала список серий открыт сразу
+            // (раньше стейт выставлялся, но VideoPlayer заводил СВОЙ showFiles)
+            initialShowFiles = showFiles,
             onEnded = {
                 val ep = episode
                 if (ep != null) {
@@ -299,9 +317,10 @@ fun PlayerScreen(
             files = torrentFiles,
             onSelectFile = { idx ->
                 if (idx != stream?.fileIndex) {
-                    restartFileIndex = idx
                     // Переключили серию — запоминаем её: индекс + имя + S/E
                     // (имя и S/E переживают смену раздачи гонкой)
+                    pendingFileIndex = idx
+                    restartTick++
                     torrentFiles.getOrNull(idx)?.let { store.saveLastWatched(item, idx, it.second) }
                         ?: store.saveLastFile(item, idx)
                 }
@@ -393,6 +412,8 @@ private fun VideoPlayer(
     skipSegs: List<com.torrenttv.app.data.SkipSeg> = emptyList(),
     /** 🔍 Поиск — уйти во вкладку поиска. */
     onSearch: () -> Unit = {},
+    /** Открыть список серий сразу (первый запуск сериала — Zona-стиль). */
+    initialShowFiles: Boolean = false,
     /** 🎧 Аудио-режим: видео не рисуется, экран может гаснуть (state в PlayerScreen). */
     audioMode: Boolean = false,
     onAudioMode: (Boolean) -> Unit = {},
@@ -612,11 +633,14 @@ private fun VideoPlayer(
                 )
                 showSkip = player.duration - player.currentPosition < 3 * 60_000L
                 // Держим скачанными ~2 мин вперёд от позиции плеера (как в
-                // открытых стримерах): перемотка вперёд попадает в готовые куски
+                // открытых стримерах): перемотка вперёд попадает в готовые куски.
+                // currentPosition — МИЛЛИсекунды, офсет — байты: раньше их
+                // складывали напрямую и окно «+2 мин» всегда смотрело на начало
                 val st = stream
-                if (player.duration > 0) {
+                if (player.duration > 0 && st.fileSize > 0) {
                     val bps = st.fileSize * 1000.0 / player.duration
-                    st.boostPiecesAround(st.fileOffset + player.currentPosition + (bps * 120).toLong())
+                    val posBytes = (bps * player.currentPosition / 1000.0).toLong()
+                    st.boostPiecesAround(st.fileOffset + posBytes + (bps * 120).toLong())
                 }
             }
         }
@@ -680,7 +704,8 @@ private fun VideoPlayer(
     var scaleIdx by remember { mutableStateOf(store.playerScale().coerceIn(0, scales.size - 1)) }
 
     // ---------- Панель «как MX»: показывается при действии пульта ----------
-    var showFiles by remember { mutableStateOf(false) }
+    // showFiles приходит из PlayerScreen: первый запуск сериала — сразу список
+    var showFiles by remember { mutableStateOf(initialShowFiles) }
     var showPanel by remember { mutableStateOf(true) }
 
     // Фокус на кнопке пропуска, как только она появилась, и после закрытия

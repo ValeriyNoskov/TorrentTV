@@ -407,7 +407,6 @@ fun SettingsScreen(onBack: () -> Unit) {
                             title = if (skipDb) "✅ Пропуск заставок и титров по базам" else "⬜ Пропуск заставок и титров по базам",
                             value = if (skipDb) "ВКЛ — заставка/пересказ сами, титры/анонс кнопкой" else "ВЫКЛ — всё смотрим как есть",
                             valueOk = skipDb,
-                            modifier = Modifier.focusRequester(contentFocus),
                         ) {
                             skipDb = !skipDb
                             store.setSkipDbEnabled(skipDb)
@@ -1182,15 +1181,19 @@ private fun SubscreenKeywords(
             Spacer(Modifier.width(12.dp))
             AppButton(onClick = onClearAll, enabled = keywords.isNotEmpty()) { Text("🗑 Удалить все") }
         }
-        KeyboardSheet(
-            value = draft,
-            title = "Новое стоп-слово",
-            onChar = { ch -> draft += ch },
-            onBackspace = { if (draft.isNotEmpty()) draft = draft.dropLast(1) },
-            onClear = { draft = "" },
-            onDismiss = { showKb = false },
-            onSuggest = { draft = it },
-        )
+        // Шторка клавиатуры — по кнопке «⌨ Ввести слово»; раньше рендерилась
+        // всегда и «висла» поверх экрана без возможности закрыть
+        if (showKb) {
+            KeyboardSheet(
+                value = draft,
+                title = "Новое стоп-слово",
+                onChar = { ch -> draft += ch },
+                onBackspace = { if (draft.isNotEmpty()) draft = draft.dropLast(1) },
+                onClear = { draft = "" },
+                onDismiss = { showKb = false },
+                onSuggest = { draft = it },
+            )
+        }
     }
 }
 

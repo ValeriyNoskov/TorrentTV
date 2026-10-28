@@ -50,29 +50,35 @@ object TmdbClient {
     /** До этого времени (мс) не ходим в сеть: источник считаем лежащим. */
     @Volatile private var cooldownUntil: Long = 0
 
+    private fun buildUrl(path: String, params: Map<String, String>): String = buildString {
+        append(BASE).append(path)
+        append(if (path.contains('?')) '&' else '?')
+        append("api_key=").append(apiKey)
+        append("&language=ru-RU")
+        params.forEach { (k, v) -> append('&').append(k).append('=').append(Uri.encode(v)) }
+    }
+
     private fun get(path: String, params: Map<String, String> = emptyMap()): JSONObject? {
         if (!isConfigured) return null
-        // Предохранитель: после сбоя пауза — не долбим источник впустую
+        // Свежий кеш — БЕЗ сети и ДО проверки cooldown: после одного сбоя
+        // кешированные каталоги не должны пустеть на 10 минут (ревью данных)
+        val cached = KinopoiskClient.sharedFresh(buildUrl(path, params))?.let {
+            runCatching { JSONObject(it) }.getOrNull()
+        }
         if (System.currentTimeMillis() < cooldownUntil) {
             lastFailed = true
-            return null
+            return cached
         }
-        val url = buildString {
-            append(BASE).append(path)
-            append(if (path.contains('?')) '&' else '?')
-            append("api_key=").append(apiKey)
-            append("&language=ru-RU")
-            params.forEach { (k, v) -> append('&').append(k).append('=').append(Uri.encode(v)) }
+        if (cached != null) {
+            lastFailed = false
+            return cached
         }
+        val url = buildUrl(path, params)
         return try {
-            // Свежий кеш — без сети (каталоги не меняются часами)
-            KinopoiskClient.sharedFresh(url)?.let {
-                lastFailed = false
-                return runCatching { JSONObject(it) }.getOrNull()
-            }
+            lastFailed = false
             ApiUsage.tmdbRequest() // расход лимита — для счётчиков в настройках
             http.newCall(Request.Builder().url(url).build()).execute().use { resp ->
-                val body = if (resp.isSuccessful) resp.body!!.string() else null
+                val body = if (resp.isSuccessful) resp.body?.string() else null
                 if (body != null) {
                     lastFailed = false
                     KinopoiskClient.sharedPut(url, body)

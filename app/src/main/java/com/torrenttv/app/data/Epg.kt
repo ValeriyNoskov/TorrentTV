@@ -84,7 +84,9 @@ object Epg {
         // кросс-доменными 301 (teleguide.info → 81.p.giex.ru) — без этого
         // получаем HTML-заглушку и на ТВ остаётся старая программа
         var conn: HttpURLConnection? = null
+        var stream: InputStream? = null
         var url = SOURCE
+        try {
         repeat(3) {
             val c = (URL(url).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 20_000
@@ -104,7 +106,7 @@ object Epg {
         val c = conn ?: error("HTTP: не дошли до файла за 3 перехода")
         if (c.responseCode !in 200..299) error("HTTP ${c.responseCode}")
         val raw: InputStream = c.inputStream
-        val stream = if (SOURCE.endsWith(".gz")) GZIPInputStream(raw, 64 * 1024) else raw
+        stream = if (SOURCE.endsWith(".gz")) GZIPInputStream(raw, 64 * 1024) else raw
 
         val now = System.currentTimeMillis()
         val from = now - 12 * 3600_000L       // вчерашние вечерние передачи ещё нужны
@@ -152,10 +154,13 @@ object Epg {
             }
             event = parser.next()
         }
-        stream.close()
-        c.disconnect()
         out.values.forEach { list -> list.sortBy { it.start } }
         return out
+        } finally {
+            // Раньше при ошибке сети/парсинга stream и conn оставались открытыми
+            runCatching { stream?.close() }
+            runCatching { conn?.disconnect() }
+        }
     }
 
     /** «20261024180000 +0300» → epoch ms. */
@@ -176,7 +181,7 @@ object Epg {
             ch.put(k, arr)
         }
         runCatching {
-            file.writeText(JSONObject().put("savedAt", System.currentTimeMillis()).put("channels", ch).toString())
+            writeAtomic(file, JSONObject().put("savedAt", System.currentTimeMillis()).put("channels", ch).toString())
         }
     }
 

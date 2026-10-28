@@ -148,9 +148,10 @@ fun LivePlayerScreen(
         }
     }
 
-    // Автоскрытие панели (как в остальных плеерах)
-    LaunchedEffect(panelTick, showPanel) {
-        if (showPanel) {
+    // Автоскрытие панели (как в остальных плеерах). Меню ⚙ открыто —
+    // панель НЕ прячем: раньше меню оставалось висеть без панели
+    LaunchedEffect(panelTick, showPanel, showGear) {
+        if (showPanel && !showGear) {
             delay(8_000)
             showPanel = false
             AppLog.log("tv", "панель: скрыта автоматически (8 с)")
@@ -167,7 +168,13 @@ fun LivePlayerScreen(
     }
 
     androidx.activity.compose.BackHandler {
-        if (showPanel) showPanel = false else onBack()
+        when {
+            // Открытое меню ⚙ закрываем первым — раньше BACK прятал всю панель,
+            // оставляя меню висеть без заголовка (ревью UI)
+            showGear -> showGear = false
+            showPanel -> showPanel = false
+            else -> onBack()
+        }
     }
 
     // Фокус на контейнере плеера: без него пульт «не видит» экран и ОК

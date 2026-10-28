@@ -146,12 +146,17 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         com.torrenttv.app.data.AppLog.init(this)
+        // Состояние сессии торрента: тёплый старт DHT в следующий раз
+        com.torrenttv.app.torrent.TorrentEngine.stateFile = java.io.File(filesDir, "session.state")
         // APK прошлых обновлений копились в кеше (~80 МБ каждое) — чистим при
         // старте, не трогая скачанный и ожидающий установки. Фоном: дисковая
         // чистка в onCreate задерживала холодный старт.
         Thread {
             runCatching { com.torrenttv.app.update.UpdateManager.cleanupApks(this@MainActivity) }
         }.apply { isDaemon = true; start() }
+        // Сохранить состояние torrent-сессии при уходе (тёплый старт DHT)
+        Thread { runCatching { com.torrenttv.app.torrent.TorrentEngine.saveState() } }
+            .apply { isDaemon = true; start() }
         // Дисковый кэш метаданных: экономит дневной лимит API и работает без сети
         com.torrenttv.app.data.KinopoiskClient.attachCache(cacheDir)
         // Конфигурация при старте: по логу сразу видно, как настроено устройство

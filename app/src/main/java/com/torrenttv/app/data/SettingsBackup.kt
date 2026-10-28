@@ -28,6 +28,25 @@ object SettingsBackup {
         .build()
 
     @Volatile private var lastSavedHash: Int? = null
+    @Volatile private var restoring = false
+    @Volatile private var cachedGistId: String? = null
+
+    /**
+     * Секреты НЕ выгружаем в Gist: github-токен (даёт доступ ко всем гистам,
+     * включая сами бэкапы и логи) и куки приватных трекеров. Ключи API
+     * (КП/TMDB) оставляем — они нужны для полного восстановления и не
+     * дают доступа к аккаунту GitHub.
+     */
+    private val SECRET_KEY_PREFIXES = listOf("github_token", "tracker_cookie_")
+
+    /** Снимок настроек без секретов (для выгрузки в Gist). */
+    private fun sanitizedJson(store: LocalStore): String {
+        val o = store.snapshot()
+        for (k in o.keys().asSequence().toList()) {
+            if (SECRET_KEY_PREFIXES.any { k.startsWith(it) }) o.remove(k)
+        }
+        return o.toString()
+    }
 
     /** Восстановить настройки, если локальные пусты (сброс/первый запуск). */
     fun restoreIfNeeded(context: Context, onRestored: (() -> Unit)? = null) {
@@ -46,11 +65,14 @@ object SettingsBackup {
                     AppLog.log("backup", "бэкап содержал управляющие символы — очищен и прочитан заново")
                     JSONObject(fixed)
                 }
+                restoring = true
                 store.restore(json)
-                lastSavedHash = content.hashCode()
+                restoring = false
+                lastSavedHash = sanitizedJson(store).hashCode()
                 AppLog.log("backup", "настройки восстановлены из облачного бэкапа (${json.length()} ключей)")
                 onRestored?.invoke()
             } catch (e: Exception) {
+                restoring = false
                 AppLog.log("backup", "восстановление FAIL: ${e.message}")
             }
         }.start()
@@ -67,16 +89,23 @@ object SettingsBackup {
 
     private fun doSave(context: Context, force: Boolean): Boolean {
         try {
+            // Идёт восстановление из бэкапа — не снимаем «частичный» снимок,
+            // иначе обрезанная версия перезапишет хороший облачный бэкап
+            if (restoring && !force) {
+                AppLog.log("backup", "сохранение пропущено: идёт восстановление")
+                return false
+            }
             val store = LocalStore(context)
             if (store.isEmpty()) return false
             val token = com.torrenttv.app.update.UpdateManager.ghToken(context)
-            val json = store.snapshot().toString()
+            val json = sanitizedJson(store)
             if (!force && json.hashCode() == lastSavedHash) return true   // ничего не менялось
             if (token.isBlank()) {
                 AppLog.log("backup", "сохранение FAIL: нет GitHub-токена")
                 return false
             }
             val gistId = findGistId(token)
+            if (gistId != null) cachedGistId = gistId
             val ok = if (gistId != null) patch(gistId, json, token) else create(json, token)
             if (ok) {
                 lastSavedHash = json.hashCode()
@@ -109,6 +138,8 @@ object SettingsBackup {
 
     /** Найти наш Gist по имени файла (секретный — в профиле не виден, но API его отдаёт). */
     private fun findGistId(token: String): String? {
+        // Найденный id кешируем: сканирование до 300 гистов на каждую выгрузку не нужно
+        cachedGistId?.let { return it }
         for (page in 1..3) {   // до 300 гистов — логи не должны так быстро расти
             val (code, body) = request("$LIST_API?per_page=100&page=$page", token, "GET", null)
             if (code != 200) return null

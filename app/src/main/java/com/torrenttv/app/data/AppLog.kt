@@ -16,7 +16,13 @@ object AppLog {
 
     private const val MAX_LINES = 800
     private val buf = ArrayDeque<String>()
-    private val fmt = SimpleDateFormat("MM-dd HH:mm:ss", Locale.US)
+    // SimpleDateFormat НЕ потокобезопасен: log() зовут из любых потоков —
+    // конкурентный format() давал битые таймстемпы и AIOOBE (ревью данных).
+    // По экземпляру на поток через ThreadLocal
+    private val fmt = object : ThreadLocal<SimpleDateFormat>() {
+        override fun initialValue() = SimpleDateFormat("MM-dd HH:mm:ss", Locale.US)
+    }
+    private fun ts(): String = fmt.get()!!.format(Date())
 
     // Очередь строк для файла: log() только кладёт в очередь (ноль дисковых
     // операций на вызывающем потоке — раньше каждый вызов писал на диск
@@ -69,7 +75,7 @@ object AppLog {
     }
 
     fun log(tag: String, msg: String) {
-        val line = "${fmt.format(Date())} [$tag] $msg"
+        val line = "${ts()} [$tag] $msg"
         synchronized(buf) {
             buf.addLast(line)
             while (buf.size > MAX_LINES) buf.removeFirst()
@@ -141,7 +147,7 @@ object AppLog {
                 // без следа в логе, когда стек был, а события терялись)
                 val tail = synchronized(buf) { buf.takeLast(30).joinToString("\n") }
                 crashFile().appendText(
-                    "\n=== ${fmt.format(Date())} thread=${t.name} ===\n" +
+                    "\n=== ${ts()} thread=${t.name} ===\n" +
                         "last events:\n$tail\n\n" +
                         android.util.Log.getStackTraceString(e),
                 )

@@ -94,13 +94,16 @@ data class MediaItem(
 
     companion object {
         fun fromJson(o: JSONObject): MediaItem = MediaItem(
-            id = o.getInt("id"),
+            // id — ключ хранилища: жёсткий getInt() ронял весь список из-за
+            // одного битого элемента (ревью данных)
+            id = runCatching { o.getInt("id") }.getOrElse { o.optInt("id", 0) },
             type = o.safeString("type", "movie"),
             title = o.safeString("title", ""),
             year = o.safeString("year", ""),
             posterUrl = o.safeString("poster", ""),
             backdropUrl = o.safeString("backdrop", ""),
-            rating = o.optDouble("rating", 0.0),
+            // optDouble при JSON-null возвращает NaN — чистим (ломал фильтры/сортировки)
+            rating = o.optDouble("rating", 0.0).takeIf { !it.isNaN() } ?: 0.0,
             genreIds = o.optJSONArray("genreIds")?.let { arr ->
                 (0 until arr.length()).map { arr.optInt(it) }
             } ?: emptyList(),
@@ -115,7 +118,7 @@ data class MediaItem(
                 (0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }
             } ?: emptyList(),
             originalLanguage = o.safeString("originalLanguage"),
-            ratingImdb = o.optDouble("ratingImdb", 0.0),
+            ratingImdb = o.optDouble("ratingImdb", 0.0).takeIf { !it.isNaN() } ?: 0.0,
         )
     }
 }

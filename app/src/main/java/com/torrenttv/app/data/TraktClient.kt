@@ -154,8 +154,9 @@ object TraktClient {
         return null
     }
 
-    /** Подвязка тайтл → slug в памяти процесса (живёт с приложением). */
-    private val slugCache = mutableMapOf<String, String>()
+    /** Подвязка тайтл → slug в памяти процесса (живёт с приложением).
+     *  ConcurrentHashMap: enrich идёт из нескольких фоновых потоков. */
+    private val slugCache = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     /** «Россия»/«СССР» → ru, «США» → us и т.д. — для сверки с Trakt country (2 буквы). */
     private fun countryCode(c: String): String {

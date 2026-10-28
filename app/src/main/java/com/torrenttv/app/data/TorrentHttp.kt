@@ -12,6 +12,10 @@ object TorrentHttp {
     val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
+        // Жёсткий предел на весь вызов: блокирующий OkHttp нельзя прервать
+        // из withTimeoutOrNull (ревью данных) — без callTimeout зависший
+        // источник занимал поток IO до 30+ секунд
+        .callTimeout(30, TimeUnit.SECONDS)
         .build()
 
     /** Быстрый клиент для каталога: медленный ответ = сразу ошибка на экране,

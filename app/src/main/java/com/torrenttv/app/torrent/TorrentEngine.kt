@@ -79,6 +79,12 @@ object TorrentEngine {
                 true,
             )
         }
+        // Отдача ограничена: узкий аплинк ТВ, залитый безлимитной отдачей,
+        // душил хендшейки и приём кусков (ревью движка)
+        runCatching { sp.uploadRateLimit(2 * 1024 * 1024) }
+        // Фиксированный порт вместо дефолтного 6881 (часто занят/фильтрован
+        // роутерами) — UPnP пробросит его на роутере
+        runCatching { sp.listenInterfaces("0.0.0.0:49013,[::]:49013") }
         // Широкий список DHT-роутеров: холодная сессия находит первый
         // пир быстрее, метаданные магнита не «висят» по 90 секунд
         runCatching {
@@ -92,16 +98,38 @@ object TorrentEngine {
             )
         }
         // Настройки передаются В start() через SessionParams: applySettings
-        // до старта сессии мог молча теряться (native-сессии ещё нет)
+        // до старта сессии мог молча теряться (native-сессии ещё нет).
+        // Состояние прошлой сессии (DHT-кеш, пиры) ускоряет тёплый старт
+        val stateF = stateFile
         try {
-            session.start(com.frostwire.jlibtorrent.SessionParams(sp))
+            val params = if (stateF != null && stateF.exists() && stateF.length() > 0) {
+                runCatching { com.frostwire.jlibtorrent.SessionParams(stateF.readBytes()) }.getOrNull()
+            } else null
+            session.start(params ?: com.frostwire.jlibtorrent.SessionParams(sp))
             com.torrenttv.app.data.AppLog.log(
                 "engine",
-                "сессия запущена: порт=${session.listenEndpoints()}, DHT=${session.isDhtRunning()}",
+                "сессия запущена: порт=${session.listenEndpoints()}, DHT=${session.isDhtRunning()}" +
+                    (if (params != null) ", состояние восстановлено" else ""),
             )
         } catch (e: Exception) {
             runCatching { session.start() }
-            com.torrenttv.app.data.AppLog.log("engine", "сессия запущена с дефолтными настройками: ${e.message}")
+            com.torrenttv.app.data.AppLog.log(
+                "engine",
+                "сессия запущена с дефолтными настройками (тюнинг не применился!): ${e.message}",
+            )
+        }
+    }
+
+    /** Куда сохранять состояние сессии; выставляет MainActivity при старте. */
+    @Volatile var stateFile: File? = null
+
+    /** Сохранить состояние сессии (DHT-кеш, пиры) — тёплый старт в следующий раз. */
+    fun saveState() {
+        val f = stateFile ?: return
+        if (!session.isRunning) return
+        runCatching {
+            f.writeBytes(session.saveState())
+            com.torrenttv.app.data.AppLog.log("engine", "состояние сессии сохранено (${f.length()} байт)")
         }
     }
 
@@ -153,6 +181,13 @@ object TorrentEngine {
         /** Число подключённых пиров (для диагностики на экране буферизации). */
         fun peers(): Int = try {
             handle.status().numPeers()
+        } catch (_: Exception) {
+            0
+        }
+
+        /** Число сидов отдельно: «пиры есть, но 0 сидов» — другой диагноз. */
+        fun seeds(): Int = try {
+            handle.status().numSeeds()
         } catch (_: Exception) {
             0
         }
@@ -410,9 +445,17 @@ object TorrentEngine {
             if (handle == null) Thread.sleep(200)
         }
         val h = handle ?: run {
-            onStatus("Торрент не добавился — нет пиров?")
+            onStatus("Торрент не добавился за 15 с (проблема движка, не пиров)")
             return null
         }
+
+        // Форс-анонс сразу: при холодном DHT (0 узлов первые 1-2 мин) пассивное
+        // ожидание длилось минуты — теперь трекеры/DHT опрашиваются немедленно
+        runCatching { if (session.dhtNodes() > 0) h.forceDHTAnnounce() }
+        com.torrenttv.app.data.AppLog.log(
+            "engine",
+            "торрент добавлен: файлов=$numFiles, выбранный=$best, всего в сессии=${session.swig().get_torrents().size}",
+        )
 
         try {
             h.setFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD, TorrentFlags.SEQUENTIAL_DOWNLOAD)

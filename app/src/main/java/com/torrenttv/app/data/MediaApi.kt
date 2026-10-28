@@ -127,7 +127,7 @@ object MediaApi {
             if (poster.isBlank()) poster = rtThumb
             if (overview.isBlank()) overview = rtDesc
         }
-        if (poster.isBlank() && overview.isBlank() && card == null) return item
+        if (poster.isBlank() && overview.isBlank() && card == null && tmdbImdb.isBlank()) return item
         val enriched = item.copy(
             posterUrl = poster.ifBlank { item.posterUrl },
             year = card?.year?.ifBlank { item.year } ?: item.year,
@@ -141,7 +141,6 @@ object MediaApi {
 
     fun trending(page: Int = 1): List<MediaItem> =
         pick({ RutrackerrCatalog.trending(page) }, { KinopoiskClient.trending(page) }, { TmdbClient.trending(page) })
-            ?: emptyList()
             ?: emptyList()
 
     /**
@@ -276,9 +275,11 @@ object MediaApi {
         pick({ KinopoiskClient.seasons(item) }, { TmdbClient.seasons(item) })?.ifEmpty {
             // Фолбэк: карточка без кинопоиск-id (торрент/рутрекер) — КП по такому id
             // отдаёт пустоту. Ищем тайтл поиском и берём сезоны по найденному id.
-            val found = KinopoiskClient.search(item.title).firstOrNull { cand ->
+            // ОДИН поисковый запрос (два жгли дневную квоту КП впустую)
+            val candidates = KinopoiskClient.search(item.title)
+            val found = candidates.firstOrNull { cand ->
                 cand.type == "tv" && cand.title.equals(item.title, ignoreCase = true)
-            } ?: KinopoiskClient.search(item.title).firstOrNull { it.type == "tv" }
+            } ?: candidates.firstOrNull { it.type == "tv" }
             found?.let { AppLog.log("episodes", "сезоны по найденному id: «${item.title}» → «${it.title}» id=${it.id}") }
             found?.let { KinopoiskClient.seasons(it) } ?: emptyList()
         } ?: emptyList()

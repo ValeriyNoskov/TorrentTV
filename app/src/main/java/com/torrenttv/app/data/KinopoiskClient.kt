@@ -85,7 +85,7 @@ object KinopoiskClient {
             for ((u, v) in cache) {
                 arr.put(org.json.JSONObject().put("u", u).put("t", v.first).put("b", v.second))
             }
-            java.io.File(dir, "kp_cache.json").writeText(arr.toString())
+            java.io.File(dir, "kp_cache.json").let { writeAtomic(it, arr.toString()) }
         }
     }
 
