@@ -157,6 +157,11 @@ class MainActivity : ComponentActivity() {
         // Сохранить состояние torrent-сессии при уходе (тёплый старт DHT)
         Thread { runCatching { com.torrenttv.app.torrent.TorrentEngine.saveState() } }
             .apply { isDaemon = true; start() }
+        // Прогрев движка и DHT при старте приложения: раньше сессия поднималась
+        // только при входе в плеер — первые 40–60 сек DHT пустая, экран
+        // буферизации показывал «сеть блокирует BitTorrent» зря
+        Thread { runCatching { com.torrenttv.app.torrent.TorrentEngine.start() } }
+            .apply { isDaemon = true; start() }
         // Дисковый кэш метаданных: экономит дневной лимит API и работает без сети
         com.torrenttv.app.data.KinopoiskClient.attachCache(cacheDir)
         // Конфигурация при старте: по логу сразу видно, как настроено устройство

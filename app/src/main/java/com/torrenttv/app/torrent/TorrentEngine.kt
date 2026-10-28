@@ -290,17 +290,36 @@ object TorrentEngine {
 
         /**
          * Готов ли диапазон [from, from+length) файла: все куски диапазона
-         * скачаны (havePiece) — как в открытых стримерах. fileProgress() тут
+         * скачаны (havePiece) — как в открытых стримерах (stremio/torrent-stream): fileProgress() тут
          * не годится: он суммирует скачанные куски без непрерывности, после
          * перемотки даёт ложную готовность.
+         *
+         * ВАЖНО (v0.9.35): одной готовности кусков мало — цикл буферизации
+         * и DataSource выходили «готово» при peers=0/head=0 (лог v0.9.33:
+         * PARSING_CONTAINER_UNSUPPORTED — плеер прочитал нули разрежённого
+         * файла). Двойной критерий: куски есть И байты реально на диске.
          */
-        fun isRangeReady(filePos: Long, length: Long): Boolean = readyFraction(filePos, length) >= 1f
+        fun isRangeReady(filePos: Long, length: Long): Boolean {
+            val pieceOk = readyFraction(filePos, length) >= 1f
+            if (!pieceOk) return false
+            // Защита от ложной готовности: если скачано 0 байт файла —
+            // куски «готовы» только по ошибке расчёта, читать рано
+            return headBytes() > 0 || length <= 0L
+        }
 
         /** Доля готовых кусков в диапазоне файла [filePos, filePos+length), 0..1. */
         fun readyFraction(filePos: Long, length: Long): Float {
             try {
                 val pieceLen = ti.pieceLength()
-                if (pieceLen <= 0) return 1f
+                if (pieceLen <= 0) {
+                    // Диагностика v0.9.33-лога: здесь цикл буферизации и DataSource
+                    // мгновенно считали «готово» при 0 пиров — плеер читал нули
+                    com.torrenttv.app.data.AppLog.log(
+                        "engine",
+                        "WARN: pieceLength=$pieceLen — готовность кусков не считается, считаю готовым",
+                    )
+                    return 1f
+                }
                 val abs = fileOffset + filePos
                 val end = (abs + length).coerceAtMost(fileOffset + fileSize)
                 val first = (abs / pieceLen).toInt().coerceIn(0, ti.numPieces() - 1)

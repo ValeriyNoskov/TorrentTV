@@ -246,6 +246,7 @@ fun PlayerScreen(
         // возобновлении с середины голова файла ни при чём
         val startPos = if (resumeSec > 30 && durationSec > 0) st.fileSize * resumeSec / durationSec else 0L
         val deadline = System.currentTimeMillis() + 180_000
+        val sessionStart = System.currentTimeMillis()
         // Зомби-торренты: при таймауте или отмене (BACK во время буферизации)
         // торрент оставался в сессии навсегда — качал, занимал слоты соединений
         // и душил следующие попытки (главная гипотеза «пиров не найдено»)
@@ -258,10 +259,13 @@ fun PlayerScreen(
             val dht = TorrentEngine.session.dhtNodes()
             netInfo = when {
                 st.peers() > 0 -> "Пиры: ${st.peers()} (сидов ${st.seeds()}) · Скачано: $mb МБ · ${speed} КБ/с"
-                // DHT-узлы = 0 значит UDP-обмен вообще не идёт (сеть режет
-                // BitTorrent); узлы есть, а пиров нет — мёртвая раздача
+                // DHT-узлы = 0 значит UDP-обмен ещё не пошёл. Первые 45 с это
+                // нормальный бутстрап (по логу v0.9.33: DHT отвечала на 45-й
+                // секунде и отдала 47 пиров) — пугаем «блокировкой» только после
                 dht > 0 -> "Пиры не найдены · DHT жив ($dht узлов) — ждём сидов раздачи"
-                else -> "Пиры не найдены · DHT пуст — сеть блокирует BitTorrent"
+                System.currentTimeMillis() - sessionStart < 45_000 ->
+                    "Поднимаю DHT-сеть… (${(System.currentTimeMillis() - sessionStart) / 1000} с)"
+                else -> "DHT пуста 45+ с — сеть может блокировать BitTorrent (VPN обходит)"
             }
             if (System.currentTimeMillis() > deadline) {
                 status = "Раздача не отвечает: пиры недоступны из вашей сети. " +
@@ -277,6 +281,11 @@ fun PlayerScreen(
         }
         buffered = true
         bufferedPct = 100
+        com.torrenttv.app.data.AppLog.log(
+            "player",
+            "буферизация завершена: ${(System.currentTimeMillis() - (deadline - 180_000)) / 1000} с, " +
+                "head=${st.headBytes() / 1024 / 1024}МБ peers=${st.peers()} dht=${TorrentEngine.session.dhtNodes()}",
+        )
         } finally {
             // Отмена корутины (BACK) или таймаут — убираем торрент из сессии
             if (!buffered) runCatching { st.stop() }
@@ -561,9 +570,14 @@ private fun VideoPlayer(
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 val pos = player.currentPosition
+                // Состояние стрима рядом с ошибкой: по нему видно, читал ли
+                // плеер нули недокачанного файла (PARSING_CONTAINER_UNSUPPORTED
+                // при head=0) или данные реально портились
+                val stNow = stream
                 com.torrenttv.app.data.AppLog.log(
                     "player",
-                    "playback error: ${error.errorCodeName} pos=${pos / 1000}s retries=$retries",
+                    "playback error: ${error.errorCodeName} pos=${pos / 1000}s retries=$retries" +
+                        (stNow?.let { ", head=${it.headBytes() / 1024 / 1024}МБ peers=${it.peers()}" } ?: ""),
                 )
                 if (retries < 3) {
                     // Транзитные ошибки источника/декодера: перемотка на место
