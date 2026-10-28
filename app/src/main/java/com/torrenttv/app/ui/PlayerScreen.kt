@@ -289,7 +289,49 @@ fun PlayerScreen(
     }
 
     val st = stream
-    if (st != null && bufferedPct >= 100) {
+    // Внешний плеер (Настройки → Плеер → «Всегда внешний плеер»): отдаём
+    // файл через FileProvider — VLC/MX Player сами читают недокачанный файл,
+    // а наш движок продолжает докачивать, пока открыт экран плеера
+    var externalLaunched by remember(st) { mutableStateOf(false) }
+    if (st != null && bufferedPct >= 100 && store.useExternalPlayer() && !externalLaunched) {
+        externalLaunched = true
+        val ctx = context
+        Thread {
+            runCatching {
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    ctx,
+                    ctx.packageName + ".updateprovider",
+                    st.videoFile,
+                )
+                val mime = when {
+                    st.videoFile.name.endsWith(".mkv", true) -> "video/x-matroska"
+                    st.videoFile.name.endsWith(".avi", true) -> "video/x-msvideo"
+                    else -> "video/mp4"
+                }
+                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW)
+                    .setDataAndType(uri, mime)
+                    .addFlags(
+                        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                            android.content.Intent.FLAG_ACTIVITY_NEW_TASK,
+                    )
+                ctx.startActivity(intent)
+                com.torrenttv.app.data.AppLog.log(
+                    "player",
+                    "внешний плеер: открыт ${st.videoFile.name.take(40)} ($mime)",
+                )
+                mainHandler.post {
+                    status = "Открыто во внешнем плеере — движок докачивает"
+                }
+            }.onFailure { e ->
+                com.torrenttv.app.data.AppLog.log(
+                    "player",
+                    "внешний плеер FAIL: ${e.javaClass.simpleName}: ${e.message}",
+                )
+                mainHandler.post { status = "Не удалось открыть внешний плеер: ${e.message?.take(60)}" }
+            }
+        }.apply { isDaemon = true; start() }
+    }
+    if (st != null && bufferedPct >= 100 && !store.useExternalPlayer()) {
         VideoPlayer(
             stream = st,
             item = itemState,

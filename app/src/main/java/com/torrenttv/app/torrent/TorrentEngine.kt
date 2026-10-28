@@ -275,6 +275,16 @@ object TorrentEngine {
             0
         }
 
+        /** Снять последовательную загрузку: она качает строго по порядку и
+         *  не даёт приоритетам кусков (индекс MKV в конце, перемотка) работать. */
+        fun clearSequential() {
+            try {
+                handle.unsetFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD)
+                com.torrenttv.app.data.AppLog.log("engine", "sequential снят: приоритеты кусков активны")
+            } catch (_: Exception) {
+            }
+        }
+
         /** Число сидов отдельно: «пиры есть, но 0 сидов» — другой диагноз. */
         fun seeds(): Int = try {
             handle.status().numSeeds()
@@ -591,6 +601,20 @@ object TorrentEngine {
             try {
                 h.prioritizeFiles(Array(numFiles) { if (it == best) Priority.NORMAL else Priority.IGNORE })
             } catch (_: Exception) {
+            }
+        }
+        // Индекс MKV (Cues) лежит в КОНЦЕ файла: без него ExoPlayer/VLC
+        // прыгают в конец и висят, пока индекс не скачается (лог 17:19:
+        // pos=2058МБ, готовность 0% минуту при peers=20 — SEQUENTIAL душит
+        // приоритеты кусков). Последним куска файла — высокий приоритет
+        runCatching {
+            val pieceLen = ti.pieceLength()
+            if (pieceLen > 0) {
+                val endAbs = fileOffset + bestSize
+                val lastPiece = ((endAbs - 1) / pieceLen).toInt().coerceIn(0, ti.numPieces() - 1)
+                val cueFrom = ((endAbs - 8L * 1024 * 1024).coerceAtLeast(fileOffset) / pieceLen).toInt()
+                    .coerceIn(0, lastPiece)
+                for (i in cueFrom..lastPiece) h.piecePriority(i, Priority.SEVEN)
             }
         }
 
