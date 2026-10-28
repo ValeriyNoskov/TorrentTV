@@ -843,7 +843,7 @@ fun OnlinePlayerScreen(
                     Spacer(Modifier.height(26.dp))
                     Text("↩ Показать видео", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold,
                         modifier = Modifier.background(Color(0x99151B26), RoundedCornerShape(10.dp))
-                            .padding(horizontal = 20.dp, vertical = 10.dp))
+                            .padding(horizontal = 20.dp, vertical = 6.dp))
                 }
             }
         }
@@ -865,7 +865,7 @@ fun OnlinePlayerScreen(
                             focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
                         ),
-                    ) { Text(label, fontSize = 30.sp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 15.dp)) }
+                    ) { Text(label, fontSize = 24.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
                 }
                 CenterBtn("⏪︎") {
                     val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
@@ -889,8 +889,8 @@ fun OnlinePlayerScreen(
                 ) {
                     Text(
                         if (playing) "▮▮" else "▶︎",
-                        fontSize = 34.sp,
-                        modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp),
+                        fontSize = 26.sp,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp),
                     )
                 }
                 CenterBtn("⏩︎") {
@@ -928,7 +928,7 @@ fun OnlinePlayerScreen(
                 modifier = Modifier
                     .align(Alignment.Center)
                     .background(Color(0xE0151B26), RoundedCornerShape(12.dp))
-                    .padding(horizontal = 22.dp, vertical = 10.dp),
+                    .padding(horizontal = 22.dp, vertical = 6.dp),
             )
         }
 
@@ -1027,7 +1027,7 @@ fun OnlinePlayerScreen(
                 Modifier
                     .align(Alignment.Center)
                     .background(Color(0xF0151B26), RoundedCornerShape(16.dp))
-                    .padding(horizontal = 24.dp, vertical = 18.dp),
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
@@ -1118,7 +1118,7 @@ fun OnlinePlayerScreen(
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .background(Color(0xB3000000))
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
             ) {
                 // Заголовок над сикбаром: название + серия (S01E08)
                 Text(
@@ -1242,7 +1242,7 @@ fun OnlinePlayerScreen(
                             focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color(0xFF0E1116),
                         ),
-                    ) { Text(if (showGear) "✕" else "⚙", fontSize = 18.sp, modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)) }
+                    ) { Text(if (showGear) "✕" else "⚙", fontSize = 18.sp, modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp)) }
                 }
             }
         }
@@ -1269,7 +1269,7 @@ fun OnlinePlayerScreen(
                             focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
                         ),
-                    ) { Text(label, fontSize = 15.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) }
+                    ) { Text(label, fontSize = 15.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) }
                 }
                 if (files.size > 1) GItem("☰ Серии (${files.size})") { showFiles = true; panelTick++ }
                 GItem("⏱ Перейти к…") { showJump = true; panelTick++ }
@@ -1459,7 +1459,7 @@ fun OnlinePlayerScreen(
                             androidx.tv.material3.Text(
                                 if (watched) "✓ Серия просмотрена (нажмите — снять)" else "✓ Отметить серию просмотренной",
                                 fontSize = 14.sp,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                             )
                         }
                     }
@@ -1497,7 +1497,7 @@ fun OnlinePlayerScreen(
                             focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
                         ),
-                    ) { Text("🧲 Другая раздача", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) }
+                    ) { Text("🧲 Другая раздача", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
                     androidx.tv.material3.Surface(
                         onClick = { showStalled = false; retryCount = 0; stallRestarts = 0; retryTick++ },
                         shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
@@ -1507,7 +1507,7 @@ fun OnlinePlayerScreen(
                             focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color(0xFF0E1116),
                         ),
-                    ) { Text("↻ Ещё раз", fontSize = 16.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) }
+                    ) { Text("↻ Ещё раз", fontSize = 16.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
                 }
             }
         }
@@ -1627,7 +1627,7 @@ internal fun SettingsMenuItem(label: String, focusRequester: FocusRequester? = n
         Text(
             label,
             fontSize = 15.sp,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
         )
     }
 }
@@ -1691,7 +1691,7 @@ fun TrailerScreen(item: MediaItem, onBack: () -> Unit) {    var link by remember
                         focusedContainerColor = Color(0xFFE8ECF4),
                         focusedContentColor = Color(0xFF0E1116),
                     ),
-                ) { Text("← Назад", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp)) }
+                ) { Text("← Назад", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
             } else {
                 Text("🎬 Ищу трейлер на Rutube…", color = Color(0xFFE8ECF4), fontSize = 18.sp)
             }
@@ -1767,7 +1767,7 @@ fun RutubeWatchScreen(videoId: String, title: String, onBack: () -> Unit) {
                         focusedContainerColor = Color(0xFFE8ECF4),
                         focusedContentColor = Color(0xFF0E1116),
                     ),
-                ) { Text("← Назад", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp)) }
+                ) { Text("← Назад", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
             } else {
                 Text("📺 Подключаюсь к Rutube…", color = Color(0xFFE8ECF4), fontSize = 18.sp)
             }

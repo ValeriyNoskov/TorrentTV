@@ -204,7 +204,7 @@ fun HomeScreen(
                                 ),
                                 modifier = Modifier.width(150.dp),
                             ) {
-                                Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                                Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
                                     Text(
                                         "● ${ch.group}",
                                         color = Color(0xFFA9D7F5),

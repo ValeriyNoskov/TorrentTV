@@ -151,7 +151,7 @@ fun DetailsScreen(
             .fillMaxSize()
             // Поверх fanart фон прозрачный — иначе непрозрачный Column закроет его
             .background(if (itemState.posterUrl.isNotBlank()) Color.Transparent else Color(0xFF0E1116))
-            .padding(horizontal = 24.dp, vertical = 18.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
         // Вертикальная карточка: постер → кнопки → описание → «Похожее».
         // Всё листается пультом ВНИЗ (просьба владельца: «двигается вниз,
@@ -164,12 +164,15 @@ fun DetailsScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             // ---------- Постер сверху ----------
+            // 190×280: постер + название + кнопки должны влезать на экран
+            // ЦЕЛИКОМ — иначе фокус на «Смотреть» (под постером) заставляет
+            // автоскролл вытолкнуть постер за верхний край (жалоба владельца)
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 if (itemState.posterUrl.isBlank()) {
                     Box(
                         Modifier
-                            .width(210.dp)
-                            .height(310.dp)
+                            .width(190.dp)
+                            .height(280.dp)
                             .background(Color(0xFF1F2430), RoundedCornerShape(12.dp)),
                         contentAlignment = Alignment.Center,
                     ) { Text("нет постера", color = Color.White.copy(alpha = 0.4f)) }
@@ -178,8 +181,8 @@ fun DetailsScreen(
                         model = itemState.posterUrl,
                         contentDescription = item.title,
                         modifier = Modifier
-                            .width(210.dp)
-                            .height(310.dp)
+                            .width(190.dp)
+                            .height(280.dp)
                             .clip(RoundedCornerShape(12.dp)),
                         contentScale = ContentScale.Crop,
                     )
@@ -190,12 +193,12 @@ fun DetailsScreen(
             Text(
                 item.title,
                 color = Color.White,
-                fontSize = 30.sp,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 16.dp),
+                    .padding(top = 10.dp),
             )
             Text(
                 text = buildString {
@@ -562,7 +565,7 @@ fun DetailsScreen(
                                 ),
                             ) {
                                 Row(
-                                    Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                                    Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Text(
@@ -640,8 +643,8 @@ fun DetailsScreen(
 private fun MiniButton(text: String, onClick: () -> Unit) {
     AppButton(
         onClick = onClick,
-        heightDp = 34.dp,
+        heightDp = 30.dp,
     ) {
-        Text(text, fontSize = 13.sp, maxLines = 1)
+        Text(text, fontSize = 12.5.sp, maxLines = 1)
     }
 }

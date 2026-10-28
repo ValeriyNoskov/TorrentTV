@@ -449,7 +449,7 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
                                 .focusRequester(kbFieldFocus)
                                 .width(620.dp)
                                 .background(Color(0xFF1F2430), androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
                             decorationBox = { inner ->
                                 Box {
                                     if (searchQ.isEmpty()) {

@@ -212,7 +212,7 @@ fun TorrentSearchScreen(
                         disabledContentColor = Color.White,
                     ),
                 ) {
-                    Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
+                    Column(Modifier.padding(horizontal = 18.dp, vertical = 8.dp)) {
                         Text(r.name, color = Color.White, fontSize = 17.sp, maxLines = 2)
                         Row(Modifier.padding(top = 4.dp)) {
                             Text(

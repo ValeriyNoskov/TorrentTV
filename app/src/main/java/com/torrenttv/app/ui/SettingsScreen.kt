@@ -380,24 +380,28 @@ fun SettingsScreen(onBack: () -> Unit) {
                             store.setUseExternalPlayer(extPlayer)
                         }
                         SettingsNote("Видео будет открываться в VLC/MX Player, если он установлен.")
-                        // Размер карточек: три варианта, циклом
+                        // Размер карточек: четыре варианта, циклом.
+                        // Дефолт 140 («Мелкие»): на ТВ влезает больше карточек
+                        // без скролла — жалоба владельца на крупные постеры
                         SettingsRow(
                             title = "Размер карточек",
                             value = when (cardWidthDp) {
-                                140 -> "Мелкие"
-                                210 -> "Крупные"
+                                90 -> "Миниатюры"
+                                120 -> "Мелкие"
+                                170 -> "Крупные"
                                 else -> "Обычные"
                             },
                             valueOk = true,
                         ) {
                             cardWidthDp = when (cardWidthDp) {
+                                90 -> 120
+                                120 -> 140
                                 140 -> 170
-                                170 -> 210
-                                else -> 140
+                                else -> 90
                             }
                             store.setCardWidthDp(cardWidthDp)
                         }
-                        SettingsNote("Размер постеров во всех каталогах.")
+                        SettingsNote("Размер постеров во всех каталогах. Мелкие — по умолчанию.")
                         var skipDb by remember { mutableStateOf(store.skipDbEnabled()) }
                         SettingsRow(
                             title = if (skipDb) "✅ Пропуск заставок и титров по базам" else "⬜ Пропуск заставок и титров по базам",
@@ -912,7 +916,7 @@ private fun EditScreen(
                     .fillMaxWidth()
                     .padding(top = 10.dp)
                     .background(Color(0xFF1F2430), androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
                 decorationBox = { inner ->
                     Box {
                         if (value.isBlank()) {
@@ -1051,7 +1055,7 @@ private fun NetCheckScreen(onClose: () -> Unit) {
                         Modifier
                             .fillMaxWidth()
                             .background(Color(0xFF161C26), RoundedCornerShape(10.dp))
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(

@@ -133,7 +133,7 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: ()
                         focusedContainerColor = Color(0xFFA9D7F5),
                         focusedContentColor = Color.Black,
                     ),
-                ) { Text("🔍", fontSize = 16.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) }
+                ) { Text("🔍", fontSize = 16.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) }
                 Spacer(Modifier.width(8.dp))
                 listOf(
                     "genre" to listOf("🎭 Жанр", fGenres.size),
@@ -158,7 +158,7 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: ()
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                         ) {
                             Text(label, fontSize = 15.sp)
                             if (n > 0) {

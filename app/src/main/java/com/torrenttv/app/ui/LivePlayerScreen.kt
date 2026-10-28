@@ -264,7 +264,7 @@ fun LivePlayerScreen(
                 Modifier
                     .align(Alignment.Center)
                     .background(Color(0xE0151B26), RoundedCornerShape(16.dp))
-                    .padding(horizontal = 28.dp, vertical = 20.dp),
+                    .padding(horizontal = 18.dp, vertical = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text("⚠ Канал не открылся", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
@@ -293,7 +293,7 @@ fun LivePlayerScreen(
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .background(Color(0xB3000000))
-                    .padding(horizontal = 24.dp, vertical = 14.dp),
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
                 // Название канала и передача — только здесь, вместе с меню
                 Text(
@@ -377,7 +377,7 @@ fun LivePlayerScreen(
                             focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color(0xFF0E1116),
                         ),
-                    ) { Text(if (showGear) "✕" else "⚙", fontSize = 18.sp, modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)) }
+                    ) { Text(if (showGear) "✕" else "⚙", fontSize = 18.sp, modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp)) }
                 }
             }
         }
@@ -398,7 +398,7 @@ fun LivePlayerScreen(
                         focusedContainerColor = Color(0xFFE8ECF4),
                         focusedContentColor = Color(0xFF0E1116),
                     ),
-                ) { Text("⏮︎", fontSize = 30.sp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 15.dp)) }
+                ) { Text("⏮︎", fontSize = 24.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
                 androidx.tv.material3.Surface(
                     onClick = {
                         if (player.isPlaying) player.pause() else player.play()
@@ -415,8 +415,8 @@ fun LivePlayerScreen(
                 ) {
                     Text(
                         if (playing) "▮▮" else "▶︎",
-                        fontSize = 34.sp,
-                        modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp),
+                        fontSize = 26.sp,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp),
                     )
                 }
                 androidx.tv.material3.Surface(
@@ -428,7 +428,7 @@ fun LivePlayerScreen(
                         focusedContainerColor = Color(0xFFE8ECF4),
                         focusedContentColor = Color(0xFF0E1116),
                     ),
-                ) { Text("⏭︎", fontSize = 30.sp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 15.dp)) }
+                ) { Text("⏭︎", fontSize = 24.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
             }
         }
 
@@ -454,7 +454,7 @@ fun LivePlayerScreen(
                             focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color(0xFF0E1116),
                         ),
-                    ) { Text(label, fontSize = 15.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) }
+                    ) { Text(label, fontSize = 15.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) }
                 }
                 GItem("↻ Перезапустить поток") {
                     error = ""

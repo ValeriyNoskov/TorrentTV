@@ -196,7 +196,7 @@ fun TvScreen(onPlay: (IptvChannel, List<IptvChannel>) -> Unit) {
 
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(210.dp),
-                contentPadding = PaddingValues(horizontal = 28.dp, vertical = 12.dp),
+                contentPadding = PaddingValues(horizontal = 28.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxSize(),

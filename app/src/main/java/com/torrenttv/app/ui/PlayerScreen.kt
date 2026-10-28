@@ -897,7 +897,7 @@ private fun VideoPlayer(
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier
                             .background(Color(0xFF7FB84F), RoundedCornerShape(10.dp))
-                            .padding(horizontal = 20.dp, vertical = 10.dp),
+                            .padding(horizontal = 20.dp, vertical = 6.dp),
                     )
                 }
             }
@@ -912,7 +912,7 @@ private fun VideoPlayer(
                     .align(Alignment.TopCenter)
                     .padding(top = 70.dp)
                     .background(Color(0xCC1F2430), RoundedCornerShape(12.dp))
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
             )
         }
 
@@ -938,7 +938,7 @@ private fun VideoPlayer(
                         focusedContainerColor = Color(0xFFE8ECF4),
                         focusedContentColor = Color.Black,
                     ),
-                ) { Text("⏪︎", fontSize = 30.sp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 15.dp)) }
+                ) { Text("⏪︎", fontSize = 24.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
                 androidx.tv.material3.Surface(
                     onClick = {
                         if (player.isPlaying) player.pause() else player.play()
@@ -955,8 +955,8 @@ private fun VideoPlayer(
                 ) {
                     Text(
                         if (player.isPlaying) "▮▮" else "▶︎",
-                        fontSize = 34.sp,
-                        modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp),
+                        fontSize = 26.sp,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp),
                     )
                 }
                 androidx.tv.material3.Surface(
@@ -972,7 +972,7 @@ private fun VideoPlayer(
                         focusedContainerColor = Color(0xFFE8ECF4),
                         focusedContentColor = Color.Black,
                     ),
-                ) { Text("⏩︎", fontSize = 30.sp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 15.dp)) }
+                ) { Text("⏩︎", fontSize = 24.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
             }
         }
 
@@ -982,7 +982,7 @@ private fun VideoPlayer(
                 Modifier
                     .align(Alignment.Center)
                     .background(Color(0xE0151B26), RoundedCornerShape(16.dp))
-                    .padding(horizontal = 28.dp, vertical = 20.dp),
+                    .padding(horizontal = 18.dp, vertical = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text("⏳ Буферизация…", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
@@ -1006,7 +1006,7 @@ private fun VideoPlayer(
                 Modifier
                     .align(Alignment.Center)
                     .background(Color(0xF0151B26), RoundedCornerShape(16.dp))
-                    .padding(horizontal = 30.dp, vertical = 22.dp),
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 androidx.tv.material3.Text(
@@ -1160,7 +1160,7 @@ private fun VideoPlayer(
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .background(Color(0xCC0A0E14))
-                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
                 // Заголовок — как в MX: название и серия над сикбаром
                 androidx.tv.material3.Text(
@@ -1278,7 +1278,7 @@ private fun VideoPlayer(
                             focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
                         ),
-                    ) { Text("⏱", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
+                    ) { Text("⏱", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
                     Spacer(Modifier.width(8.dp))
                     // Скорость: 0.75× → 1× → 1.25× → 1.5× → 2× по кругу
                     LaunchedEffect(Unit) { player.setPlaybackParameters(player.playbackParameters.withSpeed(speeds[speedIdx])) }
@@ -1296,7 +1296,7 @@ private fun VideoPlayer(
                             focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
                         ),
-                    ) { Text("${speeds[speedIdx]}×", fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
+                    ) { Text("${speeds[speedIdx]}×", fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
                     Spacer(Modifier.weight(1f))
                     // 🎵 Дорожки — аудио и субтитры в одном меню (раньше было
                     // ДВЕ кнопки, обе открывали один и тот же TrackMenuOverlay)
@@ -1309,7 +1309,7 @@ private fun VideoPlayer(
                             focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
                         ),
-                    ) { Text("🎵 Дорожки", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
+                    ) { Text("🎵 Дорожки", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
                     Spacer(Modifier.width(8.dp))
                     // ⛶ Масштаб картинки: Вписать → Растянуть → Заполнить (кнопка scale в MX)
                     androidx.tv.material3.Surface(
@@ -1327,7 +1327,7 @@ private fun VideoPlayer(
                             focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
                         ),
-                    ) { Text("⛶ ${scales[scaleIdx].first}", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
+                    ) { Text("⛶ ${scales[scaleIdx].first}", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
                     Spacer(Modifier.width(8.dp))
                     // 🔒 Блокировка экрана (как lock в MX): пульт мёртв, OK — разблок
                     androidx.tv.material3.Surface(
@@ -1343,7 +1343,7 @@ private fun VideoPlayer(
                             focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
                         ),
-                    ) { Text("🔒", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
+                    ) { Text("🔒", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
                     Spacer(Modifier.width(8.dp))
                     if (files.size > 1) {
                         androidx.tv.material3.Surface(
@@ -1355,7 +1355,7 @@ private fun VideoPlayer(
                                 focusedContainerColor = Color(0xFFE8ECF4),
                                 focusedContentColor = Color.Black,
                             ),
-                        ) { Text(if (showFiles) "✕ Серии" else "☰ Серии (${files.size})", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
+                        ) { Text(if (showFiles) "✕ Серии" else "☰ Серии (${files.size})", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
                         Spacer(Modifier.width(8.dp))
                     }
                     androidx.tv.material3.Surface(
@@ -1367,7 +1367,7 @@ private fun VideoPlayer(
                             focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
                         ),
-                    ) { Text(if (showGear) "✕" else "⚙", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) }
+                    ) { Text(if (showGear) "✕" else "⚙", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) }
                 }
             }
         }
@@ -1554,7 +1554,7 @@ private fun VideoPlayer(
                 modifier = Modifier
                     .align(Alignment.Center)
                     .background(Color(0xE0151B26), androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
-                    .padding(horizontal = 22.dp, vertical = 10.dp),
+                    .padding(horizontal = 22.dp, vertical = 6.dp),
             )
         }
 

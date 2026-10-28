@@ -579,7 +579,7 @@ fun SearchScreen(
                         .fillMaxWidth()
                         .padding(top = 10.dp)
                         .background(Color(0xFF1F2430), androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     decorationBox = { inner ->
                         Box {
                             if (query.isEmpty()) {

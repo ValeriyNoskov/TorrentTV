@@ -121,7 +121,7 @@ fun KeyboardSheet(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .background(Color(0xF5171C26), RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
-                .padding(horizontal = 28.dp, vertical = 14.dp),
+                .padding(horizontal = 18.dp, vertical = 8.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -145,7 +145,7 @@ fun KeyboardSheet(
                         focusedContainerColor = Color(0xFFA9D7F5),
                         focusedContentColor = Color.Black,
                     ),
-                ) { Text(doneLabel, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 18.dp, vertical = 11.dp)) }
+                ) { Text(doneLabel, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 18.dp, vertical = 7.dp)) }
             }
             if (suggestions.isNotEmpty()) {
                 Row(
@@ -253,7 +253,7 @@ fun FilterListDialog(
                     focusedContentColor = Color(0xFF0E1116),
                 ),
                 modifier = Modifier
-                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
                     .fillMaxWidth()
                     .focusRequester(listFocus)
                     // mouseClick — чтобы Surface кликался тапом мыши в эмуляторе
@@ -263,7 +263,7 @@ fun FilterListDialog(
                     if (query.isBlank()) "🔍 Найти фильтр…" else "🔍 $query",
                     fontSize = 15.sp,
                     maxLines = 1,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                 )
             }
             // Список с галочками, сжатый поиском по подстроке
@@ -291,7 +291,7 @@ fun FilterListDialog(
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                         ) {
                             // Квадрат-галочка: тёмный фон с голубой ✓, если включено
                             Box(
@@ -330,7 +330,7 @@ fun FilterListDialog(
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
                 val chosen = options.count { it.checked }
                 Surface(
@@ -348,7 +348,7 @@ fun FilterListDialog(
                         "✓ Применить",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                     )
                 }
                 Spacer(Modifier.width(10.dp))
@@ -366,7 +366,7 @@ fun FilterListDialog(
                     Text(
                         "Сбросить",
                         fontSize = 15.sp,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                     )
                 }
                 Spacer(Modifier.weight(1f))
@@ -424,7 +424,7 @@ fun FilterPicker(
                     focusedContainerColor = Color(0xFFA9D7F5),
                     focusedContentColor = Color.Black,
                 ),
-            ) { Text("← Готово", fontSize = 17.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) }
+            ) { Text("← Готово", fontSize = 17.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
             Spacer(Modifier.width(16.dp))
             Text(
                 "$title · исключено: ${excluded.size}",
@@ -443,7 +443,7 @@ fun FilterPicker(
                     focusedContainerColor = Color(0xFFA9D7F5),
                     focusedContentColor = Color.Black,
                 ),
-            ) { Text(if (filterOn) "✕ Скрыть поиск" else "🔎 Поиск", fontSize = 16.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) }
+            ) { Text(if (filterOn) "✕ Скрыть поиск" else "🔎 Поиск", fontSize = 16.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) }
             Spacer(Modifier.width(12.dp))
             Surface(
                 onClick = onClearAll,
@@ -457,7 +457,7 @@ fun FilterPicker(
                     disabledContainerColor = Color(0xFF141922),
                     disabledContentColor = Color.White.copy(alpha = 0.3f),
                 ),
-            ) { Text("🗑 Снять все", fontSize = 16.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) }
+            ) { Text("🗑 Снять все", fontSize = 16.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) }
             if (filterOn) {
                 Spacer(Modifier.width(16.dp))
                 Text(
@@ -525,7 +525,7 @@ fun AppButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    heightDp: androidx.compose.ui.unit.Dp = 38.dp,
+    heightDp: androidx.compose.ui.unit.Dp = 34.dp,
     shape: androidx.tv.material3.ButtonShape = androidx.tv.material3.ButtonDefaults.shape(),
     colors: androidx.tv.material3.ButtonColors = androidx.tv.material3.ButtonDefaults.colors(),
     content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit,
@@ -575,7 +575,7 @@ fun KeepScreenOn(enabled: Boolean = true) {
     }
 }
 
-var cardWidthDp by mutableStateOf(170)
+var cardWidthDp by mutableStateOf(120)
 
 /** Карточка с постером — фокус берётся с пульта, по ОК открывается карточка. */
 @Composable
@@ -593,7 +593,7 @@ fun PosterCard(item: MediaItem, onClick: () -> Unit) {
         onClick = onClick,
         modifier = Modifier
             .width(w.dp)
-            .padding(6.dp)
+            .padding(4.dp)
             .mouseClick { onClick() },
         shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
         colors = ClickableSurfaceDefaults.colors(
@@ -629,29 +629,29 @@ fun PosterCard(item: MediaItem, onClick: () -> Unit) {
                     Row(
                         modifier = Modifier
                             .align(Alignment.TopStart)
-                            .padding(8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            .padding(5.dp),
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
                     ) {
                         if (item.rating > 0.0) {
                             Text(
                                 text = "★︎ ${"%.1f".format(item.rating)}",
                                 color = Color(0xFF0E1116),
-                                fontSize = 13.sp,
+                                fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier
-                                    .background(Color(0xFFA9D7F5), RoundedCornerShape(8.dp))
-                                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                                    .background(Color(0xFFA9D7F5), RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 5.dp, vertical = 2.dp),
                             )
                         }
                         if (item.ratingImdb > 0.0) {
                             Text(
                                 text = "IMDb ${"%.1f".format(item.ratingImdb)}",
                                 color = Color.White,
-                                fontSize = 12.sp,
+                                fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier
-                                    .background(Color(0xB315181F), RoundedCornerShape(8.dp))
-                                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                                    .background(Color(0xB315181F), RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 5.dp, vertical = 2.dp),
                             )
                         }
                     }
@@ -675,10 +675,10 @@ fun PosterCard(item: MediaItem, onClick: () -> Unit) {
             Text(
                 text = item.title,
                 color = Color.White,
-                fontSize = 14.sp,
+                fontSize = 12.5.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(8.dp, 6.dp, 8.dp, 0.dp),
+                modifier = Modifier.padding(6.dp, 4.dp, 6.dp, 0.dp),
             )
             if (item.year.isNotBlank() || item.rating > 0.0) {
                 Text(
@@ -690,8 +690,8 @@ fun PosterCard(item: MediaItem, onClick: () -> Unit) {
                         }
                     },
                     color = Color.White.copy(alpha = 0.5f),
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(8.dp, 2.dp, 8.dp, 8.dp),
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(6.dp, 2.dp, 6.dp, 6.dp),
                 )
             }
         }
@@ -784,7 +784,7 @@ fun PagedMediaRow(
             }
     }
 
-    Column(Modifier.padding(vertical = 10.dp)) {
+    Column(Modifier.padding(vertical = 6.dp)) {
         if (onTitleClick != null) {
             Surface(
                 onClick = onTitleClick,
@@ -801,18 +801,18 @@ fun PagedMediaRow(
             ) {
                 Text(
                     text = "$title  ›",
-                    fontSize = 22.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
                 )
             }
         } else {
             Text(
                 text = title,
                 color = Color.White,
-                fontSize = 22.sp,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = 32.dp, vertical = 6.dp),
+                modifier = Modifier.padding(horizontal = 32.dp, vertical = 4.dp),
             )
         }
         if (items.isEmpty()) {
@@ -916,7 +916,7 @@ fun SideNav(active: Screen, onTab: (Screen) -> Unit, restoreFocusTick: Int = 0) 
             .fillMaxHeight()
             .background(Color(0xFF12161F))
             .verticalScroll(rememberScrollState())
-            .padding(vertical = 10.dp),
+            .padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
@@ -1137,7 +1137,7 @@ fun ContinueScreen(onOpenDetails: (MediaItem) -> Unit) {
             color = Color.White,
             fontSize = 26.sp,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 32.dp, vertical = 14.dp),
+            modifier = Modifier.padding(horizontal = 32.dp, vertical = 8.dp),
         )
         if (entries.isEmpty()) {
             Text(
@@ -1221,7 +1221,7 @@ fun FavoritesScreen(onOpenDetails: (MediaItem) -> Unit) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.padding(horizontal = 32.dp, vertical = 14.dp),
+            modifier = Modifier.padding(horizontal = 32.dp, vertical = 8.dp),
         ) {
             Text(
                 text = "★︎ Избранное",

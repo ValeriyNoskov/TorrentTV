@@ -237,7 +237,7 @@ fun EpisodesScreen(
                     disabledContainerColor = Color(0xFF141922),
                     disabledContentColor = Color.White.copy(alpha = 0.3f),
                 ),
-            ) { Text("🔄 Обновить", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) }
+            ) { Text("🔄 Обновить", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
         }
 
         when {
@@ -299,7 +299,7 @@ fun EpisodesScreen(
                         ),
                     ) {
                         Row(
-                            Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                            Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                              Text(

@@ -317,7 +317,7 @@ fun SmartPlayScreen(
                                 focusedContentColor = Color.White,
                             ),
                         ) {
-                            Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                            Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
                                 Text(
                                     c.label,
                                     color = Color.White,

@@ -454,7 +454,7 @@ class LocalStore(context: Context) {
 
     // ---------- Размер карточек ----------
 
-    fun cardWidthDp(): Int = prefs.getInt("card_width_dp", 170)
+    fun cardWidthDp(): Int = prefs.getInt("card_width_dp", 120)
 
     fun setCardWidthDp(v: Int) {
         prefs.edit().putInt("card_width_dp", v).apply()
