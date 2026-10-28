@@ -65,6 +65,7 @@ fun HomeScreen(
             UpdateManager.ghToken(context),
             { updateInfo = it },
             { err -> com.torrenttv.app.data.AppLog.log("update", "автопроверка при запуске FAIL: $err") },
+            source = store.updateSource(),
         )
     }
 

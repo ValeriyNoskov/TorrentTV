@@ -369,10 +369,28 @@ fun SettingsScreen(onBack: () -> Unit) {
                                         // Честный статус: не «у вас последняя», а реальная ошибка
                                         updMsg = "Не удалось проверить ($err)"
                                     },
+                                    source = store.updateSource(),
                                 )
                             }
                         }
                         SettingsNote("Обновления проверяются при запуске и качаются в фоне.")
+                        // Источник обновлений: GitVerse (зеркало в РФ) качается
+                        // заметно быстрее GitHub из российских сетей
+                        val updSourceTitles = mapOf(
+                            "auto" to "Авто (быстрейший)",
+                            "github" to "GitHub",
+                            "gitverse" to "GitVerse (быстрый в РФ)",
+                        )
+                        SettingsRow(
+                            title = "Откуда качать обновления",
+                            value = updSourceTitles[store.updateSource()] ?: "Авто",
+                            valueOk = true,
+                        ) {
+                            val order = listOf("auto", "github", "gitverse")
+                            val next = order[(order.indexOf(store.updateSource()) + 1) % order.size]
+                            store.setUpdateSource(next)
+                            com.torrenttv.app.data.AppLog.log("ui", "источник обновлений: $next")
+                        }
                     }
 
                     "player" -> {

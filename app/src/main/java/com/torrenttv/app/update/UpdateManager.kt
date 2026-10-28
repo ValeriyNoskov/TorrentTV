@@ -35,6 +35,12 @@ object UpdateManager {
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    // Источники обновлений: GitHub (исходный), GitVerse (зеркало в РФ),
+    // auto — оба параллельно, чей ответ раньше. Выбор — в Настройках
+    const val SOURCE_AUTO = "auto"
+    const val SOURCE_GITHUB = "github"
+    const val SOURCE_GITVERSE = "gitverse"
+
     data class UpdateInfo(val version: String, val apkUrl: String, val notes: String)
 
     // ---------- Фоновая загрузка APK ----------
@@ -148,51 +154,127 @@ object UpdateManager {
      * @param token GitHub-токен (настройки ТВ или вшитый) — обязателен
      *              для приватного репозитория
      * @param onError сетевая ошибка/провал API (отличать от «нет обновления»)
+     * @param source github | gitverse | auto (параллельно, чей ответ раньше)
      */
     fun checkForUpdate(
         currentVersion: String,
         token: String = "",
         onResult: (UpdateInfo?) -> Unit,
         onError: (String) -> Unit = {},
+        source: String = "auto",
     ) {
         Thread {
-            try {
-                val request = Request.Builder()
-                    .url(RELEASES_API)
-                    .header("Accept", "application/vnd.github+json")
-                    .apply { if (token.isNotBlank()) header("Authorization", "Bearer $token") }
-                    .build()
-                http.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}")
-                    val json = JSONObject(response.body?.string() ?: throw IllegalStateException("пустой ответ сервера"))
-
-                    val tag = json.optString("tag_name", "").removePrefix("v")
-                    // Ищем первый .apk-ассет
-                    var apkUrl = ""
-                    val assets = json.optJSONArray("assets") ?: org.json.JSONArray()
-                    for (i in 0 until assets.length()) {
-                        val a = assets.getJSONObject(i)
-                        if (a.optString("name", "").endsWith(".apk")) {
-                            apkUrl = a.optString("browser_download_url", "")
-                            break
-                        }
+            // Авто: оба источника параллельно, чей ответ пришёл первым —
+            // тот и используем (GitVerse из РФ обычно отвечает быстрее)
+            if (source == SOURCE_AUTO) {
+                val lock = Object()
+                var got: UpdateInfo? = null
+                var firstErr: String? = null
+                var finished = 0
+                Thread {
+                    val r = runCatching { fetchGithub(currentVersion, token) }
+                        .onFailure { com.torrenttv.app.data.AppLog.log("update", "GitHub FAIL: ${it.message}") }
+                        .getOrNull()
+                    synchronized(lock) {
+                        if (r != null && got == null) got = r
+                        if (r == null && firstErr == null) firstErr = "GitHub: не удалось"
+                        finished++
+                        (lock as Object).notifyAll()
                     }
-
-                    val newer = isNewer(tag, currentVersion) && apkUrl.isNotEmpty()
-                    // Каждый факт проверки — в лог: «проверили → что в releases/latest → вердикт»
-                    com.torrenttv.app.data.AppLog.log(
-                        "update",
-                        "проверка: последний релиз v$tag, текущая v$currentVersion → " +
-                            if (newer) "доступно обновление" else "у вас последняя",
-                    )
-                    val info = if (newer) UpdateInfo(tag, apkUrl, json.optString("body", "").take(500)) else null
-                    mainHandler.post { onResult(info) }
+                }.start()
+                Thread {
+                    val r = runCatching { fetchGitverse(currentVersion) }
+                        .onFailure { com.torrenttv.app.data.AppLog.log("update", "GitVerse FAIL: ${it.message}") }
+                        .getOrNull()
+                    synchronized(lock) {
+                        if (r != null && got == null) got = r
+                        if (r == null && firstErr == null) firstErr = "GitVerse: не удалось"
+                        finished++
+                        (lock as Object).notifyAll()
+                    }
+                }.start()
+                synchronized(lock) {
+                    while (got == null && finished < 2) lock.wait()
                 }
+                mainHandler.post {
+                    if (got != null) onResult(got)
+                    else onError(firstErr ?: "нет сети")
+                }
+                return@Thread
+            }
+            try {
+                val info = when (source) {
+                    SOURCE_GITVERSE -> fetchGitverse(currentVersion)
+                    else -> fetchGithub(currentVersion, token)
+                }
+                mainHandler.post { onResult(info) }
             } catch (e: Exception) {
-                com.torrenttv.app.data.AppLog.log("update", "проверка FAIL: ${e.message}")
+                com.torrenttv.app.data.AppLog.log("update", "проверка ($source) FAIL: ${e.message}")
                 mainHandler.post { onError(e.message ?: "нет сети") }
             }
         }.start()
+    }
+
+    private fun fetchGithub(currentVersion: String, token: String): UpdateInfo? {
+        val request = Request.Builder()
+            .url(RELEASES_API)
+            .header("Accept", "application/vnd.github+json")
+            .apply { if (token.isNotBlank()) header("Authorization", "Bearer $token") }
+            .build()
+        http.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}")
+            val json = JSONObject(response.body?.string() ?: throw IllegalStateException("пустой ответ сервера"))
+
+            val tag = json.optString("tag_name", "").removePrefix("v")
+            // Ищем первый .apk-ассет
+            var apkUrl = ""
+            val assets = json.optJSONArray("assets") ?: org.json.JSONArray()
+            for (i in 0 until assets.length()) {
+                val a = assets.getJSONObject(i)
+                if (a.optString("name", "").endsWith(".apk")) {
+                    apkUrl = a.optString("browser_download_url", "")
+                    break
+                }
+            }
+
+            val newer = isNewer(tag, currentVersion) && apkUrl.isNotEmpty()
+            // Каждый факт проверки — в лог: «проверили → что в releases/latest → вердикт»
+            com.torrenttv.app.data.AppLog.log(
+                "update",
+                "проверка [GitHub]: последний релиз v$tag, текущая v$currentVersion → " +
+                    if (newer) "доступно обновление" else "у вас последняя",
+            )
+            return if (newer) UpdateInfo(tag, apkUrl, json.optString("body", "").take(500)) else null
+        }
+    }
+
+    /** GitVerse (зеркало в РФ): репозиторий должен быть публичным. */
+    private fun fetchGitverse(currentVersion: String): UpdateInfo? {
+        val request = Request.Builder()
+            .url("https://api.gitverse.ru/repos/ChipN/TorrentTV/releases/latest")
+            .header("Accept", "application/vnd.gitverse.object+json;version=1")
+            .build()
+        http.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}")
+            val json = JSONObject(response.body?.string() ?: throw IllegalStateException("пустой ответ сервера"))
+            val tag = json.optString("tag_name", "").removePrefix("v")
+            var apkUrl = ""
+            val assets = json.optJSONArray("assets") ?: org.json.JSONArray()
+            for (i in 0 until assets.length()) {
+                val a = assets.getJSONObject(i)
+                if (a.optString("name", "").endsWith(".apk")) {
+                    apkUrl = a.optString("browser_download_url", "")
+                    break
+                }
+            }
+            val newer = isNewer(tag, currentVersion) && apkUrl.isNotEmpty()
+            com.torrenttv.app.data.AppLog.log(
+                "update",
+                "проверка [GitVerse]: последний релиз v$tag, текущая v$currentVersion → " +
+                    if (newer) "доступно обновление" else "у вас последняя",
+            )
+            return if (newer) UpdateInfo(tag, apkUrl, json.optString("body", "").take(500)) else null
+        }
     }
 
     /**

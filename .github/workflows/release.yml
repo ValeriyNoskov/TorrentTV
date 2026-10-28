@@ -74,3 +74,28 @@ jobs:
           files: dist/VNosKino-*.apk
           generate_release_notes: true
           fail_on_unmatched_files: true
+
+      - name: Опубликовать GitVerse Release (быстрое зеркало для РФ)
+        if: env.GITVERSE_TOKEN != ''
+        env:
+          GITVERSE_TOKEN: ${{ secrets.GITVERSE_TOKEN }}
+          VER: ${{ steps.version.outputs.version }}
+        run: |
+          set -e
+          API="https://api.gitverse.ru/repos/ChipN/TorrentTV"
+          AH="Authorization: Bearer $GITVERSE_TOKEN"
+          AH2="Accept: application/vnd.gitverse.object+json;version=1"
+          # Тег в GitVerse: указывает на тот же коммит, что и релиз GitHub
+          SHA=$(git rev-parse HEAD)
+          curl -sf -X POST -H "$AH" -H "$AH2" -H "Content-Type: application/json" \
+            "$API/git/refs" \
+            -d "{\"ref\":\"refs/tags/v$VER\",\"sha\":\"$SHA\"}" > /dev/null || true
+          REL_ID=$(curl -sf -X POST -H "$AH" -H "$AH2" -H "Content-Type: application/json" \
+            "$API/releases" \
+            -d "{\"tag_name\":\"v$VER\",\"name\":\"v$VER\",\"body\":\"Обновление v$VER. APK также на GitHub.\"}" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
+          echo "GitVerse release id=$REL_ID"
+          curl -sf -X POST -H "$AH" -H "$AH2" \
+            "$API/releases/$REL_ID/assets?name=VNosKino-$VER.apk" \
+            -F "attachment=@dist/VNosKino-$VER.apk" > /dev/null
+          echo "GitVerse: ассет VNosKino-$VER.apk загружен"

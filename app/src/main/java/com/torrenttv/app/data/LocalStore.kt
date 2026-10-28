@@ -877,6 +877,11 @@ class LocalStore(context: Context) {
     fun tbKey(): String =
         com.torrenttv.app.BuildConfig.TB_KEY.ifBlank { prefs.getString("tb_key", "") ?: "" }
 
+    /** Источник обновлений: auto | github | gitverse. */
+    fun updateSource(): String = prefs.getString("update_source", "auto") ?: "auto"
+
+    fun setUpdateSource(v: String) = prefs.edit().putString("update_source", v).apply()
+
     fun setTbKey(v: String) = prefs.edit().putString("tb_key", v.trim()).apply()
 
     fun setUseExternalPlayer(v: Boolean) {
