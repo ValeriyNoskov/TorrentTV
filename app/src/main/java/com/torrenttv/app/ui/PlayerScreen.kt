@@ -354,6 +354,19 @@ fun PlayerScreen(
         var buffered = false
         try {
         while (!st.isRangeReady(startPos, threshold)) {
+            // Частичный старт: если готовность ≥70% и ждём уже больше минуты —
+            // запускаем. Редкие куски (есть только у недоступных сидов) могли
+            // держать 85% вечно при 500+ МБ скачанного — буферизация FAIL по
+            // таймауту, хотя играть было можно (лог 20:03-20:05)
+            val elapsed = System.currentTimeMillis() - sessionStart
+            val rf = st.readyFraction(startPos, threshold)
+            if (elapsed > 60_000 && rf >= 0.7f) {
+                com.torrenttv.app.data.AppLog.log(
+                    "player",
+                    "буферизация: ${elapsed / 1000} с, готовность ${(rf * 100).toInt()}% — стартую частично, доберём на паузах",
+                )
+                break
+            }
             bufferedPct = ((st.readyFraction(startPos, threshold) * 100).toInt()).coerceIn(0, 100)
             val mb = st.headBytes() / 1024 / 1024
             val speed = st.speedBps() / 1024

@@ -100,12 +100,30 @@ object TorBox {
         timeoutMs: Long = 45_000,
     ): Resolved? {
         log("createtorrent: ${magnet.take(80)}…")
-        val createResp = TorrentHttp.postMultipart(
-            url = "$API/torrents/createtorrent",
-            fields = emptyMap(),
-            file = "file" to magnet,
-            headers = auth(key),
-        ) ?: run {
+        // TorBox принимает ЛИБО поле magnet (строка-магнит), ЛИБО настоящий
+        // .torrent ФАЙЛОМ multipart. Ссылка-URL, отправленная как содержимое
+        // файла, отклоняется мгновенно (HTTP 400) — раньше это маскировалось
+        // как «TorBox не ответил». URL качаем в байты и отправляем файлом.
+        val createResp = if (magnet.startsWith("magnet:")) {
+            TorrentHttp.postMultipart(
+                url = "$API/torrents/createtorrent",
+                fields = mapOf("magnet" to magnet),
+                headers = auth(key),
+            )
+        } else {
+            val torrentBytes = TorrentHttp.getBytesLogged(magnet)
+            if (torrentBytes == null) {
+                log("createtorrent FAIL: не скачался .torrent (${magnet.take(60)}…)")
+                return null
+            }
+            TorrentHttp.postMultipart(
+                url = "$API/torrents/createtorrent",
+                fields = emptyMap(),
+                fileBinary = "file" to torrentBytes,
+                headers = auth(key),
+            )
+        }
+        if (createResp == null) {
             log("createtorrent FAIL: TorBox не ответил (сеть/ключ?)")
             return null
         }

@@ -92,6 +92,7 @@ object TorrentHttp {
         url: String,
         fields: Map<String, String>,
         file: Pair<String, String>? = null, // (поле, содержимое файла) — TorBox: магнит как «файл»
+        fileBinary: Pair<String, ByteArray>? = null, // (поле, байты) — TorBox: настоящий .torrent
         headers: Map<String, String> = emptyMap(),
     ): String? = try {
         val body = okhttp3.MultipartBody.Builder()
@@ -104,12 +105,43 @@ object TorrentHttp {
                 file.second.toRequestBody("text/plain".toMediaType()),
             )
         }
+        if (fileBinary != null) {
+            body.addFormDataPart(
+                fileBinary.first,
+                "torrent.torrent",
+                fileBinary.second.toRequestBody("application/x-bittorrent".toMediaType()),
+            )
+        }
         val b = Request.Builder().url(url).post(body.build())
         headers.forEach { (k, v) -> b.header(k, v) }
         client.newCall(b.build()).execute().use { resp ->
-            if (!resp.isSuccessful) null else resp.body?.string()
+            if (!resp.isSuccessful) {
+                // Точный лог: какой код вернул сервер — иначе «не ответил»
+                // маскирует и сеть, и 4xx (невалидный запрос)
+                com.torrenttv.app.data.AppLog.log("net", "POST $url → HTTP ${resp.code}")
+                null
+            } else resp.body?.string()
         }
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        com.torrenttv.app.data.AppLog.log("net", "POST $url FAIL: ${e.message}")
+        null
+    }
+
+    /**
+     * Бинарная загрузка (.torrent-файлы): строкой нельзя — text-декод
+     * портит байты, TorBox/RD отклонят файл.
+     */
+    fun getBytesLogged(url: String, headers: Map<String, String> = emptyMap()): ByteArray? = try {
+        val b = Request.Builder().url(url)
+        headers.forEach { (k, v) -> b.header(k, v) }
+        client.newCall(b.build()).execute().use { resp ->
+            if (!resp.isSuccessful) {
+                com.torrenttv.app.data.AppLog.log("net", "GET $url → HTTP ${resp.code}")
+                null
+            } else resp.body?.bytes()
+        }
+    } catch (e: Exception) {
+        com.torrenttv.app.data.AppLog.log("net", "GET $url FAIL: ${e.message}")
         null
     }
 }
