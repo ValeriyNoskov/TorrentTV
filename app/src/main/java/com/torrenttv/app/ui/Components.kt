@@ -577,6 +577,9 @@ fun KeepScreenOn(enabled: Boolean = true) {
 
 var cardWidthDp by mutableStateOf(120)
 
+/** Глобальный масштаб интерфейса (множитель плотности): 1.0 = обычный. */
+var uiScale by mutableStateOf(0.85f)
+
 /** Карточка с постером — фокус берётся с пульта, по ОК открывается карточка. */
 @Composable
 fun PosterCard(item: MediaItem, onClick: () -> Unit) {

@@ -551,7 +551,15 @@ private fun VideoPlayer(
         var audioApplied = false
         val listener = object : androidx.media3.common.Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
-                if (state == androidx.media3.common.Player.STATE_READY) errorMsg = ""
+                // Диагностика «чёрного экрана»: буферизация завершена, ошибок
+                // нет, а видео не видно — здесь видно, дошёл ли плеер до READY
+                if (state == androidx.media3.common.Player.STATE_READY) {
+                    errorMsg = ""
+                    com.torrenttv.app.data.AppLog.log(
+                        "player",
+                        "плеер готов: duration=${player.duration / 1000}s video=${player.videoSize.width}x${player.videoSize.height}",
+                    )
+                }
                 playerBuf = state == androidx.media3.common.Player.STATE_BUFFERING
                 if (state == androidx.media3.common.Player.STATE_ENDED) {                    // «Конец» — только если видео реально проигрывалось:
                     // при нулевой скорости/ошибке источника ExoPlayer может
@@ -562,6 +570,15 @@ private fun VideoPlayer(
                         if (episode != null) nextCountdown = 8 else onEnded()
                     }
                 }
+            }
+
+            // Ключевая диагностика «чёрного экрана»: READY есть, ошибок нет,
+            // а кадр так и не отрисовался — на ТВ видно только заставку
+            override fun onRenderedFirstFrame() {
+                com.torrenttv.app.data.AppLog.log(
+                    "player",
+                    "первый кадр отрисован pos=${player.currentPosition / 1000}s",
+                )
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {

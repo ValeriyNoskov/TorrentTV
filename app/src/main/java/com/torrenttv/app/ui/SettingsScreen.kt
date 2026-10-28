@@ -372,6 +372,25 @@ fun SettingsScreen(onBack: () -> Unit) {
                     }
 
                     "player" -> {
+                        // Масштаб интерфейса: цикл 1.0 → 0.85 → 0.75 → 1.0.
+                        // Применяется сразу ко всему UI (кнопки, карточки, текст)
+                        SettingsRow(
+                            title = "Масштаб интерфейса",
+                            value = when {
+                                uiScale >= 0.99f -> "Обычный"
+                                uiScale >= 0.84f -> "Компактный"
+                                else -> "Мелкий"
+                            },
+                            valueOk = true,
+                        ) {
+                            uiScale = when {
+                                uiScale >= 0.99f -> 0.85f
+                                uiScale >= 0.84f -> 0.75f
+                                else -> 1.0f
+                            }
+                            store.setUiScale(uiScale)
+                        }
+                        SettingsNote("Компактный — по умолчанию: на ТВ с крупным масштабом кнопки и карточки мельче.")
                         SettingsRow(
                             title = if (extPlayer) "✅ Всегда внешний плеер" else "⬜ Всегда внешний плеер",
                             value = if (extPlayer) "ВКЛ — видео открывается в VLC/MX Player" else "ВЫКЛ — встроенный плеер",

@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
 import com.torrenttv.app.ui.AppTypography
+import com.torrenttv.app.ui.uiScale
 import com.torrenttv.app.data.MediaItem
 import com.torrenttv.app.ui.CatalogScreen
 import com.torrenttv.app.ui.DetailsScreen
@@ -193,6 +194,8 @@ class MainActivity : ComponentActivity() {
         // сначала одноразовая миграция старого сохранённого дефолта 170 → 120
         runCatching { if (store0.migrateCompactCards()) com.torrenttv.app.data.AppLog.log("app", "размер карточек мигрирован 170 → 120") }
         com.torrenttv.app.ui.cardWidthDp = store0.cardWidthDp()
+        // Масштаб интерфейса из настроек: множитель плотности для всего UI
+        com.torrenttv.app.ui.uiScale = store0.uiScale()
         // Разбор интента запуска (голосовой поиск из ассистента при холодном старте)
         val startupVoiceQuery = extractVoiceQuery(intent)
         if (startupVoiceQuery.isNotBlank()) {
@@ -200,8 +203,19 @@ class MainActivity : ComponentActivity() {
             voiceQuery.value = startupVoiceQuery
         }
         setContent {
-            MaterialTheme(typography = AppTypography) {
-                App(voiceQuery)
+            // Глобальный масштаб интерфейса: умножаем плотность — все dp
+            // (кнопки, карточки, отступы) и sp уменьшаются пропорционально.
+            // uiScale — mutableStateOf: смена в Настройках применяется сразу
+            val base = androidx.compose.ui.platform.LocalDensity.current
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(
+                    base.density * uiScale,
+                    base.fontScale,
+                )
+            ) {
+                MaterialTheme(typography = AppTypography) {
+                    App(voiceQuery)
+                }
             }
         }
     }
