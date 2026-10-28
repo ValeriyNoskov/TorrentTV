@@ -70,16 +70,19 @@ class TorrentDataSource(private val st: TorrentEngine.StreamSession) : DataSourc
         val waitLen = minOf(length.toLong(), st.fileSize - filePos).coerceAtLeast(0)
         val deadline = System.currentTimeMillis() + 90_000
         var lastWaitLog = 0L
+        var lastProgressLog = filePos
         while (waitLen > 0 && !st.isRangeReady(filePos, waitLen)) {
-            // Ожидание кусков дольше 5 с — в лог: видно, движется ли готовность
+            // Ожидание кусков дольше 1 с — в лог: видно, движется ли готовность
+            // (порог 5 с не срабатывал: пользователь выходил раньше первого лога)
             val now = System.currentTimeMillis()
-            if (now - lastWaitLog > 5_000) {
+            if (now - lastWaitLog > 1_000) {
                 lastWaitLog = now
                 com.torrenttv.app.data.AppLog.log(
                     "player",
                     "чтение ждёт куски: файлПоз=${filePos / 1024 / 1024}МБ " +
                         "готовность=${(st.readyFraction(filePos, waitLen) * 100).toInt()}% " +
-                        "peers=${st.peers()} head=${st.headBytes() / 1024 / 1024}МБ",
+                        "peers=${st.peers()} dht=${TorrentEngine.session.dhtNodes()} " +
+                        "head=${st.headBytes() / 1024 / 1024}МБ",
                 )
             }
             if (!TorrentEngine.session.isRunning) throw IOException("Торрент-сессия остановлена")
@@ -108,6 +111,14 @@ class TorrentDataSource(private val st: TorrentEngine.StreamSession) : DataSourc
             return C.RESULT_END_OF_INPUT
         }
         // pieceAbs/filePos уже сдвинуты в readOnce
+        // Прогресс чтения каждые ~64 МБ — видно, доходит ли плеер до данных
+        if (filePos - lastProgressLog > 64L * 1024 * 1024) {
+            lastProgressLog = filePos
+            com.torrenttv.app.data.AppLog.log(
+                "player",
+                "чтение идёт: файлПоз=${filePos / 1024 / 1024}МБ из ${st.fileSize / 1024 / 1024}МБ",
+            )
+        }
         return n
     }
 
