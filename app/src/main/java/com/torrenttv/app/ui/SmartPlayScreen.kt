@@ -36,10 +36,9 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.Text
 import com.torrenttv.app.data.LocalStore
 import com.torrenttv.app.data.MediaItem
-import com.torrenttv.app.data.TorrServeService
+import com.torrenttv.app.data.TorrentSearch
 import com.torrenttv.app.data.TorrentResult
 import com.torrenttv.app.data.isRealText
-import com.torrenttv.app.data.TorrentSearch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope

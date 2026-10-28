@@ -45,15 +45,6 @@ data class WatchEntry(
  */
 class LocalStore(context: Context) {
 
-    companion object {
-        // Домашний сервер бэкапа (MacBook): адрес и токен прописаны по умолчанию,
-        // чтобы на телевизоре ничего не вводить руками. Сервер слушает только
-        // локальную сеть (наружу порт не проброшен). Сменить можно в
-        // Настройки → Логи → «Сервер бэкапа» — тогда в prefs ляжет своё значение.
-        const val DEFAULT_BACKUP_URL = "http://192.168.3.78:8091"
-        const val DEFAULT_BACKUP_TOKEN = "8c39cbdfb8fd114471ed7b3ff36684b8"
-    }
-
     private val prefs: SharedPreferences =
         context.getSharedPreferences("torrenttv", Context.MODE_PRIVATE)
 
@@ -620,9 +611,6 @@ class LocalStore(context: Context) {
         return PrivateTrackers.TrackerAuth(trackerId, title, trackerCookie(trackerId))
     }
 
-    // ---------- TorrServe (внешний движок стриминга торрентов) ----------
-
-    /** Адрес TorrServe (внешний движок стриминга торрентов). */
     // ---------- IPTV ----------
 
     /** Свой плейлист каналов (m3u/m3u8) — добавляется к встроенному списку. */
@@ -639,26 +627,6 @@ class LocalStore(context: Context) {
         prefs.edit().putBoolean("iptv_use_own", v).apply()
     }
 
-    fun torrServeHost(): String = prefs.getString("torrserve_host", "http://127.0.0.1:8090") ?: "http://127.0.0.1:8090"
-
-    /**
-     * Фолбэк на встроенный движок, когда TorrServe не отдал буфер: качать
-     * фильм на сам ТВ (files/downloads). По умолчанию ВЫКЛ — раз у владельца
-     * TorrServe на отдельном сервере, ТВ не должен качать гигабайты «про
-     * запас» (за сутки набегало ~2 ГБ недосмотренного). Включается
-     * галочкой в настройках, если TorrServe не используется вовсе.
-     */
-    fun fallbackInternal(): Boolean = prefs.getBoolean("fallback_internal", false)
-
-    fun setFallbackInternal(v: Boolean) {
-        prefs.edit().putBoolean("fallback_internal", v).apply()
-    }
-
-    /** TorrServe настроен пользователем (вводил адрес)? У кого не настроен —
-     *  играет встроенным движком, фолбэк им не запрещаем никогда. */
-    fun torrServeConfigured(): Boolean =
-        !prefs.getString("torrserve_host", null).isNullOrBlank()
-
     // ---------- Самотест (Настройки → Для разработчика) ----------
 
     fun setFallbackInternalWriteProbe(value: String) {
@@ -673,10 +641,6 @@ class LocalStore(context: Context) {
             .forEach { prefs.edit().remove(it).apply() }
     }
 
-    fun setTorrServeHost(v: String) {
-        prefs.edit().putString("torrserve_host", v.trim().removeSuffix("/")).apply()
-    }
-
     // ---------- «Что нового» после обновления ----------
 
     /** Версия, для которой пользователь уже видел список изменений. */
@@ -684,29 +648,6 @@ class LocalStore(context: Context) {
 
     fun setLastSeenVersion(v: String) {
         prefs.edit().putString("seen_version", v).apply()
-    }
-
-    // ---------- Свой сервер бэкапа (домашний Mac) ----------
-    // Телевизор не должен быть единственным местом, где лежат настройки и кеш:
-    // при «очистить данные» они пропадают. Сначала пробуем свой сервер,
-    // Gist остаётся резервом, если сервер недоступен.
-
-    /** Адрес сервиса бэкапа, напр. http://192.168.3.78:8091 (пусто — не использовать). */
-    fun backupServerUrl(): String =
-        (prefs.getString("backup_server_url", DEFAULT_BACKUP_URL) ?: DEFAULT_BACKUP_URL)
-            .trim().removeSuffix("/")
-
-    fun setBackupServerUrl(v: String) {
-        prefs.edit().putString("backup_server_url", v.trim().removeSuffix("/")).apply()
-    }
-
-    /** Токен сервера бэкапа (заголовок X-Backup-Token). */
-    fun backupServerToken(): String =
-        (prefs.getString("backup_server_token", DEFAULT_BACKUP_TOKEN) ?: DEFAULT_BACKUP_TOKEN)
-            .trim()
-
-    fun setBackupServerToken(v: String) {
-        prefs.edit().putString("backup_server_token", v.trim()).apply()
     }
 
     // ---------- Плеер: автоскрытие панели управления ----------

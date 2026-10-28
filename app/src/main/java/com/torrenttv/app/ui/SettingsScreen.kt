@@ -66,7 +66,6 @@ private val USER_SECTIONS = listOf(
     Triple("update", "⬆ Обновление", "Проверить и установить новую версию"),
     Triple("keywords", "🚫 Стоп-слова", "Слова-исключения для поиска раздач"),
     Triple("tv", "📡 ТВ-каналы", "Свой плейлист добавляется к встроенному списку"),
-    Triple("torrserve", "🚀 TorrServe", "Внешний движок торрентов — надёжнее внутреннего"),
     Triple("player", "📺 Плеер", "Встроенный или внешний плеер (VLC, MX Player)"),
     Triple("input", "⌨ Ввод", "Клавиатура: внешняя (системная) или встроенная"),
 )
@@ -85,7 +84,7 @@ private val SECTIONS = USER_SECTIONS + DEV_SECTIONS
 private const val DEV_CODE = "0301"
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit, onOpenWebServer: (String, String) -> Unit = { _, _ -> }) {
+fun SettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
 
@@ -127,12 +126,9 @@ fun SettingsScreen(onBack: () -> Unit, onOpenWebServer: (String, String) -> Unit
         val t = editTarget ?: return
         if (editTmp.isNotBlank()) {
             when (t) {
-                "ts" -> store.setTorrServeHost(editTmp)
                 "kpkey" -> { store.setKpApiKey(editTmp); kpKey = editTmp }
                 "tmdbkey" -> { store.setTmdbApiKey(editTmp); tmdbKey = editTmp }
                 "ghtoken" -> { store.setGithubToken(editTmp); ghToken = editTmp }
-                "bkurl" -> store.setBackupServerUrl(editTmp)
-                "bktoken" -> store.setBackupServerToken(editTmp)
                 "iptvurl" -> store.setIptvPlaylistUrl(editTmp)
             }
         }
@@ -477,20 +473,9 @@ fun SettingsScreen(onBack: () -> Unit, onOpenWebServer: (String, String) -> Unit
                             logTail = com.torrenttv.app.data.AppLog.recent(14).joinToString("\n")
                         }
 
-                        // ---------- Бэкап: свой сервер (домашний Mac) ----------
+                        // ---------- Бэкап: приватный Gist ----------
                         // Настройки и кеш серий не должны жить только на телевизоре:
-                        // «очистить данные» их стирает. Адрес и токен уже прописаны,
-                        // поля — чтобы сменить сервер, не пересобирая приложение
-                        SettingsRow(
-                            title = "💾 Сервер бэкапа",
-                            value = store.backupServerUrl(),
-                            valueOk = store.backupServerUrl().isNotBlank(),
-                        ) { openEdit("bkurl", store.backupServerUrl(), "http://192.168.3.78:8091") }
-                        SettingsRow(
-                            title = "🔑 Токен сервера",
-                            value = if (store.backupServerToken().isNotBlank()) "••••••••" else "Не задан",
-                            valueOk = store.backupServerToken().isNotBlank(),
-                        ) { openEdit("bktoken", store.backupServerToken(), "Токен сервера бэкапа") }
+                        // «очистить данные» их стирает. Снимок уходит в приватный Gist.
                         SettingsRow(
                             title = "⬆ Сохранить сейчас",
                             value = if (backupMsg.isBlank()) "Настройки + кеш серий" else backupMsg,
@@ -501,12 +486,12 @@ fun SettingsScreen(onBack: () -> Unit, onOpenWebServer: (String, String) -> Unit
                             kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
                                 val ok = com.torrenttv.app.data.SettingsBackup.saveNow(context)
                                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                    backupMsg = if (ok) "✓ Отправлено на ${store.backupServerUrl()}"
-                                    else "⚠ Сервер и Gist не ответили"
+                                    backupMsg = if (ok) "✓ Сохранено в приватный Gist"
+                                    else "⚠ Gist не ответил — проверьте GitHub-токен"
                                 }
                             }
                         }
-                        SettingsNote("Копия уходит на домашний сервер; если он недоступен — в приватный Gist. Восстанавливается сама после сброса данных.")
+                        SettingsNote("Копия настроек уходит в приватный Gist и восстанавливается сама после сброса данных.")
 
                         if (uploadState.isNotBlank()) {
                             SettingsNote(uploadState)
@@ -651,115 +636,9 @@ fun SettingsScreen(onBack: () -> Unit, onOpenWebServer: (String, String) -> Unit
                         }
                         SettingsNote(
                             "Тест-кейсы проверяют приложение изнутри: настройки, магниты, парсеры, " +
-                                "доступность TorrServe/GitHub/КП, поиск раздач. Отчёт автоматически уйдёт в Gist."
+                                "доступность GitHub/КП, поиск раздач. Отчёт автоматически уйдёт в Gist."
                         )
                         SettingsNote("Крестик у источника — его блокирует провайдер, это не неисправность.")
-                    }
-
-                    "torrserve" -> {
-                        // Сводка о сервере: статус, число раздач, занятый кеш —
-                        // запрашивается при входе в раздел (запрос в IO-потоке)
-                        var tsSummary by remember { mutableStateOf("проверяю…") }
-                        LaunchedEffect(Unit) {
-                            val h = store.torrServeHost()
-                            tsSummary = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                com.torrenttv.app.data.TorrServeService.serverSummary(h)
-                            }
-                        }
-                        SettingsRow(
-                            title = "Сервер",
-                            value = tsSummary,
-                            valueOk = tsSummary.startsWith("✓"),
-                            modifier = Modifier.focusRequester(contentFocus),
-                        ) { }
-                        SettingsRow(
-                            title = "Адрес сервера",
-                            value = store.torrServeHost(),
-                            valueOk = true,
-                        ) { openEdit("ts", store.torrServeHost(), "http://127.0.0.1:8090") }
-                        // Веб-интерфейс TorrServe: встроенный браузер с пультом
-                        var webTip by remember { mutableStateOf<String?>(null) }
-                        SectionItem(
-                            title = "🌐 Веб-интерфейс сервера (${store.torrServeHost()})",
-                            selected = false,
-                        ) {
-                            val host = store.torrServeHost()
-                            if (host.isBlank()) {
-                                webTip = "адрес сервера не задан"
-                            } else {
-                                com.torrenttv.app.data.AppLog.log("ui", "нажал: «Веб-интерфейс сервера» $host — встроенный браузер")
-                                // Встроенный WebView с управлением пультом — без
-                                // поиска браузера на устройстве
-                                onOpenWebServer(host, "Сервер")
-                            }
-                        }
-                        webTip?.let { SettingsNote("🌐 $it") }
-                        SettingsNote(
-                            "Веб-интерфейс TorrServe: все раздачи на сервере, сколько скачано, " +
-                                "скорость, удаление вручную. Открывается внутри приложения, управление пультом."
-                        )
-                        // Очистка старого кеша: сносим с сервера раздачи, которых
-                        // нет в избранном (разовые просмотры, старые проверки).
-                        // Деструктивное — подтверждение вторым нажатием.
-                        var confirmClean by remember { mutableStateOf(false) }
-                        var cleanResult by remember { mutableStateOf<String?>(null) }
-                        SectionItem(
-                            title = if (confirmClean) "⚠ Точно снести НЕ избранные раздачи? (нажмите ещё раз)"
-                            else "🧹 Очистить старый кеш (раздачи не из избранного)",
-                            selected = false,
-                        ) {
-                            if (!confirmClean) {
-                                confirmClean = true
-                                com.torrenttv.app.data.AppLog.log("ui", "нажал: «Очистить старый кеш» — ждёт подтверждения")
-                            } else {
-                                confirmClean = false
-                                val host = store.torrServeHost()
-                                com.torrenttv.app.data.AppLog.log("ui", "нажал: «Очистить старый кеш» — ПОДТВЕРЖДЕНО")
-                                cleanResult = "чистлю…"
-                                Thread {
-                                    val saved = HashSet<String>()
-                                    for (fav in store.favorites()) {
-                                        for (m in store.savedMagnets(fav)) {
-                                            com.torrenttv.app.data.TorrServeService.hashOf(m)
-                                                ?.let { saved.add(it.lowercase()) }
-                                        }
-                                    }
-                                    val list = com.torrenttv.app.data.TorrServeService.listTorrents(host) ?: emptyList()
-                                    val stale = list.filter { it.hash.lowercase() !in saved }
-                                    var freed = 0L
-                                    for (t in stale) {
-                                        freed += t.preloadedBytes
-                                        com.torrenttv.app.data.TorrServeService.removeTorrent(host, t.hash)
-                                    }
-                                    val msg = if (list.isEmpty()) "сервер не ответил" else
-                                        "снесено раздач: ${stale.size} из ${list.size}, освобождено ~${freed / 1024 / 1024 / 1024.0} ГБ"
-                                    com.torrenttv.app.data.AppLog.log("serverdl", "очистка кеша сервера: $msg")
-                                    cleanResult = msg
-                                    tsSummary = com.torrenttv.app.data.TorrServeService.serverSummary(host)
-                                }.apply { isDaemon = true }.start()
-                            }
-                        }
-                        cleanResult?.let { SettingsNote("🧹 $it") }
-                        SettingsNote(
-                            "Очистка сносит раздачи, которых нет в избранном — избранные и их докачка " +
-                                "не трогаются. Место на сервере освобождается сразу."
-                        )
-                        SectionItem(
-                            title = (if (store.fallbackInternal()) "✓" else "○") +
-                                " Качать на ТВ, если TorrServe не отдаёт поток",
-                            selected = false,
-                        ) {
-                            store.setFallbackInternal(!store.fallbackInternal())
-                            com.torrenttv.app.data.AppLog.log(
-                                "ui", "настройка «Качать на ТВ»: " + if (store.fallbackInternal()) "вкл" else "выкл",
-                            )
-                        }
-                        SettingsNote(
-                            "Выкл (рекомендуется с сервером TorrServe): телевизор не качает сам — " +
-                                "при отказе сервера показываем ошибку. Вкл: при сбое TorrServe фильм " +
-                                "скачается на ТВ (занимает место, лимит 20 ГБ)."
-                        )
-                        SettingsNote("Необязательно: стрим через TorrServe быстрее. Без него работает встроенный движок.")
                     }
 
                     else -> { // keywords
@@ -1084,9 +963,6 @@ private fun NetCheckScreen(onClose: () -> Unit) {
             if (com.torrenttv.app.data.TmdbClient.isConfigured) {
                 add("TMDB (база фильмов)" to "https://api.themoviedb.org/3/configuration?api_key=" + com.torrenttv.app.BuildConfig.TMDB_API_KEY)
             }
-            if (com.torrenttv.app.data.TorrServeService.isInstalled(ctx)) {
-                add("TorrServe (движок)" to com.torrenttv.app.data.LocalStore(ctx).torrServeHost() + "/echo")
-            }
         }
     }
 
@@ -1138,19 +1014,6 @@ private fun NetCheckScreen(onClose: () -> Unit) {
                 com.torrenttv.app.data.AppLog.log("ui", "нажал: «Проверить снова» (Проверка сети)")
                 kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch { checkAll() }
             }) { Text("🔄 Проверить снова") }
-            // TorrServe установлен, но не отвечает — открыть его, чтобы нажать UPDATE/Start
-            val tsRow = rows.firstOrNull { it.name.startsWith("TorrServe") }
-            if (com.torrenttv.app.data.TorrServeService.isInstalled(ctx) && tsRow?.ok != true) {
-                Spacer(Modifier.width(16.dp))
-                Button(onClick = {
-                    runCatching {
-                        ctx.packageManager.getLaunchIntentForPackage(com.torrenttv.app.data.TorrServeService.PACKAGE)?.let {
-                            it.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                            ctx.startActivity(it)
-                        }
-                    }
-                }) { Text("🚀 Открыть TorrServe") }
-            }
         }
         Spacer(Modifier.height(12.dp))
     }

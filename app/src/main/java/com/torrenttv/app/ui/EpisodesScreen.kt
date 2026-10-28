@@ -40,9 +40,8 @@ import com.torrenttv.app.data.MediaItem
 import com.torrenttv.app.data.MediaApi
 import kotlinx.coroutines.launch
 import com.torrenttv.app.data.Season
-import com.torrenttv.app.data.TorrServeService
-import com.torrenttv.app.data.TraktClient
 import com.torrenttv.app.data.TorrentSearch
+import com.torrenttv.app.data.TraktClient
 import com.torrenttv.app.data.TorrentResult
 import com.torrenttv.app.torrent.TorrentEngine
 import kotlinx.coroutines.Dispatchers
@@ -68,7 +67,7 @@ fun EpisodesScreen(
     var loading by remember { mutableStateOf(true) }
     var selected by remember { mutableStateOf<Int?>(null) } // null = первый сезон
     var tick by remember { mutableStateOf(0) } // перерисовка статусов после поиска источника
-    // Причина пустого списка («TorrServe не отвечает») — вместо немого «не найдены»
+    // Причина пустого списка («лимит КП» и т.п.) — вместо немого «не найдены»
     var failReason by remember { mutableStateOf<String?>(null) }
 
     // Список открыт — «N новых серий» пользователь увидел, бейдж погасить
@@ -250,7 +249,7 @@ fun EpisodesScreen(
             )
 
             seasons.isEmpty() -> Text(
-                // Причина вместо немого «не найдены»: TorrServe / лимит КП / нет раздач
+                // Причина вместо немого «не найдены»: лимит КП / нет раздач
                 failReason
                     ?: (if (KinopoiskClient.lastFailed) "Эпизоды временно недоступны" else "Сезоны не найдены"),
                 color = Color.White.copy(alpha = 0.6f),
@@ -264,13 +263,8 @@ fun EpisodesScreen(
             Row(Modifier.padding(top = 12.dp)) {
                 LazyRow {
                     itemsIndexed(seasons) { _, s ->
-                        // «⬇» на чипе — весь сезон скачан на сервер (серии
-                        // стартуют мгновенно); пересчёт лёгкий: магниты из хранилища
-                        val seasonOffline = remember(tick, s.number) {
-                            com.torrenttv.app.data.ServerDownloads.isSeasonOnServer(store, item, s.episodes)
-                        }
                         SeasonChip(
-                            "Сезон ${s.number}${if (seasonOffline) " ⬇" else ""}",
+                            "Сезон ${s.number}",
                             s.number == (selected ?: seasons.first().number),
                         ) {
                             com.torrenttv.app.data.AppLog.log("episodes", "выбран сезон ${s.number} (серий ${s.episodes.size})")
@@ -357,22 +351,6 @@ fun EpisodesScreen(
                                     modifier = Modifier.padding(end = 18.dp),
                                 )
                             }
-                            // ⬇ — серия на сервере (её раздача скачана целиком):
-                            // мгновенный старт, пиры не нужны
-                            val offlineHash = com.torrenttv.app.data.TorrServeService.hashOf(
-                                store.getMagnet(item, ep.sourceSuffix) ?: "",
-                            )
-                            val offline = offlineHash != null &&
-                                com.torrenttv.app.data.ServerDownloads.isTorrentOnServer(offlineHash)
-                            if (offline) {
-                                Text(
-                                    text = "⬇",
-                                    color = Color(0xFFBFE3F7),
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(end = 10.dp),
-                                )
-                            }
                             Text(
                                 text = if (hasSource) "▶︎ Смотреть" else "🔍 Найти",
                                 color = if (hasSource) Color(0xFF9CCC65) else Color(0xFF64B5F6),
@@ -438,9 +416,10 @@ internal fun mergeSeasons(old: List<Season>, fresh: List<Season>): List<Season> 
 }
 
 /**
- * Сезоны из раздачи (главный источник при торрентовом показе): TorrServe
- * подхватывает лучшую раздачу, серии — видео-файлы (S01E05…). Магнит раздачи
- * сохраняется за каждой серией — «Смотреть» работает сразу, без поиска.
+ * Сезоны из раздач (главный источник при торрентовом показе): встроенный
+ * движок читает состав раздач (метаданные, без скачивания видео), серии —
+ * видео-файлы (S01E05…). Магнит раздачи сохраняется за каждой серией —
+ * «Смотреть» работает сразу, без поиска.
  */
 /**
  * Фоновое обновление серий ВНЕ compose-скоупа: уход с экрана («Смотреть»,
@@ -457,15 +436,18 @@ internal suspend fun seasonsFromTorrents(
     store: LocalStore,
     context: android.content.Context,
 ): Pair<List<Season>, String?> {
-    val host = store.torrServeHost()
-    if (host.isBlank()) {
-        AppLog.log("episodes", "torrserve: адрес не задан — эпизоды из раздачи недоступны")
-        return emptyList<Season>() to "TorrServe не настроен (Настройки → TorrServe)"
+    val saveDir = java.io.File(context.filesDir, "downloads/" + item.storeKey)
+    // Состав раздачи: метаданные магнита (кеш метаданных — мгновенный повторный вход)
+    fun filesOf(magnet: String): List<String> {
+        val ti = TorrentEngine.fetchMetadata(magnet, saveDir) { }
+            ?: return emptyList()
+        val fs = ti.files()
+        return (0 until fs.numFiles()).mapNotNull { i ->
+            val p = fs.filePath(i)
+            if (p.substringAfterLast('.', "").lowercase() in TorrentEngine.VIDEO_EXT) p else null
+        }
     }
-    if (!TorrServeService.ensureRunning(context, host)) {
-        AppLog.log("episodes", "torrserve: не отвечает ($host) — эпизоды из раздачи недоступны")
-        return emptyList<Season>() to "TorrServe не отвечает — откройте приложение TorrServe и повторите"
-    }
+
     // Собираем сезоны из НЕСКОЛЬКИХ раздач: сезоны одного сериала часто лежат
     // отдельными раздачами («Титаны» S01–S04 в одной, S05 — в другой).
     // Выбор раздач: группируем по номеру сезона из НАЗВАНИЯ и берём ЛУЧШУЮ
@@ -478,14 +460,14 @@ internal suspend fun seasonsFromTorrents(
     }
     val allSeasons = sortedMapOf<Int, MutableMap<Int, Episode>>()
 
-    /** Разложить файлы сессии TorrServe по сезонам/сериям; вернуть НОВЫЕ серии (s,e). */
-    fun ingestFiles(video: List<TorrServeService.TSFile>, torrentSeason: Int?): List<Pair<Int, Int>> {
+    /** Разложить пути файлов раздачи по сезонам/сериям; вернуть НОВЫЕ серии (s,e). */
+    fun ingestFiles(video: List<String>, torrentSeason: Int?): List<Pair<Int, Int>> {
         val bySeason = sortedMapOf<Int, MutableList<Episode>>()
-        for (f in video) {
-            val parsed = Episode.fileNumbers(f.path) ?: run {
+        for (path in video) {
+            val parsed = Episode.fileNumbers(path) ?: run {
                 // Файл без S/E-метки: серия — ведущее число имени («05. …» → 5),
                 // сезон — из названия раздачи. Без обоих — файл пропускаем
-                val num = Regex("^\\D*?(\\d{1,3})").find(f.path.substringAfterLast('/'))
+                val num = Regex("^\\D*?(\\d{1,3})").find(path.substringAfterLast('/'))
                     ?.groupValues?.get(1)?.toIntOrNull()
                 if (torrentSeason != null && num != null && num in 1..200) torrentSeason to num else null
             } ?: continue
@@ -494,7 +476,7 @@ internal suspend fun seasonsFromTorrents(
                 Episode(
                     season = s,
                     episode = e,
-                    title = f.path.substringAfterLast('/').substringBeforeLast('.'),
+                    title = path.substringAfterLast('/').substringBeforeLast('.'),
                 ),
             )
         }
@@ -508,22 +490,16 @@ internal suspend fun seasonsFromTorrents(
 
     // ---- 1. Сохранённые магниты — БЕЗ поиска ----
     // Паковые раздачи дописывают серии в ту же тему («05x01-06» → появится
-    // E07): TorrServe вернёт актуальный список файлов по уже известному
-    // магниту. Это мгновенно и не тратит поиск — новые серии проверяются
-    // прямо в той раздаче, где смотрели.
+    // E07): состав читается по уже известному магниту. Это мгновенно и не
+    // тратит поиск — новые серии проверяются прямо в той раздаче, где смотрели.
     val saved = store.savedMagnets(item)
     for (magnet in saved) {
-        val t = runCatching {
-            TorrServeService.addMagnet(host, magnet, item.title, 45_000)
-        }.getOrNull() ?: continue
-        val video = t.files.filter {
-            it.path.substringAfterLast('.', "").lowercase() in TorrentEngine.VIDEO_EXT
-        }
+        val video = withContext(Dispatchers.IO) { filesOf(magnet) }
+        if (video.isEmpty()) continue
         // Сезон берём из имён файлов (fileNumbers); для файлов без метки —
-        // из пути/названия раздачи: торрсервер не отдаёт имя темы, поэтому
-        // пробуем «Sxx» в имени каталога раздачи
+        // из пути/названия раздачи: пробуем «Sxx» в имени каталога раздачи
         val folderSeason = video.firstNotNullOfOrNull { f ->
-            Regex("S(\\d{1,2})", RegexOption.IGNORE_CASE).find(f.path)?.groupValues?.get(1)?.toIntOrNull()
+            Regex("S(\\d{1,2})", RegexOption.IGNORE_CASE).find(f)?.groupValues?.get(1)?.toIntOrNull()
         }
         val before = allSeasons.values.sumOf { it.size }
         ingestFiles(video, folderSeason)
@@ -563,19 +539,15 @@ internal suspend fun seasonsFromTorrents(
     AppLog.log("episodes", "«${item.title}»: к загрузке выбраны раздачи: " +
         picked.joinToString("; ") { "${it.name.take(50)} (S${torrentSeasonOf(it) ?: "?"}, ${it.seeds} сидов)" })
     for (r in picked) {
-        val t = runCatching {
-            TorrServeService.addMagnet(host, TorrentSearch.toMagnet(r), item.title, 45_000)
-        }.getOrNull() ?: continue
-        val video = t.files.filter {
-            it.path.substringAfterLast('.', "").lowercase() in TorrentEngine.VIDEO_EXT
-        }
+        val magnet = TorrentSearch.toMagnet(r)
+        val video = withContext(Dispatchers.IO) { filesOf(magnet) }
+        if (video.isEmpty()) continue
         // Сезон из названия раздачи: «Титаны.S05» / «5 сезон» — для пачек,
         // где файлы названы просто «05. …» без метки сезона
         val added = ingestFiles(video, torrentSeasonOf(r))
         if (added.isEmpty()) continue
         // Магнит раздачи сохраняем сериям, которые из неё пришли: серия
         // играет из конкретной раздачи, а не ищется заново
-        val magnet = TorrentSearch.toMagnet(r)
         for ((s, e) in added) {
             val ep = allSeasons[s]?.get(e) ?: continue
             store.saveMagnet(item, magnet, ep.sourceSuffix)

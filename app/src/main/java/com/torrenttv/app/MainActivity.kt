@@ -29,7 +29,6 @@ import com.torrenttv.app.data.MediaItem
 import com.torrenttv.app.ui.CatalogScreen
 import com.torrenttv.app.ui.DetailsScreen
 import com.torrenttv.app.ui.EpisodesScreen
-import com.torrenttv.app.ui.ServerWebScreen
 import com.torrenttv.app.ui.TrailerScreen
 import com.torrenttv.app.ui.TorrentsScreen
 import com.torrenttv.app.ui.FavoritesScreen
@@ -78,8 +77,6 @@ sealed interface Screen {
 
     /** Живое ТВ: канал и весь список (для переключения ←/→ в плеере). */
     data class Live(val channel: com.torrenttv.app.data.IptvChannel, val channels: List<com.torrenttv.app.data.IptvChannel>) : Screen
-    /** Встроенный браузер веб-интерфейса сервера (управление пультом). */
-    data class WebServer(val url: String, val title: String) : Screen
     data class TorrentResults(
         val item: MediaItem,
         val query: String,
@@ -124,34 +121,17 @@ class MainActivity : ComponentActivity() {
         com.torrenttv.app.update.UpdateManager.cleanupApks(this)
         // Дисковый кэш метаданных: экономит дневной лимит API и работает без сети
         com.torrenttv.app.data.KinopoiskClient.attachCache(cacheDir)
-        // Конфигурация при старте: по логу сразу видно, как настроено устройство,
-        // без вопросов «какой у тебя адрес TorrServe» (полное логирование)
+        // Конфигурация при старте: по логу сразу видно, как настроено устройство
         runCatching {
             val s0 = com.torrenttv.app.data.LocalStore(this)
             com.torrenttv.app.data.AppLog.log(
                 "app",
-                "конфигурация: torrserve=${s0.torrServeHost()} (настроен=${s0.torrServeConfigured()}, " +
-                    "качать на ТВ=${if (s0.fallbackInternal()) "вкл" else "выкл"}), " +
+                "конфигурация: движок=встроенный (jlibtorrent), " +
                     "jackett=${if (s0.jackettConfig() != null) "задан" else "нет"}, " +
                     "приватные трекеры=${s0.privateTrackers().size}, " +
                     "стоп-слов=${s0.excludedKeywords().size}, лог=${if (s0.loggingEnabled()) "вкл" else "выкл"}",
             )
         }
-        // Автокачалка избранного на сервер: раздачи избранного докачиваются
-        // целиком (включая новые серии свежих раздач) — просмотр потом
-        // мгновенный. Через 30 с после старта, далее каждые 3 часа: свежий
-        // поиск по каждому сериалу ловит новые серии, просмотренные не качаем.
-        Thread {
-            while (true) {
-                Thread.sleep(30_000)
-                runCatching {
-                    com.torrenttv.app.data.ServerDownloads.syncFavorites(
-                        com.torrenttv.app.data.LocalStore(this),
-                    )
-                }
-                Thread.sleep(3 * 60 * 60_000L)
-            }
-        }.apply { isDaemon = true }.start()
         // Настройки переживают сброс данных: из пустого хранилища восстановим бэкап из Gist.
         // Ключи применены ниже в onCreate — после восстановления применяем их повторно.
         com.torrenttv.app.data.SettingsBackup.restoreIfNeeded(this) {
@@ -167,26 +147,6 @@ class MainActivity : ComponentActivity() {
         com.torrenttv.app.data.AppLog.recording = store0.loggingEnabled()
         com.torrenttv.app.data.KinopoiskClient.overrideApiKey = store0.kpApiKey()
         com.torrenttv.app.data.TmdbClient.overrideApiKey = store0.tmdbApiKey()
-        // Встроенный торрент-движок на ТВ отключён: торренты качает сервер
-        // (TorrServe), телевизор только принимает HTTP-поток. Чистим то, что
-        // движок успел скачать на диск ТВ (до 200 МБ на фильм), кроме
-        // метаданных раздач (meta_*.torrent — маленькие и нужны для серий).
-        Thread {
-            runCatching {
-                val dir = java.io.File(filesDir, "downloads")
-                if (dir.exists()) {
-                    dir.walkTopDown()
-                        .filter {
-                            it.isFile && it.length() > 2L * 1024 * 1024 &&
-                                !it.name.startsWith("meta_")
-                        }
-                        .forEach { it.delete() }
-                }
-            }
-        }.apply {
-            isDaemon = true
-            start()
-        }
         // Размер карточек из настроек (Настройки → Плеер → «Размер карточек»)
         com.torrenttv.app.ui.cardWidthDp =
             com.torrenttv.app.data.LocalStore(this).cardWidthDp()
@@ -256,7 +216,6 @@ private fun App() {
             is Screen.TorrentFiles -> "Состав раздачи «${s.item.title}»"
             is Screen.TorrentResults -> "Результаты «${s.item.title}»"
             is Screen.Live -> "ТВ «${s.channel.name}»"
-            is Screen.WebServer -> "Веб-интерфейс «${s.title}»"
         }
         com.torrenttv.app.data.AppLog.log("nav", "открыл: $name")
     }
@@ -353,10 +312,6 @@ private fun App() {
                 )
                 Screen.Settings -> SettingsScreen(
                     onBack = { screen = Screen.Home },
-                    onOpenWebServer = { url, title ->
-                        com.torrenttv.app.data.AppLog.log("ui", "нажал: «Веб-интерфейс сервера» $url")
-                        screen = Screen.WebServer(url, title)
-                    },
                 )
                 else -> Unit
                 }
@@ -446,12 +401,6 @@ private fun App() {
                 channels = s.channels,
                 onBack = { screen = lastTab; menuFocusTick++ },
                 onSwitch = { ch -> screen = Screen.Live(ch, s.channels) },
-            )
-
-            is Screen.WebServer -> ServerWebScreen(
-                url = s.url,
-                title = s.title,
-                onBack = { screen = Screen.Settings },
             )
 
             is Screen.TorrentSearch -> TorrentSearchScreen(

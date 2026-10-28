@@ -118,15 +118,7 @@ object SelfTest {
                 "загрузки ${mb(downloads)}, свободно ${mb(free)}"
         }
 
-        // ---------- 6. TorrServe: echo ----------
-        check("TorrServe: доступность") {
-            val host = store.torrServeHost()
-            if (store.torrServeHost().isBlank()) return@check "адрес не задан (встроенный движок)"
-            val ok = TorrServeService.echo(host)
-            if (ok) "$host отвечает" else "FAIL: $host не отвечает"
-        }
-
-        // ---------- 7. GitHub Releases (обновления) ----------
+        // ---------- 6. GitHub Releases (обновления) ----------
         check("GitHub Releases API") {
             val code = httpCode(
                 "https://api.github.com/repos/ValeriyNoskov/TorrentTV/releases/latest",
@@ -135,13 +127,13 @@ object SelfTest {
             if (code == 200) "доступен (HTTP 200)" else "FAIL: HTTP $code"
         }
 
-        // ---------- 8. КП API (доступность, любой код = хост жив) ----------
+        // ---------- 7. КП API (доступность, любой код = хост жив) ----------
         check("Кинопоиск API: доступность") {
             val code = httpCode("https://api.kinopoisk.dev/v1.4/movie")
             if (code > 0) "доступен (HTTP $code — без ключа 401 это норма)" else "FAIL: нет ответа"
         }
 
-        // ---------- 9. Поиск раздач (долгий, до минуты) ----------
+        // ---------- 8. Поиск раздач (долгий, до минуты) ----------
         check("Поиск раздач («Титаны») — до 60 с") {
             val (list, _) = TorrentSearch.searchDetailed(
                 query = "Титаны",
@@ -151,11 +143,10 @@ object SelfTest {
             else "FAIL: 0 раздач"
         }
 
-        // ---------- 10. Режим хранения (информация) ----------
-        check("Режим «сервер качает, ТВ стримит»") {
-            val ts = store.torrServeConfigured()
-            val fb = store.fallbackInternal()
-            "TorrServe ${if (ts) "настроен" else "не настроен"}; качать на ТВ при сбое: ${if (fb) "вкл" else "выкл"}"
+        // ---------- 9. Кеш метаданных раздач (информация) ----------
+        check("Хранилище: режим") {
+            val meta = File(context.filesDir, "downloads").listFiles { f -> f.name.startsWith("meta_") }?.size ?: 0
+            "движок встроенный (jlibtorrent), кеш метаданных раздач: $meta шт"
         }
 
         return results

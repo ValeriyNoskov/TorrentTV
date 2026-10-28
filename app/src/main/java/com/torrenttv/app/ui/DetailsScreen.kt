@@ -326,75 +326,7 @@ fun DetailsScreen(
                         "ui",
                         "нажал: «${if (fav) "В избранном" else "В избранное"}» «${item.title}»",
                     )
-                    val host = store.torrServeHost()
-                    if (fav) {
-                        // В избранном = качаем на сервер и докачиваем новые серии:
-                        // тайтс уходит в очередь автокачалки сразу
-                        com.torrenttv.app.data.ServerDownloads.syncFavorites(store, only = item)
-                    } else if (host.isNotBlank()) {
-                        // Удалили из избранного — снести раздачи с сервера:
-                        // освобождаем место кеша (в избранном ↔ на сервере)
-                        val hashes = store.savedMagnets(item)
-                            .mapNotNull { com.torrenttv.app.data.TorrServeService.hashOf(it) }
-                        if (hashes.isNotEmpty()) {
-                            Thread {
-                                for (h in hashes) {
-                                    com.torrenttv.app.data.TorrServeService.removeTorrent(host, h)
-                                }
-                                com.torrenttv.app.data.AppLog.log(
-                                    "serverdl",
-                                    "«${item.title}»: удалено с сервера раздач: ${hashes.size}",
-                                )
-                            }.apply { isDaemon = true }.start()
-                        }
-                    }
                 }) { Text(if (fav) "★︎ В избранном" else "☆ В избранное") }
-                // ⬇ Скачать на сервер: раздача качается ЦЕЛИКОМ на TorrServe —
-                // просмотр потом мгновенный и не зависит от живости пиров
-                // (наш сервер, место есть; политика «сервер качает, ТВ стримит»)
-                run {
-                    var dlJob by remember {
-                        mutableStateOf<com.torrenttv.app.data.ServerDownloads.Job?>(null)
-                    }
-                    LaunchedEffect(Unit) {
-                        while (true) {
-                            dlJob = com.torrenttv.app.data.ServerDownloads.current()
-                            kotlinx.coroutines.delay(1000)
-                        }
-                    }
-                    val dl = dlJob
-                    val mine = dl != null && dl.title == item.title
-                    val running = dl != null && dl.state == "качаю"
-                    val label = when {
-                        running && dl.filesTotal > 0 ->
-                            "■ Стоп · файл ${dl.filesDone + 1}/${dl.filesTotal}: ${dl.fileDoneMb}/${dl.fileMb} МБ"
-                        running -> "■ Остановить качание…"
-                        mine && dl.state == "готово" -> "✓ На сервере (${dl.filesTotal} файлов)"
-                        else -> "⬇ Скачать на сервер"
-                    }
-                    MiniButton(label) {
-                        if (running) {
-                            com.torrenttv.app.data.ServerDownloads.stop()
-                            com.torrenttv.app.data.AppLog.log("ui", "нажал: остановить качание на сервер «${item.title}»")
-                        } else if (dl != null && dl.state == "готово" && mine) {
-                            com.torrenttv.app.data.AppLog.log("ui", "«${item.title}»: уже скачано на сервер")
-                        } else {
-                            val magnets = store.savedMagnets(item)
-                            com.torrenttv.app.data.AppLog.log(
-                                "ui",
-                                "нажал: «⬇ Скачать на сервер» «${item.title}» — сохранённых раздач ${magnets.size}",
-                            )
-                            if (magnets.isEmpty()) {
-                                com.torrenttv.app.data.AppLog.log(
-                                    "serverdl",
-                                    "«${item.title}»: нет сохранённых раздач — запустите просмотр один раз, раздача сохранится",
-                                )
-                            } else {
-                                com.torrenttv.app.data.ServerDownloads.enqueue(store, item, magnets)
-                            }
-                        }
-                    }
-                }
                 MiniButton("🔍 Раздача") { onManualSearch() }
                 // ▶︎ Трейлер — ищем на Rutube и играем встроенным плеером
                 MiniButton("🎬 Трейлер") {

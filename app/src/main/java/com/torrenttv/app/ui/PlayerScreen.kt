@@ -130,359 +130,16 @@ fun PlayerScreen(
     var bufferedPct by remember { mutableStateOf(0) }
     var netInfo by remember { mutableStateOf("") }
     var stream by remember { mutableStateOf<TorrentEngine.StreamSession?>(null) }
-    var torrLink by remember { mutableStateOf<String?>(null) }
     // Серии внутри торрента: (файл, имя) + выбор другой серии
     var torrentFiles by remember { mutableStateOf<List<Pair<Int, String>>>(emptyList()) }
     var restartFileIndex by remember { mutableStateOf<Int?>(null) }
     // Оверлеи объявлены заранее: состояние нужно уже в LaunchedEffect старта
     var showFiles by remember { mutableStateOf(false) }
     var showPanel by remember { mutableStateOf(true) }
-    // TorrServe: серии раздачи для переключения в плеере
-    var tsFiles by remember { mutableStateOf<List<Pair<Int, String>>>(emptyList()) }
-    var tsAllFiles by remember { mutableStateOf<List<com.torrenttv.app.data.TorrServeService.TSFile>>(emptyList()) }
-    var tsCurrent by remember { mutableStateOf(-1) }
-    var tsHostStr by remember { mutableStateOf<String?>(null) }
-    var tsHashStr by remember { mutableStateOf<String?>(null) }
-    var tsEpNum by remember { mutableStateOf(0) }
-    // Реальный сезон из имени файла («S05E03», «5 сезон») — раньше всегда 1,
-    // из-за чего позиция S05E03 писалась в ключ S01E03
-    var tsSeason by remember { mutableStateOf(0) }
-    var tsShowFiles by remember { mutableStateOf(false) }
 
-    // Приоритет движков: 1) TorrServe (внешний), 2) внутренний jlibtorrent
+    // Стриминг встроенным движком jlibtorrent: качает прямо на ТВ по кускам
     LaunchedEffect(magnet) {
         if (magnet == null) return@LaunchedEffect
-        val tsHost = store.torrServeHost()
-        val tsReady = withContext(Dispatchers.IO) {
-            com.torrenttv.app.data.TorrServeService.ensureRunning(context, tsHost)
-        }
-        if (tsReady) {
-            status = "Добавляю в TorrServe…"
-            com.torrenttv.app.data.AppLog.log("player", "torrserve: echo ok, adding")
-            // Кандидаты: текущий магнит + остальные сохранённые раздачи сериала.
-            // При явном выборе файла с экрана раздачи (startIndex >= 0) играем
-            // только выбранную — перебор других неуместен.
-            val candidates =
-                if (startIndex >= 0) listOf(magnet)
-                else (listOf(magnet) + store.savedMagnets(item)).distinct()
-
-            // Отбор кандидатов БЕЗ перегруза. Раньше здесь добавлялись ВСЕ
-            // 5-6 раздач сразу (лог v0.9.23: 20 add за минуту) — TorrServe
-            // захлёбывался, скорость падала до 30 КБ/с. Теперь:
-            //   1) сортируем по названию магнита (сезон/серия в dn) — без сети;
-            //   2) добавляем по одной, пока не наберём 2 с нужной серией;
-            //   3) раздачи без серии не трогаем.
-            fun magnetHint(m: String): Int {
-                val ep = episode ?: return 0
-                val dn = runCatching {
-                    java.net.URLDecoder.decode(
-                        Regex("[&?]dn=([^&]*)").find(m)?.groupValues?.get(1) ?: "", "UTF-8",
-                    )
-                }.getOrDefault("")
-                var score = 0
-                if (ep.season > 0) {
-                    val s = Regex(
-                        "(?i)(s0?" + ep.season + "|" + ep.season + "x|" + ep.season + "\\s*сезон)",
-                    )
-                    if (s.containsMatchIn(dn)) score += 2
-                }
-                if (ep.episode > 0) {
-                    val e = Regex(
-                        "(?i)(e0?" + ep.episode + "|" + ep.season + "x0?" + ep.episode + ")",
-                    )
-                    if (e.containsMatchIn(dn)) score += 1
-                }
-                return score
-            }
-
-            fun hasEpisode(t: com.torrenttv.app.data.TorrServeService.TSTorrent): Boolean {
-                val ep = episode ?: return true
-                if (ep.episode <= 0) return true
-                return t.files.any { f ->
-                    com.torrenttv.app.data.Episode.fileMatches(f.path, ep.season, ep.episode) ||
-                        com.torrenttv.app.data.Episode.fileEpisodeNoSeason(f.path) == ep.episode
-                }
-            }
-
-            val ordered = candidates.sortedByDescending { magnetHint(it) }
-            val probed = mutableListOf<Pair<String, com.torrenttv.app.data.TorrServeService.TSTorrent>>()
-            val rejected = mutableListOf<String>()
-            for (m in ordered) {
-                if (probed.size >= 2) break
-                val t = withContext(Dispatchers.IO) {
-                    runCatching {
-                        com.torrenttv.app.data.TorrServeService.addMagnet(tsHost, m, item.title) { }
-                    }.getOrNull()
-                }
-                if (t == null) {
-                    com.torrenttv.app.data.AppLog.log("player", "разведка: ${m.take(40)}… → нет данных")
-                    continue
-                }
-                val ok = hasEpisode(t)
-                com.torrenttv.app.data.AppLog.log(
-                    "player",
-                    "разведка: ${m.take(40)}… → скачано ${t.preloadedBytes / 1024 / 1024} МБ, " +
-                        "пиров ${t.peers}, файлов ${t.files.size}" +
-                        if (episode != null) (if (ok) ", серия ЕСТЬ" else ", серии НЕТ — пропускаю") else "",
-                )
-                if (ok || episode == null) probed += m to t else rejected += m
-            }
-            val episodeOk = probed
-                .sortedByDescending { it.second.preloadedBytes }
-                .map { it.first }
-            val ranked = episodeOk.ifEmpty { ordered }
-            com.torrenttv.app.data.AppLog.log(
-                "player",
-                "отбор раздач: проверено ${probed.size + rejected.size}, подходит ${probed.size}, " +
-                    "стартуем с «${ranked.firstOrNull()?.take(50) ?: "—"}»",
-            )
-            // Выбор файла в раздаче.
-            // ПРАВИЛО: явный выбор файла (startIndex) > явная серия (episode) >
-            // сохранённый S/E > сохранённое имя > индекс.
-            // Раньше при заданной серии, если файла не было, падали в
-            // сохранённый S/E / имя / индекс — и «Продолжить S05E06» запускало
-            // S01E06 из более «тёплой» раздачи первого сезона (лог 16:36:45,
-            // победила f6555c4c799f — Титаны S01). Теперь раздача без нужной
-            // серии просто не подходит: берём следующую.
-            fun pickFile(t: com.torrenttv.app.data.TorrServeService.TSTorrent):
-                com.torrenttv.app.data.TorrServeService.TSFile? {
-                if (startIndex >= 0) {
-                    val chosen = t.files.firstOrNull { it.id == startIndex }
-                        ?: t.files.getOrNull(startIndex)
-                    if (chosen != null) return chosen
-                }
-                val ep = episode
-                if (ep != null && ep.episode > 0) {
-                    t.files.firstOrNull { f ->
-                        com.torrenttv.app.data.Episode.fileMatches(f.path, ep.season, ep.episode)
-                    }?.let { return it }
-                    // Раздача без сезонной метки в именах («01. Название.mkv») —
-                    // тогда серию определяем по номеру в начале имени
-                    return t.files.firstOrNull { f ->
-                        com.torrenttv.app.data.Episode.fileEpisodeNoSeason(f.path) == ep.episode
-                    }
-                }
-                val lastEpPair = store.lastEp(item)
-                val byLastEp = lastEpPair?.let { (s, e) ->
-                    t.files.firstOrNull {
-                        com.torrenttv.app.data.Episode.fileMatches(it.path, s, e)
-                    }
-                }
-                val byName = if (byLastEp == null) {
-                    store.lastFileName(item)?.let { name ->
-                        t.files.firstOrNull { it.path.substringAfterLast('/') == name }
-                    }
-                } else null
-                return byLastEp ?: byName ?: run {
-                    val last = store.lastFile(item)
-                    val videoSorted = t.files.filter {
-                        it.path.substringAfterLast('.', "").lowercase() in TorrentEngine.VIDEO_EXT
-                    }.sortedWith { x, y -> TorrentEngine.naturalCompare(x.path, y.path) }
-                    videoSorted.getOrNull(last) ?: com.torrenttv.app.data.TorrServeService.bestVideo(t)
-                }
-            }
-
-            // Гонка раздач: топ-кандидаты качаются ПАРАЛЛЕЛЬНО, побеждает первый
-            // набравший порог. Бесплатный аналог облачного кеша: живая раздача
-            // сама «выстреливает», мёртвая просто отстаёт («Титаны»: 720p с 965 МБ
-            // выигрывает мгновенно, 1080p на нуле — отсеивается). Лишние потоки
-            // preload стихают сами (stalled/нулевой выход за ~20 с).
-            fun raceTorrent(m: String): Boolean = runCatching {
-                val t = com.torrenttv.app.data.TorrServeService.addMagnet(tsHost, m, item.title) { } ?: return@runCatching false
-                val f = pickFile(t) ?: return@runCatching false
-                com.torrenttv.app.data.TorrServeService.preloadFile(tsHost, t.hash, f) { }
-            }.getOrDefault(false)
-            suspend fun raceWinner(list: List<String>, seconds: Long): String? = withContext(Dispatchers.IO) {
-                val q = java.util.concurrent.LinkedBlockingQueue<String>()
-                val threads = list.map { m ->
-                    Thread {
-                        if (runCatching { raceTorrent(m) }.getOrDefault(false)) q.put(m)
-                    }.apply { start() }
-                }
-                runCatching { q.poll(seconds, java.util.concurrent.TimeUnit.SECONDS) }.getOrNull().also {
-                    // Проигравшие потоки докручиваются сами: preload выйдет
-                    // по нулевому/stalled-условию, сервер докачает в кеш — не зря
-                    threads.forEach { t -> runCatching { t.join(1_000) } }
-                }
-            }
-
-            // Запуск раздачи: add → выбор файла → preload → прогрев. true — плеер запущен.
-            suspend fun playTorrent(m: String): Boolean {
-                val ts = withContext(Dispatchers.IO) {
-                    com.torrenttv.app.data.TorrServeService.addMagnet(tsHost, m, item.title) { s -> status = s }
-                }
-                val file = pickFile(ts ?: return false) ?: return false
-                val buffered = withContext(Dispatchers.IO) {
-                    com.torrenttv.app.data.TorrServeService.preloadFile(tsHost, ts.hash, file) { s -> status = s }
-                }
-                com.torrenttv.app.data.AppLog.log(
-                    "player",
-                    "torrserve: ok hash=${ts.hash} file=\"${file.path}\" buffered=$buffered",
-                )
-                if (!buffered) return false
-                // Прогрев потока: TorrServe начинает отдавать файл не сразу
-                // (пиры + 1080p), и ExoPlayer успевал получить TIMEOUT на старте
-                // («Полдень» не запускался, хотя файл живой). Читаем ЦИКЛОМ до
-                // 512 КБ: один read() отдавал только 823 байта заголовка MKV,
-                // из-за чего живой поток ошибочно считался мёртвым.
-                val warm = withContext(Dispatchers.IO) {
-                    runCatching {
-                        val u = com.torrenttv.app.data.TorrServeService.streamUrl(tsHost, ts.hash, file)
-                        val at = System.currentTimeMillis()
-                        val c = java.net.URL(u).openConnection() as java.net.HttpURLConnection
-                        c.connectTimeout = 20_000
-                        c.readTimeout = 60_000
-                        c.setRequestProperty("Range", "bytes=0-524287")
-                        c.connect()
-                        var got = 0
-                        val buf = ByteArray(65_536)
-                        c.inputStream.use { ins ->
-                            while (got < 512 * 1024 && System.currentTimeMillis() - at < 60_000) {
-                                val n = ins.read(buf)
-                                if (n <= 0) break
-                                got += n
-                            }
-                        }
-                        c.disconnect()
-                        (System.currentTimeMillis() - at) to got
-                    }.getOrNull()
-                }
-                // ВАЖНО: хвост файла больше НЕ читаем (было в v0.8.4–v0.8.6).
-                // Запрос Range с конца переключал приоритеты TorrServe на
-                // последние куски — голова файла переставала качаться, и
-                // плеер стоял на первом кадре («Полдень»: картинка как на
-                // паузе, через 10 с ERROR_CODE_TIMEOUT). MKV ExoPlayer
-                // читает и без cues — seek чуть медленнее, зато играет.
-                com.torrenttv.app.data.AppLog.log(
-                    "player",
-                    "torrserve: прогрев ${warm?.first ?: -1} мс, байт ${warm?.second ?: -1}",
-                )
-                val warmKb = (warm?.second ?: 0) / 1024
-                if (warmKb < 128) {
-                    com.torrenttv.app.data.AppLog.log(
-                        "player",
-                        "torrserve: медленный старт ($warmKb КБ за ${warm?.first ?: -1} мс) — ждём буферизацию",
-                    )
-                }
-                torrLink = com.torrenttv.app.data.TorrServeService.streamUrl(tsHost, ts.hash, file)
-                // Серии для переключения в плеере: видео-файлы в естественном
-                // порядке (E01, E02…), индекс текущего — по запущенному файлу
-                val video = ts.files.filter {
-                    it.path.substringAfterLast('.', "").lowercase() in TorrentEngine.VIDEO_EXT
-                }.sortedWith { x, y -> TorrentEngine.naturalCompare(x.path, y.path) }
-                tsAllFiles = video
-                tsFiles = video.mapIndexed { i, f -> i to f.path }
-                tsCurrent = video.indexOfFirst { it.path == file.path }
-                tsHostStr = tsHost
-                tsHashStr = ts.hash
-                // Номер серии для раздельного прогресса («Продолжить»):
-                // общий парсер понимает и «S05E06», и «03. Название.S05…»
-                // (раньше regex [Ee]\d+ не находил номер в начале имени и
-                // писал E00 — «Продолжить» теряла серию и открывала по индексу)
-                val nums = com.torrenttv.app.data.Episode.fileNumbers(file.path)
-                fun epNumOf(path: String): Int = nums?.second ?: 0
-                tsEpNum = epNumOf(file.path)
-                tsSeason = nums?.first
-                    ?: Regex("[Ss](\\d{1,2})").find(file.path)?.groupValues?.get(1)?.toIntOrNull()
-                    ?: Regex("(\\d{1,2})\\s*[сС]езон").find(file.path)?.groupValues?.get(1)?.toIntOrNull() ?: 0
-                // Понятный лог: какую серию реально запустили (гонка могла
-                // выбрать другую раздачу — по логу сразу видно что открылось)
-                com.torrenttv.app.data.AppLog.log(
-                    "player",
-                    "запущена серия: S%02dE%02d «%s» (раздача %s…, файлов %d)".format(
-                        tsSeason, tsEpNum, file.path.substringAfterLast('/'), ts.hash.take(8), ts.files.size,
-                    ),
-                )
-                // Zona-стиль для TorrServe: сериал впервые — сразу список серий
-                val firstRun = episode == null && startIndex < 0 && !store.hasLastFile(item)
-                tsShowFiles = firstRun && tsFiles.size > 1
-                if (!tsShowFiles) {
-                    store.saveLastWatched(item, tsCurrent, file.path)
-                }
-                // Предзагрузка следующей серии фоном (как у Stremio):
-                // пока смотрим текущую, TorrServe качает следующую
-                scope.launch(Dispatchers.IO) {
-                    val order = ts.files.filter {
-                        it.path.substringAfterLast('.', "").lowercase() in TorrentEngine.VIDEO_EXT
-                    }.sortedWith { x, y ->
-                        TorrentEngine.naturalCompare(x.path, y.path)
-                    }
-                    val pos = order.indexOfFirst { it.path == file.path }
-                    val next = if (pos >= 0) order.getOrNull(pos + 1) else null
-                    if (next != null) {
-                        com.torrenttv.app.data.TorrServeService.preloadFile(tsHost, ts.hash, next) { }
-                    }
-                }
-                return true
-            }
-
-            // Волна 1: запуск сохранённых раздач. Если известна серия —
-            // ТОЛЬКО раздачи с ней (иначе подмена серии), гонка максимум из 2.
-            val race = if (episode != null) episodeOk.take(2) else ranked.take(2)
-            if (race.isNotEmpty()) {
-                status = if (race.size > 1) "Запускаю раздачи наперегонки…" else "Подключаюсь к раздаче…"
-                val winner1 = raceWinner(race, seconds = 120)
-                com.torrenttv.app.data.AppLog.log(
-                    "player",
-                    "гонка сохранённых раздач: ${race.size} шт, победила ${winner1?.take(40) ?: "никакая"}",
-                )
-                if (winner1 != null && playTorrent(winner1)) return@LaunchedEffect
-            } else {
-                com.torrenttv.app.data.AppLog.log(
-                    "player",
-                    "ни в одной сохранённой раздаче нет нужной серии — ищу живую",
-                )
-            }
-
-            // Волна 2: ни одна сохранённая не качается — ищем свежие раздачи сами.
-            // Универсальное решение «не хочу каждый сериал разбирать»: и «Полдень»,
-            // и «Титаны» — мёртвая раздача заменяется живой с лучшими сидами
-            // автоматически. При явном выборе файла (startIndex >= 0) не ищем.
-            if (startIndex < 0) {
-                status = "Сохранённые раздачи не качаются — ищу живые…"
-                com.torrenttv.app.data.AppLog.log("player", "авто-поиск замены: сохранённые раздачи не дали поток")
-                val found = runCatching {
-                    com.torrenttv.app.data.TorrentSearch.searchDetailed(
-                        query = item.title,
-                        isTvShow = episode != null || item.type != "movie",
-                        imdbId = item.imdbId,
-                        jackett = store.jackettConfig(),
-                        privateTrackers = store.privateTrackers(),
-                        excludedKeywords = store.excludedKeywords().toSet(),
-                    ).first
-                }.getOrElse {
-                    com.torrenttv.app.data.AppLog.log("player", "авто-поиск FAIL: ${it.message}")
-                    emptyList()
-                }.sortedByDescending { it.seeds }.take(3)
-                com.torrenttv.app.data.AppLog.log(
-                    "player",
-                    "авто-поиск: найдено ${found.size} кандидатов: " +
-                        found.joinToString("; ") { "${it.name.take(40)} (${it.seeds} сидов)" },
-                )
-                val winner2 = raceWinner(found.map { com.torrenttv.app.data.TorrentSearch.toMagnet(it) }, seconds = 120)
-                if (winner2 != null && playTorrent(winner2)) {
-                    // Раздача из поиска — сохраняем магнит, чтобы в следующий
-                    // раз «Продолжить» сразу попало в живую раздачу
-                    store.saveMagnet(item, winner2, "")
-                    com.torrenttv.app.data.AppLog.log("player", "авто-поиск: победившая раздача запущена и сохранена")
-                    return@LaunchedEffect
-                }
-            }
-
-            // Ничего не качается ни из сохранённых, ни из поиска
-            com.torrenttv.app.data.AppLog.log(
-                "player",
-                "torrserve: no buffer ни у одной из ${ranked.size} сохранённых + ${if (startIndex < 0) "поисковых" else "0"} раздач, fallback to internal engine",
-            )
-            if (!store.fallbackInternal() && store.torrServeConfigured()) {
-                // ТВ не должен качать гигабайты сам: TorrServe на отдельном
-                // сервере — при его отказе показываем причину, а не качаем фильм
-                // на телевизор (политика «сервер качает, ТВ стримит»)
-                status = "TorrServe не качает ни одну из раздач — проверьте скорость в вебе TorrServe или включите «Качать на ТВ»"
-                com.torrenttv.app.data.AppLog.log("player", "фолбэк на ТВ отключён настройкой — остановка")
-                return@LaunchedEffect
-            }
-        }
 
         com.torrenttv.app.data.AppLog.log("player", "startStream: ${magnet.take(90)}")
 
@@ -599,62 +256,6 @@ fun PlayerScreen(
         bufferedPct = 100
     }
 
-    // TorrServe готов — играем его HTTP-стрим родным онлайн-плеером.
-    // Серии TorrServe-раздачи: переключение прямо в плеере (как в Zona)
-    val tl = torrLink
-    if (tl != null) {
-        OnlinePlayerScreen(
-            link = OnlineLink(
-                url = tl,
-                label = "torrserve",
-                season = tsSeason.takeIf { it > 0 && tsEpNum > 0 } ?: 0,
-                episode = tsEpNum,
-            ),
-            item = item,
-            title = item.title,
-            onBack = onBack,
-            showFilesOnStart = tsShowFiles,
-            files = tsFiles,
-            currentFile = tsCurrent,
-            onPickTorrent = onPickTorrent,
-            onSelectFile = { n ->
-                val host = tsHostStr ?: return@OnlinePlayerScreen
-                val hash = tsHashStr ?: return@OnlinePlayerScreen
-                val f = tsFiles.getOrNull(n)?.let { (_, path) ->
-                    tsAllFiles.firstOrNull { it.path == path }
-                } ?: return@OnlinePlayerScreen
-                scope.launch {
-                    status = "Переключаю серию…"
-                    val ok = withContext(Dispatchers.IO) {
-                        com.torrenttv.app.data.TorrServeService.preloadFile(host, hash, f) { }
-                    }
-                    if (ok) {
-                        tsCurrent = n
-                        val nums2 = com.torrenttv.app.data.Episode.fileNumbers(f.path)
-                        tsEpNum = nums2?.second
-                            ?: Regex("[Ee](\\d{1,3})").find(f.path.substringAfterLast('/'))
-                                ?.groupValues?.get(1)?.toIntOrNull() ?: 0
-                        tsSeason = nums2?.first
-                            ?: Regex("[Ss](\\d{1,2})").find(f.path)?.groupValues?.get(1)?.toIntOrNull()
-                            ?: Regex("(\\d{1,2})\\s*[сС]езон").find(f.path)?.groupValues?.get(1)?.toIntOrNull() ?: 0
-                        torrLink = com.torrenttv.app.data.TorrServeService.streamUrl(host, hash, f)
-                        store.saveLastWatched(item, n, f.path)
-                        com.torrenttv.app.data.AppLog.log(
-                            "player",
-                            "запущена серия: S%02dE%02d «%s» (переключение)".format(
-                                tsSeason, tsEpNum, f.path.substringAfterLast('/'),
-                            ),
-                        )
-                        com.torrenttv.app.data.AppLog.log("player", "torrserve: switched to \"${f.path}\"")
-                    } else {
-                        com.torrenttv.app.data.AppLog.log("player", "torrserve: switch failed")
-                    }
-                }
-            },
-        )
-        return
-    }
-
     val st = stream
     if (st != null && bufferedPct >= 100) {
         VideoPlayer(
@@ -694,7 +295,6 @@ fun PlayerScreen(
                 }
             },
             onPickTorrent = onPickTorrent,
-            externalUrl = torrLink,
             skipSegs = skipSegs,
             onSearch = onSearch,
             audioMode = audioMode,
@@ -712,10 +312,16 @@ fun PlayerScreen(
             verticalArrangement = Arrangement.Center,
         ) {
             Text(item.title, color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
-            // Реальное качество (из имени файла, не названия раздачи)
-            val bufQuality = tsFiles.getOrNull(tsCurrent)?.let { (_, path) ->
-                com.torrenttv.app.data.ReleaseQuality.fromFileName(path)
-            } ?: ""
+            // Реальное качество — из названия раздачи (dn magnet-ссылки)
+            val bufQuality = remember(magnet) {
+                magnet?.let { m ->
+                    runCatching {
+                        java.net.URLDecoder.decode(
+                            Regex("[&?]dn=([^&]*)").find(m)?.groupValues?.get(1) ?: "", "UTF-8",
+                        )
+                    }.getOrDefault("")
+                }?.let { com.torrenttv.app.data.ReleaseQuality.fromFileName(it) } ?: ""
+            }
             if (episode != null) {
                 Spacer(Modifier.height(6.dp))
                 Text(episode.code, color = Color(0xFFE8ECF4), fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
@@ -771,8 +377,6 @@ private fun VideoPlayer(
     onSelectFile: (Int) -> Unit = {},
     /** «Другое качество»: вернуться к выбору раздач. */
     onPickTorrent: () -> Unit = {},
-    /** URL для внешнего плеера (TorrServe) или null — внешний недоступен. */
-    externalUrl: String? = null,
     /** Разметка пропуска (заставка/пересказ/титры) из открытых баз. */
     skipSegs: List<com.torrenttv.app.data.SkipSeg> = emptyList(),
     /** 🔍 Поиск — уйти во вкладку поиска. */
@@ -1821,61 +1425,6 @@ private fun VideoPlayer(
                         focusedContentColor = Color.Black,
                     ),
                 ) { Text("🎧 Аудио-режим", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
-                androidx.tv.material3.Surface(
-                    onClick = {
-                        showGear = false
-                        val url = externalUrl
-                        if (url == null) {
-                            gearMsg = "Внешний плеер доступен при стриме через TorrServe"
-                        } else {
-                            // Бесшовный запуск: берём плеер, выбранный владельцем
-                            // один раз (MX Player и т.п.) — без меню «Открыть
-                            // с помощью». Не выбран — берём единственный
-                            // установленный видеоплеер; меню — только в крайнем случае.
-                            val ls = com.torrenttv.app.data.LocalStore(context)
-                            val base = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
-                                setDataAndType(android.net.Uri.parse(url), "video/*")
-                                addFlags(
-                                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                                        android.content.Intent.FLAG_ACTIVITY_NEW_TASK
-                                )
-                            }
-                            val saved = ls.externalPlayerPackage()
-                            val ok = when {
-                                saved.isNotBlank() ->
-                                    runCatching { context.startActivity(base.apply { setPackage(saved) }) }
-                                        .getOrElse { false }.also { started ->
-                                            if (started == false) ls.setExternalPlayerPackage("")
-                                        }
-                                else -> {
-                                    val apps = runCatching {
-                                        context.packageManager.queryIntentActivities(base, 0)
-                                    }.getOrDefault(emptyList())
-                                    if (apps.size == 1) {
-                                        val pkg = apps.first().activityInfo.packageName
-                                        ls.setExternalPlayerPackage(pkg)
-                                        runCatching { context.startActivity(base.apply { setPackage(pkg) }) }
-                                            .getOrElse { false }
-                                    } else {
-                                        runCatching { context.startActivity(base) }.getOrElse { false }
-                                    }
-                                }
-                            }
-                            if (ok == false) {
-                                gearMsg = "Внешний плеер не найден — установите VLC или MX Player"
-                            }
-                        }
-                    },
-                    shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
-                    ),
-                    colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
-                        containerColor = Color.Transparent,
-                        contentColor = Color.White,
-                        focusedContainerColor = Color(0xFFE8ECF4),
-                        focusedContentColor = Color.Black,
-                    ),
-                ) { Text("⤴ Внешний плеер", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
                 Spacer(Modifier.height(4.dp))
                 // Скрытие панели: цикл по вариантам прямо в меню (выбор сохраняется)
                 androidx.tv.material3.Surface(

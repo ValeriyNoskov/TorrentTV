@@ -173,9 +173,6 @@ fun OnlinePlayerScreen(
     // зацикливать не надо — предлагаем сменить качество (🧲)
     var stallRestarts by remember { mutableStateOf(0) }
     var showStalled by remember { mutableStateOf(false) }
-    // Фактическое состояние торрента на TorrServe в момент зависания
-    // (скачано/пиров): отделяет «сервер не качает» от проблем плеера
-    var stallStats by remember { mutableStateOf("") }
     var retryCount by remember { mutableStateOf(0) }
     // Когда была последняя ошибка: счётчик повторов сбрасываем только после
     // 20 секунд стабильного показа, иначе каждый READY обнулял попытки
@@ -245,25 +242,13 @@ fun OnlinePlayerScreen(
     }
 
     val player = remember(link.url, retryTick) {
-        // CDN проверяет Referer: у Filmix — filmix.ac, у HDRezka — её зеркало.
-        // TorrServe (label="torrserve") — локальный стрим, Referer не нужен.
-        // TorrServe-движок узнаём по адресу, а не по метке ссылки:
-        // SmartPlay создаёт ссылки с произвольными label («⚡ Играть сразу…»),
-        // из-за метки не срабатывали retry/таймауты.
-        // ВАЖНО: TorrServe может стоять не на 127.0.0.1, а на другом хосте
-        // в сети (192.168.3.78:8090) — раньше такой поток считался обычным
-        // HTTP: таймаут 15 сек вместо 60 и без повторов, отсюда «просмотр встал».
-        val tsHost = store.torrServeHost().trimEnd('/')
-        val isTorrserve = (tsHost.isNotBlank() && link.url.startsWith(tsHost)) ||
-            (link.url.contains(":8090/") && link.url.contains("/stream/"))
-        val referer = if (isTorrserve) "" else link.referer.ifBlank { "https://filmix.ac/" }
+        // CDN проверяет Referer: у Filmix — filmix.ac, у HDRezka — её зеркало
+        val referer = link.referer.ifBlank { "https://filmix.ac/" }
         val httpFactory = DefaultHttpDataSource.Factory()
             .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-            .apply { if (referer.isNotBlank()) setDefaultRequestProperties(mapOf("Referer" to referer)) }
+            .apply { setDefaultRequestProperties(mapOf("Referer" to referer)) }
             .setConnectTimeoutMs(15_000)
-            // TorrServe отдаёт первые байты, пока качает куски с пиров:
-            // 60 сек на чтение, иначе media3 рвёт живой поток по таймауту
-            .setReadTimeoutMs(if (isTorrserve) 120_000 else 15_000)
+            .setReadTimeoutMs(15_000)
         // media3 1.11 включила «детектор зависаний»: если позиция не двигается
         // 10 секунд, поток рвётся ошибкой ERROR_CODE_TIMEOUT, хотя он живой —
         // торрент-стрим просто медленно наливает буфер на старте («Полдень»:
@@ -356,18 +341,18 @@ fun OnlinePlayerScreen(
                                 "причина=${error.cause?.javaClass?.simpleName}: ${error.cause?.message?.take(160)} " +
                                 "link=${link.url.take(120)}",
                         )
-                        // TorrServe часто не успевает скачать начало новой серии —
+                        // Живой поток иногда не успевает отдать начало —
                         // молча перезапускаем плеер, без алармов.
                         // Пауза растёт: медленная раздача (4 сида, ~0.7 МБ/с) за 1.5 с
                         // не успевает отдать даже начало файла — раньше 3 попытки
                         // заканчивались ошибкой, хотя файл был жив
                         lastErrorAt = System.currentTimeMillis()
-                        // 6 попыток: у медленных раздач TorrServe стартует дольше
-                        if (isTorrserve && retryCount < 6) {
+                        // 6 попыток: у медленных раздач старт дольше
+                        if (retryCount < 6) {
                             retryCount++
                             seekInfo = "🔄 Запускаю поток (попытка ${retryCount + 1})…"
                             panelTick++
-                            // TorrServe после IO-ошибки (2000) ещё докачивает серию —
+                            // После IO-ошибки (2000) источник ещё докачивает данные —
                             // мгновенный рестарт попадает в то же состояние
                             val waitMs = (4000L * retryCount).coerceAtMost(20_000L) // 4…20 с
                             kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
@@ -422,11 +407,7 @@ fun OnlinePlayerScreen(
         }
     }
     DisposableEffect(player) {
-        // Плеер активен → качалка приостанавливается: канал сервера отдаёт
-        // стрим, а не докачку («сервер качает, ТВ стримит» — по очереди)
-        com.torrenttv.app.data.ServerDownloads.setPlayerActive(true)
         onDispose {
-            com.torrenttv.app.data.ServerDownloads.setPlayerActive(false)
             val pos = (player.currentPosition / 1000).toInt()
             val dur = (player.duration / 1000).toInt()
             if (saveProgress && pos > 10 && dur > 0) {
@@ -524,18 +505,7 @@ fun OnlinePlayerScreen(
     }
 
     // Детектор зависания стрима: играет, но позиция И буфер стоят 30+ сек —
-    // тихо перезапускаем (TorrServe иногда залипает; раньше — только руками)
-    // Опрос состояния торрента на сервере: скачано/пиров — сразу видно,
-    // качает ли TorrServe вообще (источник почти всегда один: пиры)
-    suspend fun torrStatsLine(url: String): String {
-        val hash = Regex("[?&]link=([a-fA-F0-9]{40})").find(url)?.groupValues?.get(1)
-            ?: return "статус недоступен (нет hash)"
-        val host = url.substringBefore("/stream/")
-        val t = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            runCatching { com.torrenttv.app.data.TorrServeService.get(host, hash) }.getOrNull()
-        } ?: return "статус недоступен (сервер не ответил)"
-        return "сервер: скачано ${t.preloadedBytes / 1024 / 1024} МБ, пиров ${t.peers}, stat=${t.stat}"
-    }
+    // тихо перезапускаем (раньше — только руками)
 
     LaunchedEffect(player, retryTick) {
         var stuck = 0
@@ -572,8 +542,6 @@ fun OnlinePlayerScreen(
             if (pos == lastPos && buf == lastBuf) {
                 stuck++
                 if (stuck >= 6) { // 6 × 5 сек = 30 секунд без движения
-                    stallStats = torrStatsLine(link.url)
-                    com.torrenttv.app.data.AppLog.log("player", "torrserve при зависании: $stallStats")
                     stallRestarts++
                     if (stallRestarts >= 3) {
                         // Раздача не качается: не зацикливаемся, зовём сменить качество
@@ -1505,8 +1473,7 @@ fun OnlinePlayerScreen(
                 Text("📡 Стрим не загружается", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    if (stallStats.isNotBlank()) stallStats
-                    else "Раздача не отдаёт данные — попробуйте другую",
+                    "Раздача не отдаёт данные — попробуйте другую",
                     color = Color.White.copy(alpha = 0.6f),
                     fontSize = 15.sp,
                 )
