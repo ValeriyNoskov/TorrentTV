@@ -298,6 +298,19 @@ fun PlayerScreen(
         val ctx = context
         Thread {
             runCatching {
+                // VLC/MX Player ищут индекс MKV (Cues) в конце файла сразу
+                // после открытия: если хвост ещё не скачан — плеер тупит на
+                // поиске ключевых кадров. Ждём готовности хвоста до 25 с
+                val cueFrom = (st.fileSize - 8L * 1024 * 1024).coerceAtLeast(0)
+                var waited = 0
+                while (waited < 25_000 && !st.isRangeReady(cueFrom, st.fileSize - cueFrom)) {
+                    Thread.sleep(500)
+                    waited += 500
+                }
+                com.torrenttv.app.data.AppLog.log(
+                    "player",
+                    "внешний плеер: индекс ${if (waited < 25_000) "готов за ${waited / 1000}с" else "НЕ дождались (25с)"} — открываю",
+                )
                 val uri = androidx.core.content.FileProvider.getUriForFile(
                     ctx,
                     ctx.packageName + ".updateprovider",

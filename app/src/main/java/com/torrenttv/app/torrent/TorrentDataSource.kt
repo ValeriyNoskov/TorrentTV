@@ -39,16 +39,9 @@ class TorrentDataSource(private val st: TorrentEngine.StreamSession) : DataSourc
                 "fileOffset=${st.fileOffset / 1024 / 1024}МБ pos=${dataSpec.position / 1024 / 1024}МБ " +
                 "кусок#${pieceAbs / 1024 / 1024}МБ",
         )
-        // Seek в середину: поднимаем приоритет кусков вокруг новой позиции,
-        // иначе sequential-загрузка будет ползти с начала и read заблокируется
-        if (dataSpec.position > 0) {
-            st.boostPiecesAround(pieceAbs)
-            // SEQUENTIAL_DOWNLOAD качает строго по порядку и ДУШИТ приоритеты:
-            // куски конца файла (индекс MKV/Cues) при нём не скачаются, пока
-            // не скачаются все предыдущие ~13 ГБ пачки. Перемотка/чтение с
-            // середины = нужен приоритетный режим (stremio-стиль)
-            runCatching { st.clearSequential() }
-        }
+        // Seek в середину: поднимаем приоритет кусков вокруг новой позиции.
+        // SEQUENTIAL больше не включается — порядок задаётся приоритетами
+        if (dataSpec.position > 0) st.boostPiecesAround(pieceAbs)
         raf = try {
             RandomAccessFile(st.videoFile, "r")
         } catch (e: Exception) {

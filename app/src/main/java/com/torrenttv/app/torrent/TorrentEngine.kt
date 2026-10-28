@@ -576,13 +576,15 @@ object TorrentEngine {
             "торрент добавлен: файлов=$numFiles, выбранный=$best, всего в сессии=${session.swig().get_torrents().size}",
         )
 
-        try {
-            h.setFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD, TorrentFlags.SEQUENTIAL_DOWNLOAD)
-        } catch (_: Exception) {
-        }
+        // БЕЗ SEQUENTIAL_DOWNLOAD: он качает строго по порядку и душит
+        // приоритеты — индекс MKV (Cues) в конце пачки не скачался бы
+        // никогда (лог 17:19-17:45: ExoPlayer прыгал в конец и ждал вечно).
+        // Порядок задаётся приоритетами: заголовок и Cues — SEVEN ниже,
+        // остальное NORMAL. Скорость раздач 5-8 МБ/с при битрейте ~0.5 МБ/с
+        // даёт запас, равномерная докачка всего файла не помешает просмотру
         // Предзагрузка следующей серии (как у Stremio): следующий видеофайл
-        // с приоритетом LOW вместо IGNORE — докачивается после текущей серии,
-        // не отнимая скорость. Переключение серий становится мгновенным
+        // с приоритетом TWO вместо IGNORE — докачивается после текущей серии,
+        // не отнимая скорость
         val st = StreamSession(h, ti, best, fileOffset, bestSize, saveDir)
         try {
             val order = st.videoFiles()
@@ -604,9 +606,8 @@ object TorrentEngine {
             }
         }
         // Индекс MKV (Cues) лежит в КОНЦЕ файла: без него ExoPlayer/VLC
-        // прыгают в конец и висят, пока индекс не скачается (лог 17:19:
-        // pos=2058МБ, готовность 0% минуту при peers=20 — SEQUENTIAL душит
-        // приоритеты кусков). Последним куска файла — высокий приоритет
+        // прыгают в конец и висят, пока индекс не скачается. Плюс заголовок
+        // (EBML/Tracks) в начале: он нужен плееру первым делом
         runCatching {
             val pieceLen = ti.pieceLength()
             if (pieceLen > 0) {
@@ -615,6 +616,14 @@ object TorrentEngine {
                 val cueFrom = ((endAbs - 8L * 1024 * 1024).coerceAtLeast(fileOffset) / pieceLen).toInt()
                     .coerceIn(0, lastPiece)
                 for (i in cueFrom..lastPiece) h.piecePriority(i, Priority.SEVEN)
+                // Заголовок: первые 4 МБ файла
+                val headTo = ((fileOffset + 4L * 1024 * 1024) / pieceLen).toInt()
+                    .coerceIn(0, lastPiece)
+                for (i in 0..headTo) h.piecePriority(i, Priority.SEVEN)
+                com.torrenttv.app.data.AppLog.log(
+                    "engine",
+                    "приоритеты: заголовок куски 0-$headTo, Cues куски $cueFrom-$lastPiece = SEVEN",
+                )
             }
         }
 
