@@ -45,6 +45,11 @@ data class WatchEntry(
  */
 class LocalStore(context: Context) {
 
+    companion object {
+        /** Спец-значение: недосмотренное удаляется при выходе с экрана плеера. */
+        const val RETENTION_ON_EXIT = -1
+    }
+
     private val prefs: SharedPreferences =
         context.getSharedPreferences("torrenttv", Context.MODE_PRIVATE)
 
@@ -887,6 +892,15 @@ class LocalStore(context: Context) {
 
     /** TTL недосмотренного в мс (0 = выключен). */
     fun retentionMs(): Long = retentionDays() * 24L * 3600 * 1000
+
+    /**
+     * Режим «окно просмотра»: качается ~10 мин вперёд от позиции плеера,
+     * хвост файла не докачивается. Бросил на 20-й минуте — на диске
+     ~ только просмотренный кусок, а не весь фильм.
+     */
+    fun streamWindow(): Boolean = prefs.getBoolean("stream_window", false)
+
+    fun setStreamWindow(v: Boolean) = prefs.edit().putBoolean("stream_window", v).apply()
 
     /** API-ключ Real-Debrid (debrid-стрим: magnet → прямая ссылка без скачания). */
     fun rdKey(): String = prefs.getString("rd_key", "") ?: ""

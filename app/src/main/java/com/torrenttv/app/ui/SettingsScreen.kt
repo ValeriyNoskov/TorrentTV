@@ -423,6 +423,18 @@ fun SettingsScreen(onBack: () -> Unit) {
                             store.setUseExternalPlayer(extPlayer)
                         }
                         SettingsNote("Видео будет открываться в VLC/MX Player, если он установлен.")
+                        // Окно просмотра: качается ~5 мин вперёд от позиции,
+                        // хвост файла не докачивается (экономный режим)
+                        val winMode = store.streamWindow()
+                        SettingsRow(
+                            title = if (winMode) "✅ Окно просмотра" else "⬜ Окно просмотра",
+                            value = if (winMode) "ВКЛ — качается ~5 мин вперёд от места просмотра"
+                                    else "ВЫКЛ — файл качается целиком",
+                            valueOk = winMode,
+                        ) {
+                            store.setStreamWindow(!winMode)
+                            com.torrenttv.app.data.AppLog.log("settings", "нажал: окно просмотра → ${!winMode}")
+                        }
                         // Предзагрузка следующей серии: мгновенное переключение,
                         // но кеш растёт быстрее (доп. файл ~1-2 ГБ). Выключение —
                         // «качать только то, что смотрю»
@@ -460,12 +472,15 @@ fun SettingsScreen(onBack: () -> Unit) {
                         // TTL недосмотренного: начатое и забытое удаляется само
                         // по возрасту, не дожидаясь лимита 6 ГБ
                         val retentionTitles = mapOf(
+                            com.torrenttv.app.data.LocalStore.RETENTION_ON_EXIT to "Удалять при выходе из плеера",
                             0 to "Не удалять (только лимит 6 ГБ)",
                             1 to "1 день",
                             2 to "2 дня",
                             7 to "Неделя",
                         )
-                        val retOrder = listOf(2, 1, 7, 0)
+                        val retOrder = listOf(
+                            com.torrenttv.app.data.LocalStore.RETENTION_ON_EXIT, 2, 1, 7, 0,
+                        )
                         val retDays = store.retentionDays()
                         SettingsRow(
                             title = "Хранить недосмотренное",

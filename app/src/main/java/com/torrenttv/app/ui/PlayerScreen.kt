@@ -88,6 +88,10 @@ fun PlayerScreen(
 
     val context = LocalContext.current
     val store = remember { LocalStore(context) }
+    // Окно просмотра (Настройки → Плеер): качается ~5 мин вперёд от позиции,
+    // хвост файла не докачивается. Объявлено до всех блоков: буферизация,
+    // тик плеера и onDispose используют одно значение
+    val windowMode = store.streamWindow()
     val scope = rememberCoroutineScope()
     // Карточка без меты (заглушка из поиска раздач): дотягиваем постер/год/IMDb
     // с КП — иначе в «Продолжить» карточка без постера (жалоба по «Спецам»)
@@ -334,6 +338,14 @@ fun PlayerScreen(
         // стартовой позиции (havePiece), а не по общей скачанной голове: при
         // возобновлении с середины голова файла ни при чём
         val startPos = if (resumeSec > 30 && durationSec > 0) st.fileSize * resumeSec / durationSec else 0L
+        // Окно просмотра: пока плеер не тикает, держим окно вокруг стартовой
+        // позиции — иначе при «Продолжить» буферизация ждёт куски с IGNORE
+        if (windowMode) {
+            withContext(Dispatchers.IO) {
+                st.boostWindow(st.fileOffset + startPos, 48L * 1024 * 1024)
+            }
+            com.torrenttv.app.data.AppLog.log("player", "окно просмотра: включено, старт с ${(startPos / 1024 / 1024)} МБ")
+        }
         val deadline = System.currentTimeMillis() + 180_000
         val sessionStart = System.currentTimeMillis()
         // Зомби-торренты: при таймауте или отмене (BACK во время буферизации)
@@ -676,6 +688,9 @@ private fun VideoPlayer(
     audioMode: Boolean = false,
     onAudioMode: (Boolean) -> Unit = {},
 ) {
+    // Окно просмотра (Настройки → Плеер): качается ~5 мин вперёд от позиции.
+    // Используется тиком плеера и чисткой при выходе
+    val windowMode = store.streamWindow()
     val context = LocalContext.current
     val sourceKey = item.storeKey + (episode?.sourceSuffix ?: "")
     // Позиция просмотра хранится по конкретной серии (файлу торрента)
@@ -964,7 +979,13 @@ private fun VideoPlayer(
                 if (player.duration > 0 && st.fileSize > 0) {
                     val bps = st.fileSize * 1000.0 / player.duration
                     val posBytes = (bps * player.currentPosition / 1000.0).toLong()
-                    st.boostPiecesAround(st.fileOffset + posBytes + (bps * 120).toLong())
+                    if (windowMode) {
+                        // Окно просмотра: ~5 мин вперёд от позиции, хвост файла
+                        // (и уже не нужное) — вне окна, не докачивается
+                        st.boostWindow(st.fileOffset + posBytes, (bps * 300).toLong())
+                    } else {
+                        st.boostPiecesAround(st.fileOffset + posBytes + (bps * 120).toLong())
+                    }
                 }
             }
         }
@@ -978,10 +999,12 @@ private fun VideoPlayer(
                 )
             }.getOrDefault(false)
             player.release()
-            // Политика кэша: досмотрено до конца — удаляем; недосмотрено —
-            // оставляем на диске для мгновенного «Продолжить просмотр»,
+            // Политика кэша: досмотрено до конца — удаляем; «удалять при
+            // выходе» — стираем и недосмотренное (кеш после сеанса = 0);
+            // иначе оставляем для мгновенного «Продолжить просмотр»,
             // чистку старья делает TorrentCache.enforceLimit перед новым стримом
-            if (finished) {
+            if (finished || store.retentionDays() == com.torrenttv.app.data.LocalStore.RETENTION_ON_EXIT) {
+                if (!finished) com.torrenttv.app.data.AppLog.log("player", "недосмотрено, но режим «удалять при выходе» — папка стёрта")
                 stream.stop()
                 runCatching { stream.saveDir.deleteRecursively() }
             } else {

@@ -366,6 +366,38 @@ object TorrentEngine {
             }
         }
 
+        /**
+         * Окно просмотра: качаем только [absolutePos, absolutePos+spanBytes),
+         * остальной файл (кроме заголовка и хвоста с индексом Cues) — ZERO,
+         * чтобы не докачивать фильм целиком. Хвост нужен MKV-плееру (Cues),
+         * начало — заголовок EBML/Tracks, поэтому они всегда SEVEN.
+         * Перемотка назад: куски уже на диске; далеко вперёд — дозагрузка окна.
+         */
+        fun boostWindow(absolutePos: Long, spanBytes: Long) {
+            try {
+                val pieceLen = ti.pieceLength()
+                if (pieceLen <= 0) return
+                val n = ti.numPieces()
+                val from = (absolutePos / pieceLen).toInt().coerceIn(0, n - 1)
+                val to = ((absolutePos + spanBytes) / pieceLen).toInt().coerceIn(0, n - 1)
+                // Защищённые зоны: заголовок (4 МБ от начала файла) и индекс
+                // Cues (последние 8 МБ файла) — без них ExoPlayer/VLC висят
+                val headTo = ((fileOffset + 4L * 1024 * 1024) / pieceLen).toInt().coerceIn(0, n - 1)
+                val cueFrom = ((fileOffset + fileSize - 8L * 1024 * 1024).coerceAtLeast(fileOffset) / pieceLen)
+                    .toInt().coerceIn(0, n - 1)
+                for (i in from..to) handle.piecePriority(i, Priority.SEVEN)
+                // Понижаем всё вне окна внутри НАШЕГО файла (соседние файлы
+                // пачки не трогаем — у них свои приоритеты)
+                val fFirst = (fileOffset / pieceLen).toInt().coerceIn(0, n - 1)
+                val fLast = ((fileOffset + fileSize - 1) / pieceLen).toInt().coerceIn(0, n - 1)
+                for (i in fFirst..fLast) {
+                    if (i in from..to || i <= headTo || i >= cueFrom) continue
+                    handle.piecePriority(i, Priority.IGNORE)
+                }
+            } catch (_: Exception) {
+            }
+        }
+
         /** Убрать торрент из сессии (файлы удаляет вызывающий код). */
         fun stop() {
             try {
