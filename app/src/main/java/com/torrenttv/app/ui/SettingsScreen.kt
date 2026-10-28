@@ -115,6 +115,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     var tmdbKey by remember { mutableStateOf(store.tmdbApiKey()) }
     var ghToken by remember { mutableStateOf(store.githubToken()) }
     var rdKey by remember { mutableStateOf(store.rdKey()) }
+    var tbKey by remember { mutableStateOf(store.tbKey()) }
 
     fun openEdit(target: String, current: String, title: String) {
         editTmp = current
@@ -129,6 +130,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 "tmdbkey" -> { store.setTmdbApiKey(editTmp); tmdbKey = editTmp }
                 "ghtoken" -> { store.setGithubToken(editTmp); ghToken = editTmp }
                 "rdkey" -> { store.setRdKey(editTmp); rdKey = editTmp }
+                "tbkey" -> { store.setTbKey(editTmp); tbKey = editTmp }
                 "iptvurl" -> store.setIptvPlaylistUrl(editTmp)
             }
         }
@@ -615,6 +617,11 @@ fun SettingsScreen(onBack: () -> Unit) {
                             value = if (rdKey.isNotBlank()) "•••••••• (вписан)" else "Не задан — торренты стримятся с ТВ",
                             valueOk = rdKey.isNotBlank(),
                         ) { openEdit("rdkey", rdKey, "Real-Debrid API ключ") }
+                        SettingsRow(
+                            title = "TorBox ключ (бесплатный тариф)",
+                            value = if (tbKey.isNotBlank()) "•••••••• (вписан)" else "Не задан — torbox.app → Settings → API",
+                            valueOk = tbKey.isNotBlank(),
+                        ) { openEdit("tbkey", tbKey, "TorBox API ключ") }
                         if (kpKey.isNotBlank() || tmdbKey.isNotBlank()) {
                             SettingsRow(title = "🗑 Вернуть общие ключи", value = "", danger = true) {
                                 store.setKpApiKey(""); store.setTmdbApiKey("")
@@ -793,6 +800,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             "tmdbkey" -> "Ключ TMDB"
             "ghtoken" -> "GitHub токен (право Gists)"
             "rdkey" -> "Real-Debrid API ключ"
+            "tbkey" -> "TorBox API ключ"
             "rt" -> "Cookie для RuTracker"
             "kz" -> "Cookie для Kinozal"
             "nnm" -> "Cookie для NNM-Club"

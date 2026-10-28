@@ -145,12 +145,15 @@ fun PlayerScreen(
     // только из главного потока (запись из фона ломает рекомпозицию)
     val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
 
-    // ---- Real-Debrid: настроен ключ — пробуем мгновенную прямую ссылку ----
-    // Успех → играем онлайн-плеером (без скачания, мгновенный старт);
-    // неудача/таймаут → фолбэк на торрент-движок, как раньше
+    // ---- Debrid: настроен ключ (Real-Debrid / TorBox) — пробуем мгновенную
+    // ---- прямую ссылку. Успех → онлайн-плеер без скачания; неудача/таймаут →
+    // ---- фолбэк на торрент-движок, как раньше
     val rdKey = remember { store.rdKey() }
+    val tbKey = remember { store.tbKey() }
     var debridLink by remember(magnet) { mutableStateOf<com.torrenttv.app.ui.OnlineLink?>(null) }
-    var debridDone by remember(magnet) { mutableStateOf(rdKey.isBlank() || magnet == null) }
+    var debridDone by remember(magnet) {
+        mutableStateOf(rdKey.isBlank() && tbKey.isBlank() || magnet == null)
+    }
     var debridFiles by remember(magnet) {
         mutableStateOf<List<Pair<Int, String>>>(emptyList())
     }
@@ -159,39 +162,71 @@ fun PlayerScreen(
     var rdTick by remember(magnet) { mutableStateOf(0) }
 
     LaunchedEffect(magnet, rdTick) {
-        if (magnet == null || rdKey.isBlank()) return@LaunchedEffect
-        status = "Проверяю Real-Debrid…"
-        com.torrenttv.app.data.AppLog.log("player", "Real-Debrid: резолв магнита")
+        if (magnet == null || (rdKey.isBlank() && tbKey.isBlank())) return@LaunchedEffect
+        status = "Проверяю облачный просмотр…"
+        // Общий выбор файла: старт-индекс → эпизод → ручной выбор серии
+        fun pickFrom(names: List<String>): Int {
+            val byStart = if (startIndex in names.indices) startIndex else -1
+            val byEp = episode?.let { ep ->
+                names.indexOfFirst {
+                    com.torrenttv.app.data.Episode.fileMatches(it, ep.season, ep.episode)
+                }
+            } ?: -1
+            val bySaved = rdPick ?: -1
+            return listOf(bySaved, byStart, byEp).firstOrNull { it >= 0 } ?: -1
+        }
+
         val res = withContext(Dispatchers.IO) {
+            // Общий вид результата любого провайдера — для единой обработки
+            data class DebridStream(
+                val url: String,
+                val fileName: String,
+                val files: List<Pair<Int, String>>,
+                val fileIndex: Int,
+                val provider: String,
+            )
             runCatching {
-                com.torrenttv.app.data.RealDebrid.resolve(
-                    rdKey,
-                    magnet,
-                    pick = { fs ->
-                        val byStart = if (startIndex in fs.indices) startIndex else -1
-                        val byEp = episode?.let { ep ->
-                            fs.indexOfFirst {
-                                com.torrenttv.app.data.Episode.fileMatches(it.name, ep.season, ep.episode)
-                            }
-                        } ?: -1
-                        val bySaved = rdPick ?: -1
-                        listOf(bySaved, byStart, byEp).firstOrNull { it >= 0 } ?: -1
-                    },
-                )
+                if (rdKey.isNotBlank()) {
+                    com.torrenttv.app.data.AppLog.log("player", "деbrid: пробую Real-Debrid")
+                    com.torrenttv.app.data.RealDebrid.resolve(
+                        rdKey,
+                        magnet,
+                        pick = { fs -> pickFrom(fs.map { it.name }) },
+                    )?.let {
+                        return@runCatching DebridStream(
+                            it.url, it.fileName,
+                            it.files.mapIndexed { i, f -> i to f.name }, it.fileIndex, "Real-Debrid",
+                        )
+                    }
+                }
+                if (tbKey.isNotBlank()) {
+                    com.torrenttv.app.data.AppLog.log("player", "деbrid: пробую TorBox")
+                    com.torrenttv.app.data.TorBox.resolve(
+                        tbKey,
+                        magnet,
+                        pick = { fs -> pickFrom(fs.map { it.name }) },
+                    )?.let {
+                        return@runCatching DebridStream(
+                            it.url, it.fileName,
+                            it.files.mapIndexed { i, f -> i to f.name }, it.fileIndex, "TorBox",
+                        )
+                    }
+                }
+                null
             }.onFailure {
                 com.torrenttv.app.data.AppLog.log(
                     "player",
-                    "Real-Debrid FAIL: ${it.javaClass.simpleName}: ${it.message}",
+                    "деbrid FAIL: ${it.javaClass.simpleName}: ${it.message}",
                 )
             }.getOrNull()
         }
         if (res != null) {
-            com.torrenttv.app.data.AppLog.log("player", "Real-Debrid: играю «${res.fileName}»")
-            debridFiles = res.files.mapIndexed { i, f -> i to f.name }
+            com.torrenttv.app.data.AppLog.log("player", "${res.provider}: играю «${res.fileName}»")
+            debridFiles = res.files
             debridCurrent = res.fileIndex
-            debridLink = OnlineLink(url = res.url, label = "real-debrid")
+            debridLink = OnlineLink(url = res.url, label = res.provider.lowercase())
         } else {
-            com.torrenttv.app.data.AppLog.log("player", "Real-Debrid: не вышло — стримим торрентом")
+            com.torrenttv.app.data.AppLog.log("player", "деbrid: не вышло — стримим торрентом")
         }
         debridDone = true
     }

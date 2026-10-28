@@ -86,4 +86,30 @@ object TorrentHttp {
     } catch (_: Exception) {
         null
     }
+
+    /** POST multipart-формы (TorBox требует её для createtorrent с магнитом). */
+    fun postMultipart(
+        url: String,
+        fields: Map<String, String>,
+        file: Pair<String, String>? = null, // (поле, содержимое файла) — TorBox: магнит как «файл»
+        headers: Map<String, String> = emptyMap(),
+    ): String? = try {
+        val body = okhttp3.MultipartBody.Builder()
+            .setType(okhttp3.MultipartBody.FORM)
+        for ((k, v) in fields) body.addFormDataPart(k, v)
+        if (file != null) {
+            body.addFormDataPart(
+                file.first,
+                "magnet.txt",
+                file.second.toRequestBody("text/plain".toMediaType()),
+            )
+        }
+        val b = Request.Builder().url(url).post(body.build())
+        headers.forEach { (k, v) -> b.header(k, v) }
+        client.newCall(b.build()).execute().use { resp ->
+            if (!resp.isSuccessful) null else resp.body?.string()
+        }
+    } catch (_: Exception) {
+        null
+    }
 }

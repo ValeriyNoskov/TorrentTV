@@ -873,6 +873,11 @@ class LocalStore(context: Context) {
 
     fun setRdKey(v: String) = prefs.edit().putString("rd_key", v.trim()).apply()
 
+    /** API-ключ TorBox (аналог RD, есть бесплатный тариф). */
+    fun tbKey(): String = prefs.getString("tb_key", "") ?: ""
+
+    fun setTbKey(v: String) = prefs.edit().putString("tb_key", v.trim()).apply()
+
     fun setUseExternalPlayer(v: Boolean) {
         prefs.edit().putBoolean("use_external_player", v).apply()
     }
