@@ -184,7 +184,9 @@ class MainActivity : ComponentActivity() {
         com.torrenttv.app.data.AppLog.recording = store0.loggingEnabled()
         com.torrenttv.app.data.KinopoiskClient.overrideApiKey = store0.kpApiKey()
         com.torrenttv.app.data.TmdbClient.overrideApiKey = store0.tmdbApiKey()
-        // Размер карточек из настроек (Настройки → Плеер → «Размер карточек»)
+        // Размер карточек из настроек (Настройки → Плеер → «Размер карточек»):
+        // сначала одноразовая миграция старого сохранённого дефолта 170 → 120
+        runCatching { if (store0.migrateCompactCards()) com.torrenttv.app.data.AppLog.log("app", "размер карточек мигрирован 170 → 120") }
         com.torrenttv.app.ui.cardWidthDp = store0.cardWidthDp()
         // Разбор интента запуска (голосовой поиск из ассистента при холодном старте)
         val startupVoiceQuery = extractVoiceQuery(intent)

@@ -463,6 +463,20 @@ class LocalStore(context: Context) {
         prefs.edit().putInt("card_width_dp", v).apply()
     }
 
+    /**
+     * Одноразовая миграция: версии до v0.9.31 сохраняли в prefs дефолт 170 —
+     * он перекрывал новый компактный дефолт 120, и постеры оставались
+     * гигантскими. Флаг защищает осознанный выбор пользователя позже:
+     * миграция срабатывает только один раз.
+     */
+    fun migrateCompactCards(): Boolean {
+        if (prefs.getBoolean("card_migrated_compact", false)) return false
+        val old = cardWidthDp()
+        if (old >= 170) setCardWidthDp(120)
+        prefs.edit().putBoolean("card_migrated_compact", true).apply()
+        return old >= 170
+    }
+
     fun setKpApiKey(v: String) {
         prefs.edit().putString("kp_api_key", v).apply()
         KinopoiskClient.overrideApiKey = v

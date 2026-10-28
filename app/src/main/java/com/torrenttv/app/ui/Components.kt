@@ -984,7 +984,7 @@ fun SideBarButton(
                 if (focusRequester != null)
                     Modifier.focusRequester(focusRequester) else Modifier
             )
-            .width(if (expanded) 188.dp else 60.dp)
+            .width(if (expanded) 150.dp else 56.dp)
             .mouseClick { onTab(target) }
             .onFocusChanged { onFocusInBar(it.hasFocus) },
         shape = clickableSurfaceShape(RoundedCornerShape(12.dp)),
@@ -1029,7 +1029,7 @@ fun SideBarExitButton(expanded: Boolean = true, onFocusInBar: (Boolean) -> Unit 
     androidx.tv.material3.Surface(
         onClick = { confirm = true },
         modifier = Modifier
-            .width(if (expanded) 188.dp else 60.dp)
+            .width(if (expanded) 150.dp else 56.dp)
             .onFocusChanged { onFocusInBar(it.hasFocus) },
         shape = clickableSurfaceShape(RoundedCornerShape(12.dp)),
         colors = ClickableSurfaceDefaults.colors(
