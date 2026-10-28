@@ -106,10 +106,18 @@ object TorrentEngine {
         try {
             val params = if (stateF != null && stateF.exists() && stateF.length() > 0) {
                 runCatching {
-                    com.frostwire.jlibtorrent.SessionParams(stateF.readBytes()).apply { setSettings(sp) }
+                    com.frostwire.jlibtorrent.SessionParams(stateF.readBytes())
+                        .apply { setSettings(sp); setPosixDiskIO() }
                 }.getOrNull()
             } else null
-            session.start(params ?: com.frostwire.jlibtorrent.SessionParams(sp))
+            // POSIX-диск вместо mmap-дефолта libtorrent 2.0: mmap сбрасывает
+            // куски на диск ЛЕНИВО (havePiece=true, а на диске ещё нули) —
+            // плеер читает файл напрямую и получал нули вместо заголовка MKV
+            // (PARSING_CONTAINER_UNSUPPORTED при скачанном на 95% файле).
+            // POSIX пишет кусок в файл сразу при завершении
+            val sessionParams = (params ?: com.frostwire.jlibtorrent.SessionParams(sp))
+            runCatching { sessionParams.setPosixDiskIO() }
+            session.start(sessionParams)
             com.torrenttv.app.data.AppLog.log(
                 "engine",
                 "сессия запущена: DHT=${session.isDhtRunning()}" +
