@@ -890,7 +890,13 @@ private fun EditScreen(
             Button(onClick = onCancel) { Text("Отмена") }
         }
         if (externalKb) {
-            runCatching { LaunchedEffect(Unit) { kbFocus.requestFocus() } }
+            // Ретраи: узел не готов мгновенно; runCatching только внутри
+            LaunchedEffect(Unit) {
+                repeat(5) {
+                    runCatching { kbFocus.requestFocus() }
+                    kotlinx.coroutines.delay(60)
+                }
+            }
             androidx.compose.foundation.text.BasicTextField(
                 value = value,
                 onValueChange = onChange,

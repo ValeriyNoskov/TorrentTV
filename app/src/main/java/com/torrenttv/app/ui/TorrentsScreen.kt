@@ -71,12 +71,6 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
     var openFilter by remember { mutableStateOf<String?>(null) }        // открытый диалог фильтра
 
 
-    androidx.compose.runtime.SideEffect {
-        AppLog.log(
-            "torrents",
-            "композиция «Торрентов»: типы=$types жанры=$genres страны=$countries годы=$years",
-        )
-    }
     LaunchedEffect(types, genres, countries, years) {
         store.saveTorrentsFilters(LocalStore.TorrentsFilters(types, genres, countries, years))
     }

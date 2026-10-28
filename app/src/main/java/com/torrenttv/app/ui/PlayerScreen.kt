@@ -138,6 +138,9 @@ fun PlayerScreen(
     var showPanel by remember { mutableStateOf(true) }
 
     // Стриминг встроенным движком jlibtorrent: качает прямо на ТВ по кускам
+    // Колбэки движка приходят из IO/daemon-потоков — Compose-состояние пишем
+    // только из главного потока (запись из фона ломает рекомпозицию)
+    val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
     LaunchedEffect(magnet) {
         if (magnet == null) return@LaunchedEffect
 
@@ -152,7 +155,7 @@ fun PlayerScreen(
                 TorrentEngine.startStream(
                     source = magnet,
                     saveDir = File(context.filesDir, "downloads/" + item.storeKey),
-                    onStatus = { status = it },
+                    onStatus = { s -> mainHandler.post { status = s } },
                     fileIndex = restartFileIndex!!,
                 )
             }
@@ -170,9 +173,11 @@ fun PlayerScreen(
             TorrentEngine.startStream(
                 source = magnet,
                 saveDir = File(context.filesDir, "downloads/" + item.storeKey),
-                onStatus = {
-                    status = it
-                    com.torrenttv.app.data.AppLog.log("player", "status: $it")
+                onStatus = { s ->
+                    mainHandler.post {
+                        status = s
+                        com.torrenttv.app.data.AppLog.log("player", "status: $s")
+                    }
                 },
                 // В пачке сезона включаем файл нужной серии
                 fileMatcher = episode?.let { ep ->
@@ -630,7 +635,20 @@ private fun VideoPlayer(
         }
     }
 
-    BackHandler { onBack() }
+    // Выход из плеера: сначала ПАУЗА — иначе после возврата в меню звук
+    // продолжал играть (жалоба «плеер работает в фоне»)
+    fun exitPlayer() {
+        runCatching { player.pause() }
+        com.torrenttv.app.data.AppLog.log("player", "выход: пауза, возвращаюсь в меню")
+        onBack()
+    }
+
+    // Время armed-BACK: первый BACK только «взводит» выход, второй (в 3 сек) — выходит
+    var backArmedAt by remember { mutableStateOf(0L) }
+
+    // BACK-иерархия и BackHandler'ы — ниже, после объявления оверлеев
+    // (в Compose активен ПОСЛЕДНИЙ зарегистрированный enabled: базовый выход
+    // регистрируем первым, оверлеи — после, они его перекрывают)
 
     var showTrackMenu by remember { mutableStateOf(false) }
     var showGear by remember { mutableStateOf(false) }
@@ -670,6 +688,26 @@ private fun VideoPlayer(
     }
     var panelTick by remember { mutableStateOf(0) }
     val playFocus = remember { FocusRequester() }
+
+    // BACK-иерархия: базовый выход первым, оверлеи после (перекрывают его).
+    // Выход — только двойным BACK (3 сек): первый прячет панель, второй —
+    // выходит (жалоба: «назад сразу закрывает плеер» — как в онлайн-плеере)
+    BackHandler(enabled = showPanel && !showFiles && !showGear && !showJump && !showTrackMenu) {
+        val now = System.currentTimeMillis()
+        if (backArmedAt > 0 && now - backArmedAt < 3000) {
+            com.torrenttv.app.data.AppLog.log("player", "back: выход из плеера (подтверждён)")
+            exitPlayer()
+        } else {
+            showPanel = false
+            backArmedAt = 0
+            com.torrenttv.app.data.AppLog.log("player", "back: скрыл панель")
+        }
+    }
+    BackHandler(enabled = showJump) { showJump = false }
+    BackHandler(enabled = showFiles) { showFiles = false }
+    BackHandler(enabled = showGear) { showGear = false }
+    // Меню дорожек закрывает свой BackHandler внутри TrackMenuOverlay
+
     // Время автоскрытия — настройка из ⚙ (дефолт 20 сек, 0 = не прятать)
     var panelHideSec by remember { mutableStateOf(store.panelHideSec()) }
     LaunchedEffect(panelTick, panelHideSec) {
@@ -681,7 +719,17 @@ private fun VideoPlayer(
             }
         }
     }
-    runCatching { LaunchedEffect(showPanel) { if (showPanel) playFocus.requestFocus() } }
+    // runCatching ВНУТРИ LaunchedEffect с ретраями: фокус-таргет попадает
+    // в иерархию не мгновенно, а защита снаружи краш не ловит — корутина
+    // выполнится позже (панель молча оставалась без фокуса)
+    LaunchedEffect(showPanel) {
+        if (showPanel) {
+            repeat(5) {
+                runCatching { playFocus.requestFocus() }
+                kotlinx.coroutines.delay(60)
+            }
+        }
+    }
 
     // Единый обработчик кнопок пульта — вызывается и из Compose-перехвата
     // (onPreviewKeyEvent на Box), и из PlayerView: панель появляется при
@@ -742,14 +790,16 @@ private fun VideoPlayer(
         KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { player.seekTo(player.currentPosition + 30_000L); seekInfo = "⏩︎ +30 сек"; panelTick++; true }
         KeyEvent.KEYCODE_MEDIA_REWIND -> { player.seekTo((player.currentPosition - 30_000L).coerceAtLeast(0)); seekInfo = "⏪︎ −30 сек"; panelTick++; true }
         KeyEvent.KEYCODE_MENU -> { showTrackMenu = !showTrackMenu; true }
-        // BACK при открытой панели прячет панель, при скрытой — выход из плеера
-        // (меню дорожек не трогаем: его закрывает свой BackHandler в оверлее)
+        // BACK: когда всё закрыто и панель скрыта — первый BACK поднимает
+        // панель с подсказкой «ещё раз — выход», второй подтверждает.
+        // Оверлеи не трогаем: их закрывают BackHandler'ы (свой у меню дорожек)
         KeyEvent.KEYCODE_BACK -> {
-            if (showJump) { showJump = false; true }
-            else if (showFiles || showGear) {
-                showFiles = false; showGear = false; panelTick++; true
-            } else if (showPanel) {
-                showPanel = false; true
+            if (!showPanel && !showFiles && !showGear && !showJump && !showTrackMenu) {
+                showPanel = true
+                panelTick++
+                backArmedAt = System.currentTimeMillis()
+                seekInfo = "⚠ BACK ещё раз — выход из плеера"
+                true
             } else false
         }
         else -> false
@@ -938,7 +988,13 @@ private fun VideoPlayer(
         // Фокус на «Отмена» — случайное OK не проматывает сериал
         if (nextCountdown != null) {
             val cancelFocus = remember { FocusRequester() }
-            runCatching { LaunchedEffect(Unit) { cancelFocus.requestFocus() } }
+            // Ретраи: узел не готов мгновенно; runCatching только внутри
+            LaunchedEffect(Unit) {
+                repeat(5) {
+                    runCatching { cancelFocus.requestFocus() }
+                    kotlinx.coroutines.delay(60)
+                }
+            }
             Column(
                 Modifier
                     .align(Alignment.Center)
@@ -1320,7 +1376,15 @@ private fun VideoPlayer(
             }
         }
         if (showFiles) {
+            // Автоскролл к текущей серии: на сериале с 50 файлами фокус
+            // стартует с E01 — листать 39 позиций с пульта мучение
+            val filesListState = androidx.compose.foundation.lazy.rememberLazyListState()
+            LaunchedEffect(showFiles) {
+                val cur = files.indexOfFirst { it.first == stream.fileIndex }
+                if (cur > 0) runCatching { filesListState.scrollToItem(cur) }
+            }
             androidx.compose.foundation.lazy.LazyColumn(
+                state = filesListState,
                 modifier = Modifier
                     .align(Alignment.Center)
                     .width(560.dp)

@@ -1364,7 +1364,15 @@ fun OnlinePlayerScreen(
         if (showFiles && files.size > 1) {
             val firstFileFocus = remember { androidx.compose.ui.focus.FocusRequester() }
             LaunchedEffect(showFiles) { runCatching { firstFileFocus.requestFocus() } }
+            // Автоскролл к текущей серии: на сериале с 50 файлами фокус
+            // стартует с E01 — листать 39 позиций с пульта мучение
+            val filesListState = androidx.compose.foundation.lazy.rememberLazyListState()
+            LaunchedEffect(showFiles) {
+                val cur = files.indexOfFirst { it.first == currentFile }
+                if (cur > 0) runCatching { filesListState.scrollToItem(cur) }
+            }
             androidx.compose.foundation.lazy.LazyColumn(
+                state = filesListState,
                 modifier = Modifier
                     .align(Alignment.Center)
                     .width(560.dp)

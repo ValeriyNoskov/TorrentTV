@@ -18,6 +18,43 @@ object AppLog {
     private val buf = ArrayDeque<String>()
     private val fmt = SimpleDateFormat("MM-dd HH:mm:ss", Locale.US)
 
+    // Очередь строк для файла: log() только кладёт в очередь (ноль дисковых
+    // операций на вызывающем потоке — раньше каждый вызов писал на диск
+    // прямо из Main и давал джанки на медленной flash ТВ). Фоновый поток
+    // раз в 2 сек сбрасывает очередь в файл одним блоком.
+    private val pending = java.util.concurrent.ConcurrentLinkedQueue<String>()
+    private val writer = Thread({
+        while (true) {
+            try {
+                Thread.sleep(2000)
+            } catch (_: InterruptedException) {
+                return@Thread
+            }
+            flushPending()
+        }
+    }).apply {
+        name = "applog-writer"
+        isDaemon = true
+        start()
+    }
+
+    private fun flushPending() {
+        if (pending.isEmpty()) return
+        runCatching {
+            val f = file()
+            val sb = StringBuilder()
+            while (true) {
+                val l = pending.poll() ?: break
+                sb.append(l).append('\n')
+            }
+            if (sb.isNotEmpty()) {
+                // Ротация: файл больше 512 КБ — начинаем заново
+                if (f.length() + sb.length > 512L * 1024) f.writeText("")
+                f.appendText(sb.toString())
+            }
+        }
+    }
+
     /** Запись логов включена (галочка в Настройках → Логи). */
     @Volatile var recording: Boolean = true
 
@@ -37,14 +74,7 @@ object AppLog {
             buf.addLast(line)
             while (buf.size > MAX_LINES) buf.removeFirst()
         }
-        if (recording) {
-            runCatching {
-                val f = file()
-                // Ротация: файл больше 512 КБ — начинаем заново
-                if (f.length() > 512L * 1024) f.writeText("")
-                f.appendText(line + "\n")
-            }
-        }
+        if (recording) pending.add(line)
         runCatching { android.util.Log.i("VNosKino", "$tag: $msg") }
     }
 
@@ -56,6 +86,7 @@ object AppLog {
     /** Полностью очистить лог (память + файл). */
     fun clear() {
         synchronized(buf) { buf.clear() }
+        pending.clear()
         runCatching { file().writeText("") }
         log("app", "логи очищены")
     }
@@ -77,6 +108,9 @@ object AppLog {
         }
         append("\n--- events ---\n")
         synchronized(buf) { buf.forEach { append(it).append('\n') } }
+        // Синхронный сброс очереди: в выгрузку должны попасть строки,
+        // ещё не дошедшие до файла (writer пишет раз в 2 сек)
+        flushPending()
         // История из файла: буфер держит 800 строк, файл — больше
         runCatching {
             val f = file()

@@ -39,19 +39,40 @@ object KinopoiskClient {
         // Счётчики API — в filesDir: cacheDir система может подчистить в любой
         // момент, и счётчик обнулялся посреди дня (расхождение с кабинетом КП)
         ApiUsage.attach(java.io.File(dir.parentFile, "files"))
-        runCatching {
-            val f = java.io.File(dir, "kp_cache.json")
-            if (f.exists()) {
-                val arr = org.json.JSONArray(f.readText())
-                for (i in 0 until arr.length()) {
-                    val o = arr.getJSONObject(i)
-                    cache[o.getString("u")] = o.getLong("t") to o.getString("b")
+        // Мегабайтный JSON читаем и парсим в фоне: раньше это шло в onCreate
+        // на главном потоке и задерживало холодный старт
+        Thread {
+            runCatching {
+                val f = java.io.File(dir, "kp_cache.json")
+                if (f.exists()) {
+                    val arr = org.json.JSONArray(f.readText())
+                    for (i in 0 until arr.length()) {
+                        val o = arr.getJSONObject(i)
+                        cache[o.getString("u")] = o.getLong("t") to o.getString("b")
+                    }
                 }
             }
-        }
+        }.apply { isDaemon = true; start() }
     }
 
+    // Запись кеша фоновым потоком с дебаунсом: раньше каждый успешный fetch
+    // перезаписывал весь файл (до единиц МБ) — каталог из десятков страниц
+    // десятки раз гонял диск. Пишем не чаще раза в 30 сек; отложенный вызов
+    // гарантирует, что последняя партия ответов тоже попадёт в файл.
+    private val dirty = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val persistExecutor =
+        java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
+            Thread(r, "kp-cache-writer").apply { isDaemon = true }
+        }
+
     private fun persistCache() {
+        dirty.set(true)
+        persistExecutor.schedule({
+            if (dirty.compareAndSet(true, false)) doPersist()
+        }, 30, java.util.concurrent.TimeUnit.SECONDS)
+    }
+
+    private fun doPersist() {
         val dir = cacheDir ?: return
         runCatching {
             // переполнение — удаляем самые старые записи

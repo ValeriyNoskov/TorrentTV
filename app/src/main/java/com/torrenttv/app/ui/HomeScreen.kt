@@ -219,9 +219,15 @@ fun HomeScreen(
 
         // ---------- Оверлей обновления ----------
         updateInfo?.let { info ->
-            // Фокус сразу на кнопке «Обновить»: пультом достаточно нажать OK
+            // Фокус сразу на кнопке «Обновить»: пультом достаточно нажать OK.
+            // Ретраи: узел не готов мгновенно; runCatching только внутри
             val updateFocus = remember { FocusRequester() }
-            runCatching { LaunchedEffect(info) { updateFocus.requestFocus() } }
+            LaunchedEffect(info) {
+                repeat(5) {
+                    runCatching { updateFocus.requestFocus() }
+                    kotlinx.coroutines.delay(60)
+                }
+            }
             androidx.tv.material3.Surface(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)

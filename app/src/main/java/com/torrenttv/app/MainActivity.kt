@@ -116,20 +116,24 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         com.torrenttv.app.data.AppLog.init(this)
-        // APK прошлых обновлений копились в кеше (~80 МБ каждое) — чистим при старте,
-        // не трогая скачанный и ожидающий установки
-        com.torrenttv.app.update.UpdateManager.cleanupApks(this)
+        // APK прошлых обновлений копились в кеше (~80 МБ каждое) — чистим при
+        // старте, не трогая скачанный и ожидающий установки. Фоном: дисковая
+        // чистка в onCreate задерживала холодный старт.
+        Thread {
+            runCatching { com.torrenttv.app.update.UpdateManager.cleanupApks(this@MainActivity) }
+        }.apply { isDaemon = true; start() }
         // Дисковый кэш метаданных: экономит дневной лимит API и работает без сети
         com.torrenttv.app.data.KinopoiskClient.attachCache(cacheDir)
         // Конфигурация при старте: по логу сразу видно, как настроено устройство
+        // Личные ключи баз фильмов (перекрывают вшитые общие)
+        val store0 = com.torrenttv.app.data.LocalStore(this)
         runCatching {
-            val s0 = com.torrenttv.app.data.LocalStore(this)
             com.torrenttv.app.data.AppLog.log(
                 "app",
                 "конфигурация: движок=встроенный (jlibtorrent), " +
-                    "jackett=${if (s0.jackettConfig() != null) "задан" else "нет"}, " +
-                    "приватные трекеры=${s0.privateTrackers().size}, " +
-                    "стоп-слов=${s0.excludedKeywords().size}, лог=${if (s0.loggingEnabled()) "вкл" else "выкл"}",
+                    "jackett=${if (store0.jackettConfig() != null) "задан" else "нет"}, " +
+                    "приватные трекеры=${store0.privateTrackers().size}, " +
+                    "стоп-слов=${store0.excludedKeywords().size}, лог=${if (store0.loggingEnabled()) "вкл" else "выкл"}",
             )
         }
         // Настройки переживают сброс данных: из пустого хранилища восстановим бэкап из Gist.
@@ -141,15 +145,12 @@ class MainActivity : ComponentActivity() {
             com.torrenttv.app.data.TmdbClient.overrideApiKey = s.tmdbApiKey()
             com.torrenttv.app.data.AppLog.log("backup", "ключи применены после восстановления")
         }
-        // Личные ключи баз фильмов (перекрывают вшитые общие)
-        val store0 = com.torrenttv.app.data.LocalStore(this)
         // Галочка «Запись логов» (Настройки → Логи): включена по умолчанию
         com.torrenttv.app.data.AppLog.recording = store0.loggingEnabled()
         com.torrenttv.app.data.KinopoiskClient.overrideApiKey = store0.kpApiKey()
         com.torrenttv.app.data.TmdbClient.overrideApiKey = store0.tmdbApiKey()
         // Размер карточек из настроек (Настройки → Плеер → «Размер карточек»)
-        com.torrenttv.app.ui.cardWidthDp =
-            com.torrenttv.app.data.LocalStore(this).cardWidthDp()
+        com.torrenttv.app.ui.cardWidthDp = store0.cardWidthDp()
         setContent {
             MaterialTheme(typography = AppTypography) {
                 App()

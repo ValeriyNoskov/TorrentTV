@@ -212,6 +212,16 @@ fun LivePlayerScreen(
                         }
                     }
 
+                    // MENU: открываем меню ⚙, как в остальных плеерах
+                    // (раньше кнопка MENU на пульте ничего не делала)
+                    Key.Menu -> {
+                        showPanel = true
+                        showGear = true
+                        panelTick++
+                        AppLog.log("tv", "панель: меню открыто кнопкой MENU")
+                        true
+                    }
+
                     // Вверх/вниз без панели — тоже показываем её (как в обычных плеерах)
                     Key.DirectionUp, Key.DirectionDown -> {
                         if (!showPanel) {

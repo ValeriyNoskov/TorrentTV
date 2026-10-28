@@ -200,8 +200,11 @@ fun SearchScreen(
                                 r.name to (poster to desc)
                             }
                         }.map { it.get() }.toMap()
-                        // Запрос мог смениться, пока грузились страницы — не затирать
-                        if (kotlin.coroutines.coroutineContext.isActive && querySnapshot == query) torrentMeta = meta
+                        // Запрос мог смениться, пока грузились страницы — не затирать.
+                        // Состояние Compose пишем только из Main: корутина на IO
+                        withContext(Dispatchers.Main) {
+                            if (isActive && querySnapshot == query) torrentMeta = meta
+                        }
                     } finally {
                         pool.shutdown()
                     }
@@ -551,7 +554,13 @@ fun SearchScreen(
         if (showKb) {
             if (externalKb) {
                 val kbFieldFocus = remember { FocusRequester() }
-                runCatching { LaunchedEffect(Unit) { kbFieldFocus.requestFocus() } }
+                // Ретраи: узел не готов мгновенно; runCatching только внутри
+                LaunchedEffect(Unit) {
+                    repeat(5) {
+                        runCatching { kbFieldFocus.requestFocus() }
+                        kotlinx.coroutines.delay(60)
+                    }
+                }
                 androidx.compose.foundation.text.BasicTextField(
                     value = query,
                     onValueChange = { query = it },
@@ -603,7 +612,13 @@ fun TvKeyboard(
     onClear: () -> Unit,
     firstKeyFocus: FocusRequester? = null,
 ) {
-    runCatching { LaunchedEffect(Unit) { firstKeyFocus?.requestFocus() } }
+    // Ретраи: узел не готов мгновенно; runCatching только внутри
+    LaunchedEffect(Unit) {
+        repeat(5) {
+            runCatching { firstKeyFocus?.requestFocus() }
+            kotlinx.coroutines.delay(60)
+        }
+    }
 
     Column(
         verticalArrangement = Arrangement.spacedBy(6.dp),
