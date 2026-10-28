@@ -167,37 +167,41 @@ object UpdateManager {
             // Авто: оба источника параллельно, чей ответ пришёл первым —
             // тот и используем (GitVerse из РФ обычно отвечает быстрее)
             if (source == SOURCE_AUTO) {
+                // ВАЖНО: null от fetch* — это УСПЕХ «у вас последняя», а не ошибка.
+                // Раньше null трактовался как fail — и авто-режим показывал
+                // «Не удалось проверить» при работавшей проверке (жалоба владельца)
                 val lock = Object()
                 var got: UpdateInfo? = null
+                var noUpdate = false // хоть один источник ответил «у вас последняя»
                 var firstErr: String? = null
                 var finished = 0
-                Thread {
-                    val r = runCatching { fetchGithub(currentVersion, token) }
-                        .onFailure { com.torrenttv.app.data.AppLog.log("update", "GitHub FAIL: ${it.message}") }
-                        .getOrNull()
+                fun handle(r: kotlin.Result<UpdateInfo?>, name: String) {
                     synchronized(lock) {
-                        if (r != null && got == null) got = r
-                        if (r == null && firstErr == null) firstErr = "GitHub: не удалось"
+                        if (r.isSuccess) {
+                            noUpdate = true
+                            val v = r.getOrNull()
+                            if (v != null && got == null) got = v
+                        } else if (firstErr == null) {
+                            firstErr = "$name: ${r.exceptionOrNull()?.message ?: "не удалось"}"
+                        }
                         finished++
                         (lock as Object).notifyAll()
                     }
+                }
+                Thread {
+                    handle(runCatching { fetchGithub(currentVersion, token) }, "GitHub")
                 }.start()
                 Thread {
-                    val r = runCatching { fetchGitverse(currentVersion) }
-                        .onFailure { com.torrenttv.app.data.AppLog.log("update", "GitVerse FAIL: ${it.message}") }
-                        .getOrNull()
-                    synchronized(lock) {
-                        if (r != null && got == null) got = r
-                        if (r == null && firstErr == null) firstErr = "GitVerse: не удалось"
-                        finished++
-                        (lock as Object).notifyAll()
-                    }
+                    handle(runCatching { fetchGitverse(currentVersion) }, "GitVerse")
                 }.start()
+                // Ждём: обновление найдено, либо «последняя» от источника,
+                // либо оба ответили ошибкой
                 synchronized(lock) {
-                    while (got == null && finished < 2) lock.wait()
+                    while (got == null && !noUpdate && finished < 2) lock.wait()
                 }
                 mainHandler.post {
                     if (got != null) onResult(got)
+                    else if (noUpdate) onResult(null)
                     else onError(firstErr ?: "нет сети")
                 }
                 return@Thread

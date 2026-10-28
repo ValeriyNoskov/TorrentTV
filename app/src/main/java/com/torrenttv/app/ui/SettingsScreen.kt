@@ -374,22 +374,32 @@ fun SettingsScreen(onBack: () -> Unit) {
                             }
                         }
                         SettingsNote("Обновления проверяются при запуске и качаются в фоне.")
-                        // Источник обновлений: GitVerse (зеркало в РФ) качается
-                        // заметно быстрее GitHub из российских сетей
-                        val updSourceTitles = mapOf(
-                            "auto" to "Авто (быстрейший)",
-                            "github" to "GitHub",
-                            "gitverse" to "GitVerse (быстрый в РФ)",
+                        // Источник обновлений — СПИСОК ГАЛОЧЕК: все варианты
+                        // на экране сразу, ✓ у текущего, нажал строку — выбрал
+                        val updSourceNotes = mapOf(
+                            "auto" to "оба источника, чей ответ раньше",
+                            "github" to "оригинальный хостинг",
+                            "gitverse" to "зеркало в РФ (быстрее)",
                         )
-                        SettingsRow(
-                            title = "Откуда качать обновления",
-                            value = updSourceTitles[store.updateSource()] ?: "Авто",
-                            valueOk = true,
-                        ) {
-                            val order = listOf("auto", "github", "gitverse")
-                            val next = order[(order.indexOf(store.updateSource()) + 1) % order.size]
-                            store.setUpdateSource(next)
-                            com.torrenttv.app.data.AppLog.log("ui", "источник обновлений: $next")
+                        val updSources = listOf("auto", "github", "gitverse")
+                        val updTitles = mapOf(
+                            "auto" to "Авто — быстрейший из двух",
+                            "github" to "GitHub",
+                            "gitverse" to "GitVerse",
+                        )
+                        val curSrc = store.updateSource()
+                        for (src in updSources) {
+                            val on = curSrc == src
+                            SettingsRow(
+                                title = if (on) "✅ ${updTitles[src]}" else "⬜ ${updTitles[src]}",
+                                value = updSourceNotes[src] ?: "",
+                                valueOk = on,
+                            ) {
+                                if (!on) {
+                                    store.setUpdateSource(src)
+                                    com.torrenttv.app.data.AppLog.log("ui", "нажал: источник обновлений → $src")
+                                }
+                            }
                         }
                     }
 

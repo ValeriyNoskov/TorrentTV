@@ -80,22 +80,31 @@ jobs:
         env:
           GITVERSE_TOKEN: ${{ secrets.GITVERSE_TOKEN }}
           VER: ${{ steps.version.outputs.version }}
+        # GitVerse периодически лежит: зеркало НЕ должно валить релиз —
+        # GitHub-публикация уже состоялась, пропускаем с предупреждением
         run: |
-          set -e
+          if ! curl -s -m 15 -o /dev/null -H "Authorization: Bearer $GITVERSE_TOKEN" \
+               -H "Accept: application/vnd.gitverse.object+json;version=1" \
+               "https://api.gitverse.ru/repos/ChipN/TorrentTV"; then
+            echo "::warning::GitVerse недоступен — публикация зеркала пропущена"
+            exit 0
+          fi
           API="https://api.gitverse.ru/repos/ChipN/TorrentTV"
           AH="Authorization: Bearer $GITVERSE_TOKEN"
           AH2="Accept: application/vnd.gitverse.object+json;version=1"
-          # Тег в GitVerse: указывает на тот же коммит, что и релиз GitHub
           SHA=$(git rev-parse HEAD)
-          curl -sf -X POST -H "$AH" -H "$AH2" -H "Content-Type: application/json" \
+          curl -sf -m 60 -X POST -H "$AH" -H "$AH2" -H "Content-Type: application/json" \
             "$API/git/refs" \
             -d "{\"ref\":\"refs/tags/v$VER\",\"sha\":\"$SHA\"}" > /dev/null || true
-          REL_ID=$(curl -sf -X POST -H "$AH" -H "$AH2" -H "Content-Type: application/json" \
+          REL_ID=$(curl -sf -m 60 -X POST -H "$AH" -H "$AH2" -H "Content-Type: application/json" \
             "$API/releases" \
             -d "{\"tag_name\":\"v$VER\",\"name\":\"v$VER\",\"body\":\"Обновление v$VER. APK также на GitHub.\"}" \
-            | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])" 2>/dev/null) || {
+            echo "::warning::GitVerse: релиз не создался — пропускаю"
+            exit 0
+          }
           echo "GitVerse release id=$REL_ID"
-          curl -sf -X POST -H "$AH" -H "$AH2" \
+          curl -sf -m 600 -X POST -H "$AH" -H "$AH2" \
             "$API/releases/$REL_ID/assets?name=VNosKino-$VER.apk" \
-            -F "attachment=@dist/VNosKino-$VER.apk" > /dev/null
-          echo "GitVerse: ассет VNosKino-$VER.apk загружен"
+            -F "attachment=@dist/VNosKino-$VER.apk" > /dev/null \
+            || echo "::warning::GitVerse: ассет не загрузился"
