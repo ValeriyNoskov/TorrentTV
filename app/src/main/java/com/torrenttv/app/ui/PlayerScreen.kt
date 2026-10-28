@@ -520,6 +520,9 @@ private fun VideoPlayer(
     // ⏳ Буферизация посреди просмотра: стоп/подкачка — показываем «живой» статус
     var playerBuf by remember { mutableStateOf(false) }
     var bufPct by remember { mutableIntStateOf(0) }
+    // Сколько секунд буферизуем при нуле пиров: раздача не подключается —
+    // честно говорим об этом, вместо молчаливого чёрного экрана
+    var noPeersSec by remember { mutableIntStateOf(0) }
     // Авто-перезапуск после ошибки (как в VLC/Just Player): до 3 попыток
     var retries by remember { mutableStateOf(0) }
     // ---------- Сдвиг субтитров (как в Kodi): кастомный вывод через onCues ----------
@@ -543,8 +546,20 @@ private fun VideoPlayer(
     LaunchedEffect(playerBuf) {
         while (playerBuf) {
             bufPct = player.bufferedPercentage
+            // Пиры не подключаются: буферизация не двинется — показываем причину
+            val peers = runCatching { stream.peers() }.getOrDefault(0)
+            if (peers == 0) {
+                noPeersSec++
+                if (noPeersSec == 10 || noPeersSec == 30) {
+                    com.torrenttv.app.data.AppLog.log(
+                        "player",
+                        "буферизация без пиров: ${noPeersSec}с, dht=${TorrentEngine.session.dhtNodes()} — раздача не подключается",
+                    )
+                }
+            } else noPeersSec = 0
             delay(400)
         }
+        noPeersSec = 0
     }
 
     DisposableEffect(player) {
@@ -1069,6 +1084,14 @@ private fun VideoPlayer(
                 Text("⏳ Буферизация…", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
                 Text("буфер $bufPct%", color = Color(0xB3FFFFFF), fontSize = 15.sp)
+                if (noPeersSec >= 10) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "пиры не подключаются ${noPeersSec}с — раздача недоступна из вашей сети",
+                        color = Color(0xFFFFB74D),
+                        fontSize = 14.sp,
+                    )
+                }
             }
         }
 
