@@ -23,6 +23,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -60,6 +63,30 @@ fun HomeScreen(
     // Проверка обновлений при запуске (вернули после рефакторинга v0.7.67 —
     // тогда автопроверка выпала из главной, плашка перестала появляться)
     LaunchedEffect(Unit) {
+        // Подрезка кеша при старте: раньше лимит применялся только перед новым
+        // стримом — без запуска раздач кеш рос неограниченно (жалоба: 12 ГБ)
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val root = File(context.filesDir, "downloads")
+                val size = root.walkBottomUp().filter { it.isFile }.sumOf { it.length() }
+                if (size > 0) {
+                    com.torrenttv.app.data.AppLog.log(
+                        "cache",
+                        "кеш при старте: ${size / 1024 / 1024} МБ",
+                    )
+                    com.torrenttv.app.torrent.TorrentCache.enforceLimit(
+                        rootDir = root,
+                    )
+                    val after = root.walkBottomUp().filter { it.isFile }.sumOf { it.length() }
+                    if (after != size) {
+                        com.torrenttv.app.data.AppLog.log(
+                            "cache",
+                            "кеш после подрезки: ${after / 1024 / 1024} МБ (освобождено ${(size - after) / 1024 / 1024} МБ)",
+                        )
+                    }
+                }
+            }
+        }
         UpdateManager.checkForUpdate(
             currentVersion,
             UpdateManager.ghToken(context),

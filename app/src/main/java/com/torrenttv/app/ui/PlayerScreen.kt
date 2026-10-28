@@ -383,7 +383,16 @@ fun PlayerScreen(
     // а через какое-то время включается внешний плеер»)
     val screenAlive = remember { java.util.concurrent.atomic.AtomicBoolean(true) }
     DisposableEffect(Unit) {
-        onDispose { screenAlive.set(false) }
+        onDispose {
+            screenAlive.set(false)
+            // Остановка докачки при ЛЮБОМ уходе с экрана (BACK, home, запуск
+            // внешнего плеера). Раньше сессия продолжала жить после выхода и
+            // докачивала пачку целиком — кеш разрастался (жалоба: 12 ГБ).
+            stream?.let { s ->
+                runCatching { s.stop() }
+                com.torrenttv.app.data.AppLog.log("player", "уход с экрана: докачка остановлена")
+            }
+        }
     }
     // Внешний плеер (Настройки → Плеер → «Всегда внешний плеер»): отдаём
     // файл через FileProvider — VLC/MX Player сами читают недокачанный файл,

@@ -18,9 +18,15 @@ object TorrentCache {
     private const val MIN_FREE_BYTES = 2L * 1024 * 1024 * 1024 // держим ≥2 ГБ свободно
     private const val ACTIVE_MS = 6L * 3600 * 1000 // «активная» папка: 6 часов
 
-    /** Освободить место под новый стрим: root — папка downloads. */
-    fun enforceLimit(currentDir: File? = null) {
-        val root = currentDir?.parentFile ?: return
+    /**
+     * Освободить место: root — папка downloads (можно передать её напрямую
+     * rootDir — для чистки при старте приложения, без нового стрима).
+     * Лимит соблюдается ВСЕГДА: если «активных» (моложе 6ч) папок слишком
+     * много, старейшие из них тоже удаляются — раньше при активном тестировании
+     * раздач подряд кеш уходил за 12 ГБ, потому что активные были неприкосновенны.
+     */
+    fun enforceLimit(currentDir: File? = null, rootDir: File? = null) {
+        val root = rootDir ?: currentDir?.parentFile ?: return
         val dirs = root.listFiles { f -> f.isDirectory } ?: return
         val now = System.currentTimeMillis()
 
@@ -33,16 +39,24 @@ object TorrentCache {
 
         if (total <= LIMIT_BYTES && free >= MIN_FREE_BYTES) return
 
-        // Кандидаты на удаление: не текущая и не активная (12ч), старые первыми
+        // 1) старейшие неактивные (не трогаем текущую и свежие за 6ч)
         val candidates = dirs
             .filter { it != currentDir && now - it.lastModified() > ACTIVE_MS }
             .sortedBy { it.lastModified() }
-
+        // 2) не хватило — в ход идут и «активные» (кроме текущей), старейшие первыми
+        val queue = if (total > LIMIT_BYTES) {
+            candidates + dirs
+                .filter { it != currentDir && it !in candidates }
+                .sortedBy { it.lastModified() }
+        } else {
+            candidates
+        }
         var freed = 0L
-        for (d in candidates) {
-            if (total - freed <= LIMIT_BYTES && free + freed >= MIN_FREE_BYTES) break
-            freed += sizes[d] ?: 0
-            runCatching { d.deleteRecursively() }
+        queue.forEach { d ->
+            if (total - freed > LIMIT_BYTES || free + freed < MIN_FREE_BYTES) {
+                freed += sizes[d] ?: 0
+                runCatching { d.deleteRecursively() }
+            }
         }
     }
 
