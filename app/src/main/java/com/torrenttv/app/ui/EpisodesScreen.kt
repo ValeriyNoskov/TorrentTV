@@ -281,7 +281,15 @@ fun EpisodesScreen(
                 itemsIndexed(season.episodes) { _, ep ->
                     val hasSource = remember(tick) { store.getMagnet(item, ep.sourceSuffix) != null }
                     Surface(
-                        onClick = { if (hasSource) onPlay(ep) else onFind(ep) },
+                        onClick = {
+                            // Диагностика «нажимаю серию — ничего не происходит»:
+                            // видно, дошёл ли клик и был ли у серии источник
+                            com.torrenttv.app.data.AppLog.log(
+                                "episodes",
+                                "выбрана серия ${ep.code}: источник ${if (hasSource) "есть" else "НЕТ"}",
+                            )
+                            if (hasSource) onPlay(ep) else onFind(ep)
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 3.dp)
