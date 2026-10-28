@@ -579,6 +579,29 @@ private fun VideoPlayer(
                     "playback error: ${error.errorCodeName} pos=${pos / 1000}s retries=$retries" +
                         (stNow?.let { ", head=${it.headBytes() / 1024 / 1024}МБ peers=${it.peers()}" } ?: ""),
                 )
+                if (error.errorCodeName.contains("PARSING")) {
+                    // Решающая диагностика: что реально лежит в начале файла.
+                    // EBML-заголовок MKV начинается 1A 45 DF A3; нули или мусор =
+                    // данные недокачаны/фейк-раздача (файл-обманка без видео)
+                    val stNow2 = stream
+                    if (stNow2 != null) {
+                        Thread {
+                            runCatching {
+                                java.io.RandomAccessFile(stNow2.videoFile, "r").use { f ->
+                                    val head = ByteArray(32)
+                                    f.seek(stNow2.fileOffset)
+                                    val n = f.read(head)
+                                    val hex = head.take(n.coerceAtLeast(0))
+                                        .joinToString(" ") { "%02X".format(it) }
+                                    com.torrenttv.app.data.AppLog.log(
+                                        "player",
+                                        "первые байты файла: $hex (${stNow2.videoFile.name})",
+                                    )
+                                }
+                            }
+                        }.apply { isDaemon = true; start() }
+                    }
+                }
                 if (retries < 3) {
                     // Транзитные ошибки источника/декодера: перемотка на место
                     // и пере-подготовка — в большинстве случаев лечит
@@ -588,8 +611,10 @@ private fun VideoPlayer(
                     player.prepare()
                     player.play()
                 } else {
-                    errorMsg = "Ошибка воспроизведения: ${error.errorCodeName}. " +
-                        "Попробуйте другую раздачу или внешний плеер"
+                    val fakeHint = if (error.errorCodeName.contains("PARSING"))
+                        " Раздача не распознана как видео — возможно, фейк, попробуйте другую." else ""
+                    errorMsg = "Ошибка воспроизведения: ${error.errorCodeName}." + fakeHint +
+                        " Попробуйте другую раздачу или внешний плеер"
                 }
             }
             override fun onCues(cueGroup: androidx.media3.common.text.CueGroup) {
