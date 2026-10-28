@@ -81,9 +81,9 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
     var page by remember { mutableStateOf(1) }
     var endReached by remember { mutableStateOf(false) }
     var reloadTick by remember { mutableStateOf(0) }
-    // Сортировка: «Популярное» (по умолчанию) / «Поступившие» (дата появления
-    // раздач на трекере). Выбор запоминается.
-    var sort by remember { mutableStateOf(store.lastTorrentsSort()) }
+    // Сортировка: «Полки» (по умолчанию, как во вкладках Фильмы/Сериалы) /
+    // «Поступившие» (сетка-лента). Выбор запоминается.
+    var sort by remember { mutableStateOf(store.lastTorrentsSort().ifBlank { "shelves" }) }
     fun changeSort(v: String) {
         if (sort == v) return
         sort = v
@@ -104,6 +104,7 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
     // Внешняя клавиатура (Настройки → Ввод): раньше экран её игнорировал
     // и всегда показывал экранную — теперь как в «Поиске»
     val externalKb = remember { store.useExternalKeyboard() }
+    val inShelves = sort == "shelves" && !searchMode
 
     val voiceLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -165,16 +166,34 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
         return typeOk && genreOk && yearOk && countryOk
     }
 
-    // Серверный источник: один жанр > сериалы > популярное.
-    // Годы и страны фильтруются клиентски по загруженным карточкам.
+    // Серверный источник: жанр → категория сайта, точный год → xfsearch года,
+    // сериалы → /serialy/. Страна, тип и диапазоны лет («2010-е») серверно
+    // не фильтруются — их доснимает локальный matches(), для этого при
+    // активных фильтрах грузим больше страниц.
     fun sourceUrl(p: Int): String? {
         if (searchMode) return null
         val base = RutrackerrCatalog.baseUrl
         val suffix = if (p > 1) "page/$p/" else ""
         return when {
-            genres.size == 1 -> "$base/${genres.first()}/$suffix"
+            genres.isNotEmpty() -> "$base/${genres.first()}/$suffix"
+            years.size == 1 && !years.first().contains('-') ->
+                "$base/xfsearch/year/${years.first()}/$suffix"
             types == setOf("tv") -> "$base/serialy/$suffix"
             else -> "$base/popular/$suffix"
+        }
+    }
+
+    // URL страницы с серверным фильтром (для ленты «Поступившие»): null —
+    // фильтр серверно не выразить, берём общий поток и фильтруем локально
+    fun filteredUrl(p: Int): String? {
+        if (searchMode) return null
+        val base = RutrackerrCatalog.baseUrl
+        val suffix = if (p > 1) "page/$p/" else ""
+        return when {
+            genres.isNotEmpty() -> "$base/${genres.first()}/$suffix"
+            years.size == 1 && !years.first().contains('-') ->
+                "$base/xfsearch/year/${years.first()}/$suffix"
+            else -> null
         }
     }
 
@@ -231,13 +250,23 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
             return@withContext if (p > 1) emptyList() else searchCards(searchQ).filter { matches(it) }
         }
         if (sort == "posted") {
-            return@withContext RutrackerrCatalog.lastnews(p).filter { matches(it) }
+            // Фильтр жанра/года уходит в запрос к трекеру (категория/xfsearch);
+            // страна и остальное снимаем локально
+            val raw = filteredUrl(p)?.let { RutrackerrCatalog.categoryByUrl(it) }
+                ?: RutrackerrCatalog.lastnews(p)
+            return@withContext raw.filter { matches(it) }
         }
         val url = sourceUrl(p) ?: return@withContext emptyList()
         RutrackerrCatalog.categoryByUrl(url).filter { matches(it) }
     }
 
     LaunchedEffect(types, genres, countries, years, reloadTick, searchMode, sort) {
+        // В режиме «Полки» контент грузят сами ряды (PagedMediaRow) —
+        // общий загрузчик сетки не нужен
+        if (sort == "shelves" && !searchMode) {
+            loading = false
+            return@LaunchedEffect
+        }
         loading = true
         loadError = ""
         page = 0
@@ -250,7 +279,11 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
             // Сразу несколько страниц: одна страница трекера — всего 10 карточек,
             // после фильтров оставалось 7, и раздел выглядел «пустым».
             // В поиске страниц нет — там один запрос.
-            val pages = if (searchMode) 1 else PAGES_AT_START
+            // Фильтры съедают карточки (страна/тип серверно не фильтруются) —
+        // при них грузим глубже, иначе раздел выглядит пустым
+        val hasFilters =
+            types.isNotEmpty() || genres.isNotEmpty() || countries.isNotEmpty() || years.isNotEmpty()
+        val pages = if (searchMode) 1 else if (hasFilters) 10 else PAGES_AT_START
             for (p in 1..pages) {
                 val part = loadPage(p)
                 if (part.isEmpty()) {
@@ -293,6 +326,8 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
         }.collect { (last, total) ->
             if (total == 0 || last < total - 6) return@collect
             if (loading || endReached || searchMode || items.isEmpty()) return@collect
+            // В режиме «Полки» сетки нет — догрузка ленты не нужна
+            if (inShelves) return@collect
             loading = true
             val next = page + 1
             val more = try {
@@ -351,10 +386,6 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(horizontal = 32.dp, vertical = 2.dp),
             ) {
-                ActionPill(text = "📥 Поступившие", active = sort == "posted") { changeSort("posted") }
-                Spacer(Modifier.width(6.dp))
-                ActionPill(text = "🔥 Популярное", active = sort == "popular") { changeSort("popular") }
-                Spacer(Modifier.width(10.dp))
                 // Фильтры «как во вкладках Фильмы/Сериалы»: кнопки Жанр · Тип ·
                 // Страна · Год, каждая открывает общую модалку со списком и поиском
                 ActionPill(
@@ -426,6 +457,16 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
                     modifier = Modifier.padding(horizontal = 36.dp, vertical = 2.dp),
                 )
             }
+
+            // ---------- Сортировка чипами — как во вкладках Фильмы/Сериалы ----------
+            SortChips(
+                options = listOf(
+                    "shelves" to "📚 Полки",
+                    "posted" to "📥 Поступившие",
+                ),
+                selected = sort,
+                onSelect = { changeSort(it) },
+            )
 
             // ---------- Ввод запроса: внешняя клавиатура или экранная ----------
             if (inputOpen) {
@@ -521,22 +562,60 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
                 ) { reloadTick++ }
             }
 
-            // ---------- Сетка карточек ----------
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(150.dp),
-                state = gridState,
-                contentPadding = PaddingValues(horizontal = 26.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                items(shown, key = { it.storeKey }) { item ->
-                    PosterCard(item) { onOpenDetails(item) }
+            // ---------- Полки (как в «Фильмах/Сериалах») ----------
+            if (inShelves) {
+                Column(Modifier.fillMaxSize()) {
+                    PagedMediaRow(
+                        title = "🆕 Поступившие раздачи",
+                        keyTag = "rt-new" to filters.hashCode(),
+                        // Жанр/точный год уходим в запрос к трекеру
+                        loader = { p ->
+                            filteredUrl(p)?.let { RutrackerrCatalog.categoryByUrl(it) }
+                                ?: RutrackerrCatalog.lastnews(p)
+                        },
+                        onOpen = onOpenDetails,
+                        filterFn = { matches(it) },
+                    )
+                    PagedMediaRow(
+                        title = "🔥 Популярное",
+                        keyTag = "rt-pop" to filters.hashCode(),
+                        loader = { p -> RutrackerrCatalog.trending(p) },
+                        onOpen = onOpenDetails,
+                        filterFn = { matches(it) },
+                    )
+                    PagedMediaRow(
+                        title = "🎬 Фильмы",
+                        keyTag = "rt-movies" to filters.hashCode(),
+                        loader = { p -> RutrackerrCatalog.popularMovies(p) },
+                        onOpen = onOpenDetails,
+                        filterFn = { matches(it) },
+                    )
+                    PagedMediaRow(
+                        title = "📺 Сериалы",
+                        keyTag = "rt-tv" to filters.hashCode(),
+                        loader = { p -> RutrackerrCatalog.popularTv(p) },
+                        onOpen = onOpenDetails,
+                        filterFn = { matches(it) },
+                    )
                 }
-                if (loading && shown.isNotEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        Box(Modifier.fillMaxWidth().height(36.dp), contentAlignment = Alignment.Center) {
-                            Text("Подгружаю ещё…", color = Color.White.copy(alpha = 0.5f), fontSize = 13.sp)
+            } else {
+                // ---------- Сетка карточек (лента «Поступившие»/поиск) ----------
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(150.dp),
+                    state = gridState,
+                    contentPadding = PaddingValues(horizontal = 26.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    items(shown, key = { it.storeKey }) { item ->
+                        PosterCard(item) { onOpenDetails(item) }
+                    }
+                    if (loading && shown.isNotEmpty()) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Box(Modifier.fillMaxWidth().height(36.dp), contentAlignment = Alignment.Center) {
+                                Text("Подгружаю ещё…", color = Color.White.copy(alpha = 0.5f), fontSize = 13.sp)
+                            }
                         }
                     }
                 }
