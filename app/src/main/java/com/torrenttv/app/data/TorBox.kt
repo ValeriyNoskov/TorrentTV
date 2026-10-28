@@ -182,9 +182,12 @@ object TorBox {
         val chosen = files[idx]
         log("выбран файл [$idx]: ${chosen.name.take(60)} (${chosen.size / 1024 / 1024}МБ)")
 
+        // ВАЖНО: requestdl принимает токен ТОЛЬКО query-параметром (?token=),
+        // Authorization-заголовок игнорирует → 422 «Field required: token».
+        // Из-за этого деbrid всегда падал на последнем шаге, хотя облако
+        // уже скачало раздачу (проверено живым API: header→422, query→success)
         val dlResp = TorrentHttp.get(
-            "$API/torrents/requestdl?torrent_id=$id&file_id=${chosen.id}&zip_link=false",
-            auth(key),
+            "$API/torrents/requestdl?token=$key&torrent_id=$id&file_id=${chosen.id}&zip_link=false",
         ) ?: run {
             log("requestdl FAIL: TorBox не ответил (бесплатный тариф может урезать прямые ссылки)")
             return null

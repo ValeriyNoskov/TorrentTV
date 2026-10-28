@@ -847,14 +847,21 @@ private fun VideoPlayer(
         var audioApplied = false
         val listener = object : androidx.media3.common.Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
-                // Диагностика «чёрного экрана»: буферизация завершена, ошибок
-                // нет, а видео не видно — здесь видно, дошёл ли плеер до READY
+                // РАЗВЁРНУТЫЙ ЛОГ: каждое состояние плеера, не только READY —
+                // по цепочке IDLE→BUFFERING→READY видно, где плеер застрял
+                val stName = when (state) {
+                    androidx.media3.common.Player.STATE_IDLE -> "IDLE"
+                    androidx.media3.common.Player.STATE_BUFFERING -> "BUFFERING"
+                    androidx.media3.common.Player.STATE_READY -> "READY"
+                    androidx.media3.common.Player.STATE_ENDED -> "ENDED"
+                    else -> "?$state"
+                }
+                com.torrenttv.app.data.AppLog.log(
+                    "player",
+                    "состояние: $stName pos=${player.currentPosition / 1000}s буфер=${player.bufferedPosition / 1000}s",
+                )
                 if (state == androidx.media3.common.Player.STATE_READY) {
                     errorMsg = ""
-                    com.torrenttv.app.data.AppLog.log(
-                        "player",
-                        "плеер готов: duration=${player.duration / 1000}s video=${player.videoSize.width}x${player.videoSize.height}",
-                    )
                 }
                 playerBuf = state == androidx.media3.common.Player.STATE_BUFFERING
                 if (state == androidx.media3.common.Player.STATE_ENDED) {                    // «Конец» — только если видео реально проигрывалось:
@@ -875,6 +882,22 @@ private fun VideoPlayer(
                     "player",
                     "первый кадр отрисован pos=${player.currentPosition / 1000}s",
                 )
+            }
+
+            // «Как раскрашивается картинка»: дорожка видео — размер, кодек.
+            // Если кадра нет, здесь видно, дал ли демукс видео вообще
+            override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                val f = player.videoFormat
+                com.torrenttv.app.data.AppLog.log(
+                    "player",
+                    "видеодорожка: ${videoSize.width}x${videoSize.height}" +
+                        (f?.sampleMimeType?.let { " формат=$it" } ?: "") +
+                        (f?.codecs?.let { " кодек=$it" } ?: ""),
+                )
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                com.torrenttv.app.data.AppLog.log("player", if (isPlaying) "воспроизведение: ИДЁТ" else "воспроизведение: пауза/стоп")
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {

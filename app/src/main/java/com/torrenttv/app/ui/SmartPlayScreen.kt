@@ -165,6 +165,14 @@ fun SmartPlayScreen(
         }
         val statsText = TorrentSearch.lastStats.joinToString(" ") { it.label() }
         com.torrenttv.app.data.AppLog.log("smart", "sources: online=0 torrents=${found.size} [$statsText]")
+        // РАЗВЁРНУТЫЙ ЛОГ: каждый источник отдельно — время, результат, текст
+        // ошибки. Суммарной строки не хватало: «ошибка» не говорила какая
+        for (s in TorrentSearch.lastStats) {
+            com.torrenttv.app.data.AppLog.log(
+                "smart",
+                "источник ${s.name}: найдено=${s.count} за ${s.ms}мс" + (s.error?.let { " ОШИБКА: $it" } ?: ""),
+            )
+        }
 
         // Лучшая раздача для «Играть сразу»: сиды × бонус качества.
         // Для сериалов — бонус раздачам с сезоном/сериями в названии

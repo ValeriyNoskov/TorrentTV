@@ -41,9 +41,14 @@ object TorrentHttp {
         val b = Request.Builder().url(url)
         headers.forEach { (k, v) -> b.header(k, v) }
         client.newCall(b.build()).execute().use { resp ->
-            if (!resp.isSuccessful) null else resp.body?.string()
+            if (!resp.isSuccessful) {
+                // Точный код ответа в лог — иначе «не ответил» скрывает 4xx
+                com.torrenttv.app.data.AppLog.log("net", "GET $url → HTTP ${resp.code}")
+                null
+            } else resp.body?.string()
         }
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        com.torrenttv.app.data.AppLog.log("net", "GET $url FAIL: ${e.message}")
         null
     }
 
