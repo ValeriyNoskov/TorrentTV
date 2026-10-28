@@ -873,8 +873,9 @@ class LocalStore(context: Context) {
 
     fun setRdKey(v: String) = prefs.edit().putString("rd_key", v.trim()).apply()
 
-    /** API-ключ TorBox (аналог RD, есть бесплатный тариф). */
-    fun tbKey(): String = prefs.getString("tb_key", "") ?: ""
+    /** API-ключ TorBox (аналог RD, есть бесплатный тариф). Вшит в релиз. */
+    fun tbKey(): String =
+        com.torrenttv.app.BuildConfig.TB_KEY.ifBlank { prefs.getString("tb_key", "") ?: "" }
 
     fun setTbKey(v: String) = prefs.edit().putString("tb_key", v.trim()).apply()
 

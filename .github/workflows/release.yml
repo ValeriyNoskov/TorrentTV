@@ -50,6 +50,7 @@ jobs:
           -PghEmbeddedToken="$GH_EMBEDDED_TOKEN"
           -PkapiKey="$KP_API_KEY"
           -PtraktClientId="$TRAKT_CLIENT_ID"
+          -PtorboxKey="$TORBOX_KEY"
         env:
           VNOSKINO_KEYSTORE: ${{ github.workspace }}/keystore/release-keystore.jks
           VNOSKINO_STORE_PASSWORD: ${{ secrets.KS_STORE_PASSWORD }}
@@ -58,6 +59,7 @@ jobs:
           GH_EMBEDDED_TOKEN: ${{ secrets.GH_EMBEDDED_TOKEN }}
           KP_API_KEY: ${{ secrets.KP_API_KEY }}
           TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
+          TORBOX_KEY: ${{ secrets.TORBOX_KEY }}
 
       - name: Переименовать APK
         run: |
