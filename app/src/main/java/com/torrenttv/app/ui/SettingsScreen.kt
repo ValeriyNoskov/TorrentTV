@@ -423,6 +423,18 @@ fun SettingsScreen(onBack: () -> Unit) {
                             store.setUseExternalPlayer(extPlayer)
                         }
                         SettingsNote("Видео будет открываться в VLC/MX Player, если он установлен.")
+                        // Предзагрузка следующей серии: мгновенное переключение,
+                        // но кеш растёт быстрее (доп. файл ~1-2 ГБ). Выключение —
+                        // «качать только то, что смотрю»
+                        val preload = store.preloadNext()
+                        SettingsRow(
+                            title = if (preload) "✅ Предзагрузка следующей серии" else "⬜ Предзагрузка следующей серии",
+                            value = if (preload) "ВКЛ — переключение серий мгновенное" else "ВЫКЛ — качается только то, что смотришь",
+                            valueOk = preload,
+                        ) {
+                            store.setPreloadNext(!preload)
+                            com.torrenttv.app.data.AppLog.log("settings", "нажал: предзагрузка след. серии → ${!preload}")
+                        }
                         // Размер карточек: четыре варианта, циклом.
                         // Дефолт 140 («Мелкие»): на ТВ влезает больше карточек
                         // без скролла — жалоба владельца на крупные постеры
@@ -445,6 +457,29 @@ fun SettingsScreen(onBack: () -> Unit) {
                             store.setCardWidthDp(cardWidthDp)
                         }
                         SettingsNote("Размер постеров во всех каталогах. Мелкие — по умолчанию.")
+                        // TTL недосмотренного: начатое и забытое удаляется само
+                        // по возрасту, не дожидаясь лимита 6 ГБ
+                        val retentionTitles = mapOf(
+                            0 to "Не удалять (только лимит 6 ГБ)",
+                            1 to "1 день",
+                            2 to "2 дня",
+                            7 to "Неделя",
+                        )
+                        val retOrder = listOf(2, 1, 7, 0)
+                        val retDays = store.retentionDays()
+                        SettingsRow(
+                            title = "Хранить недосмотренное",
+                            value = retentionTitles[retDays] ?: "$retDays дн.",
+                            valueOk = true,
+                        ) {
+                            val next = retOrder[(retOrder.indexOf(retDays) + 1) % retOrder.size]
+                            store.setRetentionDays(next)
+                            com.torrenttv.app.data.AppLog.log(
+                                "settings",
+                                "нажал: хранить недосмотренное → ${retentionTitles[next] ?: "$next дн."}",
+                            )
+                        }
+                        SettingsNote("Начал смотреть и забыл — удалится само через срок.")
                         // Очистка кеша скачанных торрентов: недосмотренные серии
                         // копятся на диске (лимит кеша — до 20 ГБ)
                         var cacheSizeMb by remember { mutableStateOf(-1) }

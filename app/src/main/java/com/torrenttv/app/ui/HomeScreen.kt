@@ -76,6 +76,7 @@ fun HomeScreen(
                     )
                     com.torrenttv.app.torrent.TorrentCache.enforceLimit(
                         rootDir = root,
+                        retentionMs = store.retentionMs(),
                     )
                     val after = root.walkBottomUp().filter { it.isFile }.sumOf { it.length() }
                     if (after != size) {

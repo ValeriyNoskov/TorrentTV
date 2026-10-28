@@ -486,12 +486,16 @@ object TorrentEngine {
         fileMatcher: ((String) -> Boolean)? = null,
         /** Прямой выбор файла (для «☰ Серии»): перекрывает matcher. */
         fileIndex: Int = -1,
+        /** Предзагрузка следующей серии (настройка Настройки → Плеер). */
+        preloadNext: Boolean = true,
+        /** TTL недосмотренного, мс (0 = без TTL). См. TorrentCache.enforceLimit. */
+        retentionMs: Long = 0,
     ): StreamSession? {
         start()
         saveDir.mkdirs()
         // Политика кэша: перед новым стримом освобождаем место —
         // досмотренное и старьё под нож, недосмотренное живёт до лимита
-        runCatching { com.torrenttv.app.torrent.TorrentCache.enforceLimit(saveDir) }
+        runCatching { com.torrenttv.app.torrent.TorrentCache.enforceLimit(saveDir, retentionMs = retentionMs) }
 
         // Кэш метаданных: для знакомой раздачи плеер стартует без пиров
         val cacheKeyS = Regex("urn:btih:([0-9a-fA-F]{40})").find(source)?.groupValues?.get(1)?.lowercase()
@@ -599,7 +603,9 @@ object TorrentEngine {
         try {
             val order = st.videoFiles()
             val pos = order.indexOfFirst { it.first == best }
-            val next = if (pos >= 0) order.getOrNull(pos + 1) else null
+            val next = if (preloadNext) {
+                if (pos >= 0) order.getOrNull(pos + 1) else null
+            } else null
             val priorities = Array(numFiles) { i ->
                 when {
                     i == best -> Priority.NORMAL

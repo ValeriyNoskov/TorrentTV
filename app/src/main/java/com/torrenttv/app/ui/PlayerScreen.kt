@@ -253,6 +253,8 @@ fun PlayerScreen(
                     saveDir = File(context.filesDir, "downloads/" + item.storeKey),
                     onStatus = { s -> mainHandler.post { status = s } },
                     fileIndex = idx,
+                    preloadNext = store.preloadNext(),
+                    retentionMs = store.retentionMs(),
                 )
             }
         } else {
@@ -280,6 +282,9 @@ fun PlayerScreen(
                         } else -1
                         if (byEp >= 0) byEp else store.lastFile(item)
                     },
+                    // Предзагрузка следующей серии (Настройки → Плеер)
+                    preloadNext = store.preloadNext(),
+                    retentionMs = store.retentionMs(),
                 )
             }
         }

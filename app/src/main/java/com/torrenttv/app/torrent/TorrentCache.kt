@@ -25,7 +25,7 @@ object TorrentCache {
      * много, старейшие из них тоже удаляются — раньше при активном тестировании
      * раздач подряд кеш уходил за 12 ГБ, потому что активные были неприкосновенны.
      */
-    fun enforceLimit(currentDir: File? = null, rootDir: File? = null) {
+    fun enforceLimit(currentDir: File? = null, rootDir: File? = null, retentionMs: Long = 0) {
         val root = rootDir ?: currentDir?.parentFile ?: return
         val dirs = root.listFiles { f -> f.isDirectory } ?: return
         val now = System.currentTimeMillis()
@@ -36,6 +36,25 @@ object TorrentCache {
         val sizes = dirs.associateWith { sizeOf(it) }
         var total = sizes.values.sum()
         var free = root.usableSpace
+
+        // TTL недосмотренного: «начал смотреть и забыл» не должно копиться —
+        // папки старше retentionMs удаляются ВСЕГДА (не текущая), даже в
+        // пределах лимита. 0 = TTL выключен.
+        if (retentionMs > 0) {
+            dirs.filter { it != currentDir && now - it.lastModified() > retentionMs }.forEach { d ->
+                val s = sizes[d] ?: 0
+                runCatching {
+                    d.deleteRecursively()
+                    com.torrenttv.app.data.AppLog.log(
+                        "cache",
+                        "TTL: удалена папка ${d.name} (не трогали >${retentionMs / 3600000}ч, ${s / 1024 / 1024} МБ)",
+                    )
+                }
+                total -= s
+                free += s
+            }
+            if (total <= LIMIT_BYTES && free >= MIN_FREE_BYTES) return
+        }
 
         if (total <= LIMIT_BYTES && free >= MIN_FREE_BYTES) return
 

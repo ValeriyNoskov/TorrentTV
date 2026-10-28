@@ -868,6 +868,26 @@ class LocalStore(context: Context) {
     /** Открывать видео во внешнем плеере (VLC, MX Player и т.п.) вместо встроенного. */
     fun useExternalPlayer(): Boolean = prefs.getBoolean("use_external_player", false)
 
+    /**
+     * Предзагрузка следующей серии (как у Stremio): докачивается вхолостую,
+     * чтобы переключение было мгновенным. Выключи — качается ровно один
+     * файл, кеш растёт медленнее.
+     */
+    fun preloadNext(): Boolean = prefs.getBoolean("preload_next", true)
+
+    fun setPreloadNext(v: Boolean) = prefs.edit().putBoolean("preload_next", v).apply()
+
+    /**
+     * Сколько дней хранить недосмотренное (0 = не удалять по возрасту,
+     * работает только лимит 6 ГБ). «Начал смотреть и забыл» чистится само.
+     */
+    fun retentionDays(): Int = prefs.getInt("retention_days", 2)
+
+    fun setRetentionDays(d: Int) = prefs.edit().putInt("retention_days", d).apply()
+
+    /** TTL недосмотренного в мс (0 = выключен). */
+    fun retentionMs(): Long = retentionDays() * 24L * 3600 * 1000
+
     /** API-ключ Real-Debrid (debrid-стрим: magnet → прямая ссылка без скачания). */
     fun rdKey(): String = prefs.getString("rd_key", "") ?: ""
 
