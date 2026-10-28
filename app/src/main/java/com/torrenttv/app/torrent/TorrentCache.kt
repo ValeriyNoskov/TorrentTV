@@ -12,9 +12,11 @@ import java.io.File
  */
 object TorrentCache {
 
-    private const val LIMIT_BYTES = 20L * 1024 * 1024 * 1024 // 20 ГБ
-    private const val MIN_FREE_BYTES = 3L * 1024 * 1024 * 1024 // держим ≥3 ГБ свободно
-    private const val ACTIVE_MS = 12L * 3600 * 1000 // 12 часов
+    // 20 ГБ — слишком много для ТВ: владелец обнаружил 5 ГБ «непонятного»
+    // кеша. 6 ГБ хватает на 2-3 серии 720p; недосмотренное живёт до лимита
+    private const val LIMIT_BYTES = 6L * 1024 * 1024 * 1024
+    private const val MIN_FREE_BYTES = 2L * 1024 * 1024 * 1024 // держим ≥2 ГБ свободно
+    private const val ACTIVE_MS = 6L * 3600 * 1000 // «активная» папка: 6 часов
 
     /** Освободить место под новый стрим: root — папка downloads. */
     fun enforceLimit(currentDir: File? = null) {

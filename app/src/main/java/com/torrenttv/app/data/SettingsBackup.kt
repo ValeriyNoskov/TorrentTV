@@ -28,6 +28,7 @@ object SettingsBackup {
         .build()
 
     @Volatile private var lastSavedHash: Int? = null
+    @Volatile private var lastSavedKeyCount: Int = 0
     @Volatile private var restoring = false
     @Volatile private var cachedGistId: String? = null
 
@@ -99,6 +100,22 @@ object SettingsBackup {
             if (store.isEmpty()) return false
             val token = com.torrenttv.app.update.UpdateManager.ghToken(context)
             val json = sanitizedJson(store)
+            // Защита облачного бэкапа от деградации: сброс настроек на ТВ
+            // (прошивки убивают prefs) опустошал хранилище, и «пустой» снимок
+            // из 2 ключей перезаписывал в облаке полный бэкап — настройки
+            // терялись безвозвратно. Сильно урезанный снапшот не сохраняем:
+            // пусть лучше бэкап останется полным (лог 09:19: снапшот 2 ключа
+            // затёр сотни ключей)
+            val keyCount = runCatching { org.json.JSONObject(json).length() }.getOrDefault(0)
+            val known = lastSavedKeyCount
+            if (known > 20 && keyCount < known / 2) {
+                AppLog.log(
+                    "backup",
+                    "сохранение отклонено: снапшот подозрительно мал ($keyCount ключей против $known) — " +
+                        "вероятен сброс настроек, облачный бэкап не тронут",
+                )
+                return false
+            }
             if (!force && json.hashCode() == lastSavedHash) return true   // ничего не менялось
             if (token.isBlank()) {
                 AppLog.log("backup", "сохранение FAIL: нет GitHub-токена")
@@ -109,6 +126,7 @@ object SettingsBackup {
             val ok = if (gistId != null) patch(gistId, json, token) else create(json, token)
             if (ok) {
                 lastSavedHash = json.hashCode()
+                lastSavedKeyCount = keyCount
                 AppLog.log("backup", "настройки сохранены в приватный Gist")
             } else {
                 AppLog.log("backup", "сохранение FAIL: Gist недоступен")

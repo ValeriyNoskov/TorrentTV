@@ -149,14 +149,17 @@ fun PlayerScreen(
 
         com.torrenttv.app.data.AppLog.log("player", "startStream: ${magnet.take(90)}")
 
-        // Перезапуск выбранной серии: гасим текущий стрим, стартуем с выбранного
-        // файла (restartTick>0 — пользователь выбрал серию в «☰ Серии»)
-        if (restartTick > 0 && pendingFileIndex != null) {
+        // Перезапуск серии (restartTick>0 — пользователь выбрал в «☰ Серии»)
+        // и первый старт идут ОДНИМ путём: вычисляем стрим, дальше общий цикл
+        // буферизации. Раньше ветка перезапуска ставила stream и выходила
+        // МИМО цикла — bufferedPct оставался 0 и серии не воспроизводились
+        val st: TorrentEngine.StreamSession? = if (restartTick > 0 && pendingFileIndex != null) {
             stream?.stop()
             stream = null
             bufferedPct = 0
+            netInfo = ""
             val idx = pendingFileIndex!!
-            val st2 = withContext(Dispatchers.IO) {
+            withContext(Dispatchers.IO) {
                 TorrentEngine.startStream(
                     source = magnet,
                     saveDir = File(context.filesDir, "downloads/" + item.storeKey),
@@ -164,40 +167,33 @@ fun PlayerScreen(
                     fileIndex = idx,
                 )
             }
-            if (st2 == null) {
-                status = "Не удалось переключить серию"
-                return@LaunchedEffect
+        } else {
+            withContext(Dispatchers.IO) {
+                TorrentEngine.startStream(
+                    source = magnet,
+                    saveDir = File(context.filesDir, "downloads/" + item.storeKey),
+                    onStatus = { s ->
+                        mainHandler.post {
+                            status = s
+                            com.torrenttv.app.data.AppLog.log("player", "status: $s")
+                        }
+                    },
+                    // В пачке сезона включаем файл нужной серии
+                    fileMatcher = episode?.let { ep ->
+                        { name: String -> com.torrenttv.app.data.Episode.fileMatches(name, ep.season, ep.episode) }
+                    },
+                    // Прямой запуск файла (из экрана файлов раздачи),
+                    // иначе — запомненная последняя серия раздачи
+                    fileIndex = if (startIndex >= 0) startIndex else {
+                        // Приоритет: сохранённый S/E → эпизод в файлах → индекс
+                        val sEp = store.lastEp(item)
+                        val byEp = if (episode == null && sEp != null) torrentFiles.indexOfFirst {
+                            com.torrenttv.app.data.Episode.fileMatches(it.second, sEp.first, sEp.second)
+                        } else -1
+                        if (byEp >= 0) byEp else store.lastFile(item)
+                    },
+                )
             }
-            torrentFiles = st2.videoFiles()
-            stream = st2
-            return@LaunchedEffect
-        }
-
-        val st = withContext(Dispatchers.IO) {
-            TorrentEngine.startStream(
-                source = magnet,
-                saveDir = File(context.filesDir, "downloads/" + item.storeKey),
-                onStatus = { s ->
-                    mainHandler.post {
-                        status = s
-                        com.torrenttv.app.data.AppLog.log("player", "status: $s")
-                    }
-                },
-                // В пачке сезона включаем файл нужной серии
-                fileMatcher = episode?.let { ep ->
-                    { name: String -> com.torrenttv.app.data.Episode.fileMatches(name, ep.season, ep.episode) }
-                },
-                // Прямой запуск файла (из экрана файлов раздачи),
-                // иначе — запомненная последняя серия раздачи
-                fileIndex = if (startIndex >= 0) startIndex else {
-                    // Приоритет: сохранённый S/E → эпизод в файлах → индекс
-                    val sEp = store.lastEp(item)
-                    val byEp = if (episode == null && sEp != null) torrentFiles.indexOfFirst {
-                        com.torrenttv.app.data.Episode.fileMatches(it.second, sEp.first, sEp.second)
-                    } else -1
-                    if (byEp >= 0) byEp else store.lastFile(item)
-                },
-            )
         }
         if (st == null) {
             com.torrenttv.app.data.AppLog.log("player", "startStream FAILED (null)")

@@ -56,6 +56,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import kotlinx.coroutines.withContext
 
 /**
  * Разделы настроек: id, заголовок, краткое описание.
@@ -402,6 +404,40 @@ fun SettingsScreen(onBack: () -> Unit) {
                             store.setCardWidthDp(cardWidthDp)
                         }
                         SettingsNote("Размер постеров во всех каталогах. Мелкие — по умолчанию.")
+                        // Очистка кеша скачанных торрентов: недосмотренные серии
+                        // копятся на диске (лимит кеша — до 20 ГБ)
+                        var cacheSizeMb by remember { mutableStateOf(-1) }
+                        LaunchedEffect(Unit) {
+                            cacheSizeMb = withContext(Dispatchers.IO) {
+                                runCatching {
+                                    File(context.filesDir, "downloads")
+                                        .walkBottomUp().filter { it.isFile }.sumOf { it.length() }
+                                }.getOrDefault(0L).toInt() / 1024 / 1024
+                            }
+                        }
+                        SettingsRow(
+                            title = "🧹 Очистить кеш торрентов",
+                            value = if (cacheSizeMb > 0)
+                                "Скачано ${cacheSizeMb / 1024} ГБ ${cacheSizeMb % 1024} МБ — нажми для удаления"
+                            else "Кеш пуст",
+                            valueOk = cacheSizeMb <= 0,
+                        ) {
+                            com.torrenttv.app.data.AppLog.log("settings", "нажал: очистка кеша торрентов")
+                            // Очистка и подсчёт — в IO; стейт пишем из главного потока
+                            CoroutineScope(Dispatchers.IO).launch {
+                                runCatching {
+                                    File(context.filesDir, "downloads").listFiles()?.forEach { d ->
+                                        if (d.isDirectory) d.deleteRecursively()
+                                    }
+                                }
+                                val mb = runCatching {
+                                    File(context.filesDir, "downloads")
+                                        .walkBottomUp().filter { it.isFile }.sumOf { it.length() }
+                                }.getOrDefault(0L).toInt() / 1024 / 1024
+                                kotlinx.coroutines.withContext(Dispatchers.Main) { cacheSizeMb = mb }
+                            }
+                        }
+                        SettingsNote("Недосмотренное хранится для мгновенного «Продолжить» (лимит 20 ГБ). Досмотренное удаляется само.")
                         var skipDb by remember { mutableStateOf(store.skipDbEnabled()) }
                         SettingsRow(
                             title = if (skipDb) "✅ Пропуск заставок и титров по базам" else "⬜ Пропуск заставок и титров по базам",
