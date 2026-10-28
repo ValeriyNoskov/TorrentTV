@@ -20,13 +20,21 @@ import java.io.RandomAccessFile
 class TorrentDataSource(private val st: TorrentEngine.StreamSession) : DataSource {
 
     private var raf: RandomAccessFile? = null
-    private var absPos = 0L
+    // Позиция в ТОРРЕНТЕ (для готовности/приоритетов кусков): fileOffset + position
+    private var pieceAbs = 0L
+    // Позиция в ФАЙЛЕ серии на диске: multi-file торрент раскладывает пачку
+    // в ОТДЕЛЬНЫЕ файлы, поэтому читаем файл с его собственной позиции 0.
+    // Раньше сюда шёл fileOffset (смещение файла внутри пачки, ~2 ГБ для
+    // 7-й серии) — чтение уходило за конец файла, ExoPlayer получал пустой
+    // поток и PARSING_CONTAINER_UNSUPPORTED при полностью скачанной серии
+    private var filePos = 0L
 
     override fun open(dataSpec: DataSpec): Long {
-        absPos = st.fileOffset + dataSpec.position
+        pieceAbs = st.fileOffset + dataSpec.position
+        filePos = dataSpec.position
         // Seek в середину: поднимаем приоритет кусков вокруг новой позиции,
         // иначе sequential-загрузка будет ползти с начала и read заблокируется
-        if (dataSpec.position > 0) st.boostPiecesAround(absPos)
+        if (dataSpec.position > 0) st.boostPiecesAround(pieceAbs)
         raf = RandomAccessFile(st.videoFile, "r")
         return if (dataSpec.length != C.LENGTH_UNSET.toLong()) {
             dataSpec.length
@@ -42,9 +50,9 @@ class TorrentDataSource(private val st: TorrentEngine.StreamSession) : DataSourc
         // Ждём, пока будут скачаны ВСЕ куски запрошенного диапазона.
         // Таймаут 90 с: без него заблокированный поток ExoPlayer зависает
         // молча (чёрный экран)
-        val end = (absPos + length).coerceAtMost(st.fileSize)
+        val end = (pieceAbs + length).coerceAtMost(st.fileOffset + st.fileSize)
         val deadline = System.currentTimeMillis() + 90_000
-        while (!st.isRangeReady(absPos, end - absPos)) {
+        while (!st.isRangeReady(pieceAbs, end - pieceAbs)) {
             if (!TorrentEngine.session.isRunning) throw IOException("Торрент-сессия остановлена")
             if (System.currentTimeMillis() > deadline) {
                 throw IOException("Куски не загружаются — пиры недоступны")
@@ -62,18 +70,24 @@ class TorrentDataSource(private val st: TorrentEngine.StreamSession) : DataSourc
             // Конец файла — только если действительно конец. Иначе это ошибка
             // чтения (кусок есть в памяти, но не сброшен): END_OF_INPUT здесь
             // означал бы «фильм кончился» в середине — ложный STATE_ENDED
-            if (absPos < st.fileSize) throw IOException("Кусок скачан, но не читается с диска")
+            if (filePos < st.fileSize) throw IOException("Кусок скачан, но не читается с диска")
             return C.RESULT_END_OF_INPUT
         }
-        absPos += n
+        // pieceAbs/filePos уже сдвинуты в readOnce
         return n
     }
 
     private fun readOnce(f: RandomAccessFile, target: ByteArray, offset: Int, length: Int): Int {
         return try {
-            f.seek(absPos)
-            val limit = minOf(length.toLong(), st.fileSize - absPos).toInt().coerceAtLeast(0)
-            if (limit == 0) -1 else f.read(target, offset, limit)
+            // Читаем в КООРДИНАТАХ ФАЙЛА серии (filePos), не торрента
+            f.seek(filePos)
+            val limit = minOf(length.toLong(), st.fileSize - filePos).toInt().coerceAtLeast(0)
+            if (limit == 0) -1 else f.read(target, offset, limit).also { n ->
+                if (n > 0) {
+                    pieceAbs += n
+                    filePos += n
+                }
+            }
         } catch (_: Exception) {
             -1
         }

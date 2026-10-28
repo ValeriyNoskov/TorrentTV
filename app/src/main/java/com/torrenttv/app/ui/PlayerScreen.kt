@@ -602,7 +602,11 @@ private fun VideoPlayer(
                             runCatching {
                                 java.io.RandomAccessFile(stNow2.videoFile, "r").use { f ->
                                     val head = ByteArray(32)
-                                    f.seek(stNow2.fileOffset)
+                                    // Начало ФАЙЛА серии (он отдельный на диске),
+                                    // а не fileOffset — смещение внутри пачки;
+                                    // seek(fileOffset) читал за концом файла и
+                                    // всегда показывал пустоту
+                                    f.seek(0)
                                     val n = f.read(head)
                                     val hex = head.take(n.coerceAtLeast(0))
                                         .joinToString(" ") { "%02X".format(it) }
