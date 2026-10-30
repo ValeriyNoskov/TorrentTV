@@ -977,6 +977,13 @@ fun SideNav(active: Screen, onTab: (Screen) -> Unit, restoreFocusTick: Int = 0) 
     // из которой вышел»). Переносим фокус на активный пункт.
     var focusedItem by remember { mutableStateOf<Screen?>(null) }
     var menuHadFocus by remember { mutableStateOf(false) }
+    // Защита от ложных «входов извне»: при перемещении фокуса по кнопкам
+    // Column на мгновение теряет hasFocus (false→true за миллисекунды) —
+    // без проверки переброс на активный пункт срабатывает на КАЖДОЕ нажатие
+    // ВНИЗ, и пользователь не может уйти с «Главной» (баг 0.9.63).
+    // Критерий: разрыв фокуса < 300 мс — внутреннее перемещение, не вход
+    // извне; честный вход после контента — фокус отсутствовал дольше.
+    var focusLostAt by remember { mutableStateOf(Long.MAX_VALUE) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     LaunchedEffect(restoreFocusTick, active) {
         if (restoreFocusTick > 0) {
@@ -997,10 +1004,20 @@ fun SideNav(active: Screen, onTab: (Screen) -> Unit, restoreFocusTick: Int = 0) 
             .verticalScroll(rememberScrollState())
             .padding(vertical = 6.dp)
             .onFocusChanged { st ->
+                AppLog.log("focus", "меню: hasFocus=${st.hasFocus} active=$active")
+                if (!st.hasFocus) focusLostAt = System.currentTimeMillis()
                 if (st.hasFocus && !menuHadFocus && focusedItem != active) {
-                    scope.launch {
-                        kotlinx.coroutines.delay(80) // фокус должен «устояться»
-                        runCatching { activeFocus.requestFocus() }
+                    val gap = System.currentTimeMillis() - focusLostAt
+                    if (gap < 300L) {
+                        // Фокус вернулся мгновенно — ложный «вход извне» при
+                        // перемещении по кнопкам, не крадём фокус.
+                        AppLog.log("focus", "меню: ложный вход извне (разрыв ${gap}мс) → не перебрасываем")
+                    } else {
+                        scope.launch {
+                            kotlinx.coroutines.delay(80) // фокус должен «устояться»
+                            AppLog.log("focus", "меню: вход извне → переброс на активный пункт ($active)")
+                            runCatching { activeFocus.requestFocus() }
+                        }
                     }
                 }
                 menuHadFocus = st.hasFocus
@@ -1076,7 +1093,10 @@ fun SideBarButton(
             .width(if (expanded) 150.dp else 56.dp)
             .mouseClick { onTab(target) }
             .onFocusChanged {
-                if (it.isFocused) onFocusedItem(target)
+                if (it.isFocused) {
+                    AppLog.log("focus", "меню: пункт «$label»${if (isActive) " (активный)" else ""}")
+                    onFocusedItem(target)
+                }
                 onFocusInBar(it.hasFocus)
             },
         shape = clickableSurfaceShape(RoundedCornerShape(12.dp)),

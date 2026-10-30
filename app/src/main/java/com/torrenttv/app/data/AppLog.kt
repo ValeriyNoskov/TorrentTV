@@ -72,6 +72,98 @@ object AppLog {
         appContext = context.applicationContext
         installCrashHandler()
         log("app", "start, log initialized")
+        startAutoLog()
+    }
+
+    // ---------- Автолог: авто-выгрузка лога в GitVerse tv-logs ----------
+    // Лог выгружается сам: при старте (независимо от причины) и раз в 2 часа.
+    // Краш с прошлого запуска уходит первым — не нужно ждать ручной выгрузки,
+    // чтобы понять, почему приложение вылетело. Дедуп: если лог не изменился
+    // с прошлой выгрузки — сетевой запрос не делаем.
+
+    @Volatile private var lastUploadHash: Int = 0
+    @Volatile private var lastUploadAt: Long = 0L
+
+    private fun startAutoLog() {
+        Thread({
+            try {
+                Thread.sleep(2 * 60_000L)          // даём приложению стартовать без помех
+                uploadCrashIfAny()
+                autoUpload("startup")
+                while (true) {
+                    Thread.sleep(2 * 3600_000L)    // раз в 2 часа
+                    autoUpload("periodic")
+                }
+            } catch (_: InterruptedException) { }
+        }).apply {
+            name = "applog-autoupload"
+            isDaemon = true
+            start()
+        }
+    }
+
+    /** Краш прошлого запуска: app_crash.txt переименовывается в *_sent — выгружается один раз. */
+    private fun uploadCrashIfAny() {
+        val crash = crashFile()
+        if (!crash.exists() || crash.length() == 0L) return
+        val content = crash.readText()
+        runCatching {
+            if (uploadToTvLogs(content, "crash")) {
+                crash.renameTo(crashSentFile())
+                log("autolog", "краш прошлого запуска выгружен")
+            }
+        }
+    }
+
+    /** Авто-выгрузка дампа лога (дедуп по хешу: не менялся — не шлём). */
+    fun autoUpload(reason: String) {
+        val dump = dump()
+        val h = dump.hashCode()
+        if (h == lastUploadHash) return
+        if (uploadToTvLogs(dump, "auto-$reason")) {
+            lastUploadHash = h
+            lastUploadAt = System.currentTimeMillis()
+            log("autolog", "лог выгружен ($reason)")
+        }
+    }
+
+    /** PUT файла в tv-logs/logs/<имя>. Возвращает успех. Имя перезаписывается в пределах часа. */
+    private fun uploadToTvLogs(content: String, baseName: String): Boolean {
+        val logToken = runCatching {
+            com.torrenttv.app.Obf.decode(
+                com.torrenttv.app.BuildConfig.LOG_TOKEN_OBF, com.torrenttv.app.BuildConfig.OBF_KEY,
+            )
+        }.getOrDefault("")
+        if (logToken.isBlank()) return false
+        val stamp = SimpleDateFormat("yyyyMMdd-HH").format(Date())
+        val name = "$baseName-$stamp.txt"
+        val api = "https://api.gitverse.ru/repos/ChipN/tv-logs/contents/logs/$name"
+        val client = TorrentHttp.client
+        return try {
+            // sha текущего файла (для перезаписи); 404 = файла нет
+            var sha: String? = null
+            client.newCall(
+                okhttp3.Request.Builder().url(api).header("Authorization", "Bearer $logToken")
+                    .header("Accept", "application/vnd.gitverse.object+json;version=1").get().build()
+            ).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    sha = org.json.JSONObject(resp.body?.string().orEmpty()).optString("sha").takeIf { it.isNotBlank() }
+                }
+            }
+            val payload = org.json.JSONObject()
+                .put("message", "автолог $baseName")
+                .put("content", android.util.Base64.encodeToString(content.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP))
+            if (sha != null) payload.put("sha", sha)
+            val body = okhttp3.RequestBody.create("application/json; charset=utf-8".toMediaTypeOrNull(), payload.toString())
+            client.newCall(
+                okhttp3.Request.Builder().url(api)
+                    .header("Authorization", "Bearer $logToken")
+                    .header("Accept", "application/vnd.gitverse.object+json;version=1")
+                    .put(body).build()
+            ).execute().use { resp -> resp.isSuccessful }
+        } catch (e: Exception) {
+            false
+        }
     }
 
     fun log(tag: String, msg: String) {
@@ -136,6 +228,8 @@ object AppLog {
     fun crashFile(): File = File(appContext?.filesDir ?: File("/tmp"), "app_crash.txt")
 
     private fun file(): File = File(appContext?.filesDir ?: File("/tmp"), "app_log.txt")
+
+    private fun crashSentFile(): File = File(appContext?.filesDir ?: File("/tmp"), "app_crash_sent.txt")
 
     /** Писать краши в файл — попадут в следующий dump. */
     private fun installCrashHandler() {

@@ -793,7 +793,11 @@ private fun VideoPlayer(
     val segSkipFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     // Тик раз в секунду: авто-заставка/пересказ (прыжок при входе в отрезок)
     // и кнопка «Пропустить» для титров/анонса
+    // withContext(Main): при отмене/рестарте тика продолжение после delay
+    // могло резюмиться на worker-потоке — краш ExoPlayer
+    // «Player is accessed on the wrong thread» (крэш-лог 0.9.62, getCurrentPosition)
     LaunchedEffect(player, skipSegs) {
+        withContext(Dispatchers.Main) {
         while (true) {
             kotlinx.coroutines.delay(1000)
             if (skipSegs.isEmpty() || player.duration <= 0) continue
@@ -818,6 +822,7 @@ private fun VideoPlayer(
                 (it.kind == "outro" || it.kind == "preview") &&
                     pos >= it.startMs && pos < it.endMs
             }
+        }
         }
     }
     // Автопереход: «Следующая серия через N…» с кнопками Сейчас/Отмена
@@ -847,20 +852,26 @@ private fun VideoPlayer(
     // Очередь сработавших групп cues: (время активации в мс плеера, cues)
     val pendingCues = remember { mutableListOf<Pair<Long, List<androidx.media3.common.text.Cue>>>() }
     var subCues by remember { mutableStateOf<List<androidx.media3.common.text.Cue>>(emptyList()) }
+    // withContext(Main) — как в тике пропусков: продолжение после delay при
+    // отмене могло уйти на worker-поток (крэш 0.9.62 «wrong thread»)
     LaunchedEffect(player, subShiftMs) {
-        while (true) {
-            delay(200)
-            val effMs = player.currentPosition - subShiftMs
-            val snapshot = synchronized(pendingCues) { pendingCues.toList() }
-            if (snapshot.isNotEmpty()) {
-                subCues = snapshot.lastOrNull { it.first <= effMs }?.second ?: emptyList()
-                synchronized(pendingCues) { pendingCues.removeAll { it.first < effMs - 30_000 } }
+        withContext(Dispatchers.Main) {
+            while (true) {
+                delay(200)
+                val effMs = player.currentPosition - subShiftMs
+                val snapshot = synchronized(pendingCues) { pendingCues.toList() }
+                if (snapshot.isNotEmpty()) {
+                    subCues = snapshot.lastOrNull { it.first <= effMs }?.second ?: emptyList()
+                    synchronized(pendingCues) { pendingCues.removeAll { it.first < effMs - 30_000 } }
+                }
             }
         }
     }
 
     // Процент буфера во время подкачки (для индикатора «живого» плеера)
+    // withContext(Main) — тик тоже трогает плеер (bufferedPercentage)
     LaunchedEffect(playerBuf) {
+        withContext(Dispatchers.Main) {
         while (playerBuf) {
             bufPct = player.bufferedPercentage
             // Пиры не подключаются: буферизация не двинется — показываем причину
@@ -877,6 +888,7 @@ private fun VideoPlayer(
             delay(400)
         }
         noPeersSec = 0
+        }
     }
 
     DisposableEffect(player) {
@@ -996,7 +1008,9 @@ private fun VideoPlayer(
     }
 
     // Автосохранение позиции каждые 5 секунд + показ «Пропустить титры» в последние 3 минуты
+    // withContext(Main) — это место краша 0.9.62 (getCurrentPosition с worker-потока)
     LaunchedEffect(player) {
+        withContext(Dispatchers.Main) {
         while (true) {
             delay(5000)
             if (player.duration > 0) {
@@ -1027,6 +1041,7 @@ private fun VideoPlayer(
                     }
                 }
             }
+        }
         }
     }
 
