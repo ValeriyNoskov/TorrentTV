@@ -14,7 +14,9 @@ name: Release
 #   KP_API_KEY         — ключ Кинопоиска, вшивается в APK
 #   TRAKT_CLIENT_ID    — Trakt, вшивается в APK
 #   TORBOX_KEY         — TorBox, вшивается в APK
-#   GITVERSE_TOKEN     — токен для API GitVerse (создание релиза/ассета)
+#   GV_TOKEN           — токен для API GitVerse (создание релиза/ассета).
+#                        Имя GITVERSE_TOKEN платформа не принимает (префикс
+#                        GITVERSE_ зарезервирован), поэтому GV_TOKEN.
 on:
   push:
     branches: [release]
@@ -95,11 +97,11 @@ jobs:
 
       - name: Опубликовать GitVerse Release
         env:
-          GITVERSE_TOKEN: ${{ secrets.GITVERSE_TOKEN }}
+          GITVERSE_TOKEN: ${{ secrets.GV_TOKEN }}
           VER: ${{ steps.version.outputs.version }}
         run: |
           API="$REPO_API"
-          AH="Authorization: Bearer $GITVERSE_TOKEN"
+          AH="Authorization: Bearer $GITVERSE_TOKEN"  # GV_TOKEN из секретов
           AH2="Accept: application/vnd.gitverse.object+json;version=1"
           SHA=$(git rev-parse HEAD)
           # Тег: если уже существует (например, создан зеркальным шагом
