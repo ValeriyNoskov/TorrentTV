@@ -252,32 +252,46 @@ object UpdateManager {
         }
     }
 
-    /** GitVerse (зеркало в РФ): репозиторий должен быть публичным. */
+    /**
+     * GitVerse (зеркало в РФ). API GitVerse закрыт для анонимов (401 на
+     * /releases/latest — «ошибка не удалось проверить http» на ТВ), поэтому
+     * парсим анонимные HTML-страницы релизов:
+     *  1) страница списка — первый тег `/releases/tag/vX` = новейший релиз;
+     *  2) страница тега — APK виден как `<a download="VNosKino-X.apk"
+     *     href="/api/attachments/<uuid>">`; attachment качается без токена.
+     */
     private fun fetchGitverse(currentVersion: String): UpdateInfo? {
-        val request = Request.Builder()
-            .url("https://api.gitverse.ru/repos/ChipN/TorrentTV/releases/latest")
-            .header("Accept", "application/vnd.gitverse.object+json;version=1")
-            .build()
-        http.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}")
-            val json = JSONObject(response.body?.string() ?: throw IllegalStateException("пустой ответ сервера"))
-            val tag = json.optString("tag_name", "").removePrefix("v")
-            var apkUrl = ""
-            val assets = json.optJSONArray("assets") ?: org.json.JSONArray()
-            for (i in 0 until assets.length()) {
-                val a = assets.getJSONObject(i)
-                if (a.optString("name", "").endsWith(".apk")) {
-                    apkUrl = a.optString("browser_download_url", "")
-                    break
-                }
-            }
-            val newer = isNewer(tag, currentVersion) && apkUrl.isNotEmpty()
+        val listHtml = getHtml("https://gitverse.ru/ChipN/TorrentTV/releases")
+        val tag = Regex("/ChipN/TorrentTV/releases/tag/v(\\d+\\.\\d+\\.\\d+)")
+            .find(listHtml)?.groupValues?.get(1)
+            ?: throw IllegalStateException("на странице релизов нет тега версии")
+        if (!isNewer(tag, currentVersion)) {
             com.torrenttv.app.data.AppLog.log(
                 "update",
-                "проверка [GitVerse]: последний релиз v$tag, текущая v$currentVersion → " +
-                    if (newer) "доступно обновление" else "у вас последняя",
+                "проверка [GitVerse]: последний релиз v$tag, текущая v$currentVersion → у вас последняя",
             )
-            return if (newer) UpdateInfo(tag, apkUrl, json.optString("body", "").take(500)) else null
+            return null
+        }
+        // Новее текущей: страница тега → ссылка на APK-attachment
+        val tagHtml = getHtml("https://gitverse.ru/ChipN/TorrentTV/releases/tag/v$tag")
+        val apkUrl = Regex("""download="[^"]*\.apk"[^>]*href="/api/attachments/([0-9a-f-]+)"""")
+            .find(tagHtml)?.let { "https://gitverse.ru/api/attachments/${it.groupValues[1]}" }
+            ?: Regex("/api/attachments/([0-9a-f-]+)")
+                .find(tagHtml)?.let { "https://gitverse.ru/api/attachments/${it.groupValues[1]}" }
+            ?: throw IllegalStateException("у релиза v$tag нет APK на странице")
+        com.torrenttv.app.data.AppLog.log(
+            "update",
+            "проверка [GitVerse]: последний релиз v$tag, текущая v$currentVersion → доступно обновление",
+        )
+        return UpdateInfo(tag, apkUrl, "")
+    }
+
+    /** GET HTML-страницы GitVerse анонимно, с проверкой кода. */
+    private fun getHtml(url: String): String {
+        val request = Request.Builder().url(url).header("Accept", "text/html").build()
+        http.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}")
+            return response.body?.string() ?: throw IllegalStateException("пустой ответ сервера")
         }
     }
 
