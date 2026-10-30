@@ -27,7 +27,7 @@ object TraktClient {
         .build()
 
     private val clientId: String
-        get() = BuildConfig.TRAKT_CLIENT_ID
+        get() = com.torrenttv.app.Obf.decode(BuildConfig.TRAKT_CLIENT_ID_OBF, BuildConfig.OBF_KEY)
 
     /** Есть ли настроенный ключ — чтобы не ходить в сеть впустую. */
     val isConfigured: Boolean

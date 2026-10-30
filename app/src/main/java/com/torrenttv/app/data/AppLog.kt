@@ -158,15 +158,51 @@ object AppLog {
 
     /**
      * Выложить лог и вернуть URL. Приоритет:
-     * GitHub Gist (если задан токен) → dpaste.org → paste.rs → 0x0.st → tmpfiles.org.
-     * Gist — секретный: открывается по ссылке без пароля, но не виден в профиле.
-     * Токен хранится в Настройках ТВ (не в APK) с правами только на gists.
+     * GitVerse tv-logs (вшитый токен) → GitHub Gist (свой токен из настроек)
+     * → dpaste.org → paste.rs → 0x0.st → tmpfiles.org.
+     *
+     * GitVerse: каждая выгрузка — отдельный файл logs/<имя>-<штамп>.txt в
+     * приватном репозитории ChipN/tv-logs (Contents API). Токен вшит в APK
+     * обфусцированным (XOR+hex, см. Obf.kt) — в APK нет ключей открытым текстом.
+     * Gist — опция для своего токена с правами только на gists.
      */
     fun sendToPastebin(githubToken: String? = null, overrideContent: String? = null, overrideTitle: String? = null): String {
         val content = (overrideContent ?: dump()).toByteArray(Charsets.UTF_8)
         val client = TorrentHttp.client
 
-        // 0) GitHub Gist от имени владельца токена: я (разработчик) читаю его сам
+        // 0) GitVerse tv-logs: хранилище логов владельца, читается через API
+        runCatching {
+            val logToken = com.torrenttv.app.Obf.decode(
+                com.torrenttv.app.BuildConfig.LOG_TOKEN_OBF, com.torrenttv.app.BuildConfig.OBF_KEY,
+            )
+            if (logToken.isNotBlank()) {
+                val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmmss").format(java.util.Date())
+                val name = (if (overrideTitle != null) "selftest" else "log") + "-$stamp.txt"
+                val payload = org.json.JSONObject()
+                    .put("message", "лог с ТВ $stamp")
+                    .put("content", android.util.Base64.encodeToString(content, android.util.Base64.NO_WRAP))
+                    .toString()
+                val body = okhttp3.RequestBody.create(
+                    "application/json; charset=utf-8".toMediaTypeOrNull(),
+                    payload,
+                )
+                client.newCall(
+                    okhttp3.Request.Builder()
+                        .url("https://api.gitverse.ru/repos/ChipN/tv-logs/contents/logs/$name")
+                        .header("Authorization", "Bearer $logToken")
+                        .header("Accept", "application/vnd.gitverse.object+json;version=1")
+                        .put(body)
+                        .build()
+                ).execute().use { resp ->
+                    if (resp.isSuccessful) {
+                        // Человекочитаемая страница файла (открывается под логином владельца)
+                        return "https://gitverse.ru/ChipN/tv-logs/blob/main/logs/$name"
+                    }
+                }
+            }
+        }
+
+        // 0b) GitHub Gist от имени владельца токена (свой токен из Настроек)
         if (!githubToken.isNullOrBlank()) {
             runCatching {
                 val stamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm").format(java.util.Date())

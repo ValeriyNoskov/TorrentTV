@@ -23,7 +23,7 @@ object KinopoiskClient {
     private const val BASE = "https://kinopoiskapiunofficial.tech"
 
     val isConfigured: Boolean
-        get() = overrideApiKey.isNotBlank() || BuildConfig.KP_API_KEY.isNotBlank()
+        get() = overrideApiKey.isNotBlank() || BuildConfig.KP_API_KEY_OBF.isNotBlank()
 
     // ---------- Дисковый кэш ответов (экономит дневной лимит API) ----------
 
@@ -158,7 +158,7 @@ object KinopoiskClient {
      * каждый: когда ключ исчерпан (HTTP 402/429), авто-переключаемся на следующий.
      */
     private val allKeys: List<String>
-        get() = (overrideApiKey.ifBlank { BuildConfig.KP_API_KEY })
+        get() = (overrideApiKey.ifBlank { com.torrenttv.app.Obf.decode(BuildConfig.KP_API_KEY_OBF, BuildConfig.OBF_KEY) })
             .split(',').map { it.trim() }.filter { it.isNotBlank() }
 
     @Volatile private var keyIndex: Int = 0

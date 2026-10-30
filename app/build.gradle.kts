@@ -11,22 +11,34 @@ android {
     // чтобы обновление библиотек не притащило новых ограничений Android 15/16
     compileSdk = 36
 
+    // ---------- Вшитые ключи: XOR-обфускация ----------
+    // Секреты не лежат в APK открытым текстом: при сборке строка XOR-ится
+    // с ключом и вшивается hex'ом, в рантайме собирается обратно (Obf.kt).
+    // Это защита от jadx-поиска по строкам и скриптов-грепперов, не от
+    // целевого реверса: приложение само расшифровывает — значит, ключ
+    // в APK есть, просто не рядом с данными и не в открытом виде.
+    val obfKey = Integer.toHexString((31 * "vN0sK1no".hashCode() + namespace.hashCode())).padStart(8, '0')
+    fun xorHex(secret: String, key: String): String =
+        secret.mapIndexed { i, c -> (c.code xor key[i % key.length].code).toString(16).padStart(2, '0') }.joinToString("")
+
     defaultConfig {
         applicationId = "com.torrenttv.app"
         minSdk = 29          // Android 10 — минимальная версия Android TV по требованию
         targetSdk = 34
-        versionCode = 198
-        versionName = "0.9.62"
-        // Ключи метаданных задаются в gradle.properties: kpApiKey=... (kinopoisk.dev) или tmdbApiKey=...
-        buildConfigField("String", "KP_API_KEY", "\"${findProperty("kpApiKey") ?: ""}\"")
-        buildConfigField("String", "TMDB_API_KEY", "\"${findProperty("tmdbApiKey") ?: ""}\"")
-        // Ключ Trakt API (серии и даты выхода) — задаётся в gradle.properties: traktClientId=...
-        buildConfigField("String", "TRAKT_CLIENT_ID", "\"${findProperty("traktClientId") ?: ""}\"")
-        // GitHub-токен для приватного репо (автообновление + Gist-логи).
-        // В CI передаётся секретом: -PghEmbeddedToken=$GH_EMBEDDED_TOKEN
-        buildConfigField("String", "GH_EMBEDDED_TOKEN", "\"${findProperty("ghEmbeddedToken") ?: ""}\"")
+        versionCode = 199
+        versionName = "0.9.63"
+        // Ключ метаданных (kinopoiskapiunofficial.tech) — задаётся в gradle.properties: kpApiKey=...
+        buildConfigField("String", "OBF_KEY", "\"$obfKey\"")
+        buildConfigField("String", "KP_API_KEY_OBF", "\"${xorHex(findProperty("kpApiKey") as String? ?: "", obfKey)}\"")
+        // Ключ API TMDB (themoviedb.org) — tmdbApiKey=...
+        buildConfigField("String", "TMDB_API_KEY_OBF", "\"${xorHex(findProperty("tmdbApiKey") as String? ?: "", obfKey)}\"")
+        // Ключ Trakt API (серии и даты выхода) — traktClientId=...
+        buildConfigField("String", "TRAKT_CLIENT_ID_OBF", "\"${xorHex(findProperty("traktClientId") as String? ?: "", obfKey)}\"")
+        // Токен GitVerse для хранилища логов и бэкапа настроек (репо ChipN/tv-logs).
+        // В CI передаётся секретом: -PlogToken="$LOG_TOKEN"
+        buildConfigField("String", "LOG_TOKEN_OBF", "\"${xorHex(findProperty("logToken") as String? ?: "", obfKey)}\"")
         // TorBox API ключ владельца: вшит в релиз — на ТВ не нужно ничего вводить
-        buildConfigField("String", "TB_KEY", "\"${findProperty("torboxKey") ?: ""}\"")
+        buildConfigField("String", "TB_KEY_OBF", "\"${xorHex(findProperty("torboxKey") as String? ?: "", obfKey)}\"")
     }
 
     // Подпись релиза: ключ берётся из переменных окружения (CI) или gradle.properties;

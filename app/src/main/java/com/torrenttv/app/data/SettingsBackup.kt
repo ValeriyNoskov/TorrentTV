@@ -5,22 +5,21 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 /**
- * Облачный бэкап настроек в приватный Gist (токен уже есть — свой или вшитый).
- * Сброс данных/кеша на ТВ убивает SharedPreferences — из Gist всё восстанавливается
- * при следующем запуске (LocalStore.isEmpty() → restore).
+ * Облачный бэкап настроек в приватный репозиторий ChipN/tv-logs на GitVerse
+ * (токен вшит в APK обфусцированным — см. Obf.kt; раньше был GitHub Gist).
+ * Сброс данных/кеша на ТВ убивает SharedPreferences — из tv-logs всё
+ * восстанавливается при следующем запуске (LocalStore.isEmpty() → restore).
  *
  * Экономия API: сохраняем только если снимок изменился с прошлой выгрузки.
  */
 object SettingsBackup {
 
-    private const val FILE = "vnoskino_settings.json"
-    private const val DESC = "ВНосКино настройки (авто-бэкап)"
-    private const val LIST_API = "https://api.github.com/gists"
+    private const val FILE_PATH = "settings/vnoskino_settings.json"
+    private const val CONTENTS_API = "https://api.gitverse.ru/repos/ChipN/tv-logs/contents"
 
     private val http = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -30,7 +29,6 @@ object SettingsBackup {
     @Volatile private var lastSavedHash: Int? = null
     @Volatile private var lastSavedKeyCount: Int = 0
     @Volatile private var restoring = false
-    @Volatile private var cachedGistId: String? = null
 
     /**
      * Секреты НЕ выгружаем в Gist: github-токен (даёт доступ ко всем гистам,
@@ -55,9 +53,9 @@ object SettingsBackup {
             try {
                 val store = LocalStore(context)
                 if (!store.isEmpty()) return@Thread
-                val token = com.torrenttv.app.update.UpdateManager.ghToken(context)
+                val token = logToken()
                 if (token.isBlank()) return@Thread
-                val content = download(findGistId(token) ?: return@Thread, token) ?: return@Thread
+                val content = download(token) ?: return@Thread
                 // Старые снимки могли сохраниться с управляющими символами
                 // (Android org.json их не экранирует) — такой JSON не парсится.
                 // Чистим и пробуем снова, иначе настройки «теряются» при сбросе
@@ -98,7 +96,7 @@ object SettingsBackup {
             }
             val store = LocalStore(context)
             if (store.isEmpty()) return false
-            val token = com.torrenttv.app.update.UpdateManager.ghToken(context)
+            val token = logToken()
             val json = sanitizedJson(store)
             // Защита облачного бэкапа от деградации: сброс настроек на ТВ
             // (прошивки убивают prefs) опустошал хранилище, и «пустой» снимок
@@ -118,18 +116,16 @@ object SettingsBackup {
             }
             if (!force && json.hashCode() == lastSavedHash) return true   // ничего не менялось
             if (token.isBlank()) {
-                AppLog.log("backup", "сохранение FAIL: нет GitHub-токена")
+                AppLog.log("backup", "сохранение FAIL: нет токена tv-logs")
                 return false
             }
-            val gistId = findGistId(token)
-            if (gistId != null) cachedGistId = gistId
-            val ok = if (gistId != null) patch(gistId, json, token) else create(json, token)
+            val ok = put(json, token)
             if (ok) {
                 lastSavedHash = json.hashCode()
                 lastSavedKeyCount = keyCount
-                AppLog.log("backup", "настройки сохранены в приватный Gist")
+                AppLog.log("backup", "настройки сохранены в GitVerse tv-logs")
             } else {
-                AppLog.log("backup", "сохранение FAIL: Gist недоступен")
+                AppLog.log("backup", "сохранение FAIL: tv-logs недоступен")
             }
             return ok
         } catch (e: Exception) {
@@ -138,15 +134,18 @@ object SettingsBackup {
         }
     }
 
-    // ---------- GitHub Gist ----------
+    // ---------- GitVerse tv-logs (Contents API) ----------
+
+    /** Вшитый токен хранилища (обфусцированный в BuildConfig). */
+    private fun logToken(): String =
+        com.torrenttv.app.Obf.decode(com.torrenttv.app.BuildConfig.LOG_TOKEN_OBF, com.torrenttv.app.BuildConfig.OBF_KEY)
 
     private fun request(url: String, token: String, method: String, body: String?): Pair<Int, String> {
         val rb = Request.Builder().url(url)
             .header("Authorization", "Bearer $token")
-            .header("Accept", "application/vnd.github+json")
+            .header("Accept", "application/vnd.gitverse.object+json;version=1")
         when (method) {
-            "POST" -> rb.post(body!!.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
-            "PATCH" -> rb.patch(body!!.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
+            "PUT" -> rb.put(body!!.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
             else -> rb.get()
         }
         http.newCall(rb.build()).execute().use { resp ->
@@ -154,41 +153,37 @@ object SettingsBackup {
         }
     }
 
-    /** Найти наш Gist по имени файла (секретный — в профиле не виден, но API его отдаёт). */
-    private fun findGistId(token: String): String? {
-        // Найденный id кешируем: сканирование до 300 гистов на каждую выгрузку не нужно
-        cachedGistId?.let { return it }
-        for (page in 1..3) {   // до 300 гистов — логи не должны так быстро расти
-            val (code, body) = request("$LIST_API?per_page=100&page=$page", token, "GET", null)
-            if (code != 200) return null
-            val arr = JSONArray(body)
-            for (i in 0 until arr.length()) {
-                val g = arr.getJSONObject(i)
-                if (g.optJSONObject("files")?.has(FILE) == true) return g.optString("id")
-            }
-            if (arr.length() < 100) return null
-        }
-        return null
+    /**
+     * Выгрузка снимка: если файл уже есть — обновляем по sha (PATCH-семантика
+     * Contents API), если нет — создаём. Возвращает успех.
+     */
+    private fun put(json: String, token: String): Boolean {
+        // sha текущей версии файла (для обновления); 404 = файла нет, создадим
+        val (getCode, getBody) = request("$CONTENTS_API/$FILE_PATH", token, "GET", null)
+        val sha: String? = if (getCode == 200) {
+            runCatching { JSONObject(getBody).optString("sha").takeIf { it.isNotBlank() } }.getOrNull()
+        } else null
+
+        val b64 = android.util.Base64.encodeToString(
+            json.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP,
+        )
+        val payload = JSONObject()
+            .put("message", "бэкап настроек с ТВ")
+            .put("content", b64)
+        if (sha != null) payload.put("sha", sha)
+
+        val (putCode, _) = request("$CONTENTS_API/$FILE_PATH", token, "PUT", payload.toString())
+        return putCode in 200..299
     }
 
-    private fun download(gistId: String, token: String): String? {
-        val (code, body) = request("$LIST_API/$gistId", token, "GET", null)
+    /** Скачать текущий снимок настроек (или null — бэкапа ещё нет). */
+    private fun download(token: String): String? {
+        val (code, body) = request("$CONTENTS_API/$FILE_PATH", token, "GET", null)
         if (code != 200) return null
-        return JSONObject(body).optJSONObject("files")
-            ?.optJSONObject(FILE)?.optString("content")?.takeIf { it.isNotBlank() }
-    }
-
-    private fun create(json: String, token: String): Boolean {
-        val payload = JSONObject()
-            .put("description", DESC)
-            .put("public", false)
-            .put("files", JSONObject().put(FILE, JSONObject().put("content", json)))
-        return request(LIST_API, token, "POST", payload.toString()).first in 200..299
-    }
-
-    private fun patch(gistId: String, json: String, token: String): Boolean {
-        val payload = JSONObject()
-            .put("files", JSONObject().put(FILE, JSONObject().put("content", json)))
-        return request("$LIST_API/$gistId", token, "PATCH", payload.toString()).first in 200..299
+        val b64 = runCatching { JSONObject(body).optString("content") }.getOrDefault("")
+        if (b64.isBlank()) return null
+        // API отдаёт content с переводами строк — Base64 их игнорирует
+        return String(android.util.Base64.decode(b64, android.util.Base64.DEFAULT), Charsets.UTF_8)
+            .takeIf { it.isNotBlank() }
     }
 }

@@ -701,10 +701,10 @@ fun SettingsScreen(onBack: () -> Unit) {
                             valueOk = tmdbKey.isNotBlank(),
                         ) { openEdit("tmdbkey", tmdbKey, "Ключ TMDB") }
                         SettingsRow(
-                            title = "GitHub-токен (логи мне)",
-                            value = if (ghToken.isNotBlank()) "•••••••• (вписан)" else "Не задан — логи уходят на pastebin",
-                            valueOk = ghToken.isNotBlank(),
-                        ) { openEdit("ghtoken", ghToken, "GitHub токен (право Gists)") }
+                            title = "GitHub-токен (логи в Gist)",
+                            value = if (ghToken.isNotBlank()) "•••••••• (вписан)" else "Не нужен — логи идут в GitVerse",
+                            valueOk = true,
+                        ) { openEdit("ghtoken", ghToken, "GitHub токен (право Gists, опционально)") }
                         SettingsRow(
                             title = "Real-Debrid ключ (мгновенный просмотр)",
                             value = if (rdKey.isNotBlank()) "•••••••• (вписан)" else "Не задан — торренты стримятся с ТВ",
@@ -1124,7 +1124,8 @@ private fun NetCheckScreen(onClose: () -> Unit) {
                 add("Кинопоиск API (база фильмов)" to "https://kinopoiskapiunofficial.tech/api/v2.1/films/filters")
             }
             if (com.torrenttv.app.data.TmdbClient.isConfigured) {
-                add("TMDB (база фильмов)" to "https://api.themoviedb.org/3/configuration?api_key=" + com.torrenttv.app.BuildConfig.TMDB_API_KEY)
+                val tmdbKey = com.torrenttv.app.Obf.decode(com.torrenttv.app.BuildConfig.TMDB_API_KEY_OBF, com.torrenttv.app.BuildConfig.OBF_KEY)
+                add("TMDB (база фильмов)" to "https://api.themoviedb.org/3/configuration?api_key=" + tmdbKey)
             }
         }
     }

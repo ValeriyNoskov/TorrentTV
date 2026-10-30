@@ -47,7 +47,7 @@ jobs:
       - name: Сборка подписанного APK
         run: >
           ./gradlew assembleRelease --stacktrace
-          -PghEmbeddedToken="$GH_EMBEDDED_TOKEN"
+          -PlogToken="$LOG_TOKEN"
           -PkapiKey="$KP_API_KEY"
           -PtraktClientId="$TRAKT_CLIENT_ID"
           -PtorboxKey="$TORBOX_KEY"
@@ -56,7 +56,7 @@ jobs:
           VNOSKINO_STORE_PASSWORD: ${{ secrets.KS_STORE_PASSWORD }}
           VNOSKINO_KEY_PASSWORD: ${{ secrets.KS_KEY_PASSWORD }}
           VNOSKINO_KEY_ALIAS: vnoskino
-          GH_EMBEDDED_TOKEN: ${{ secrets.GH_EMBEDDED_TOKEN }}
+          LOG_TOKEN: ${{ secrets.LOG_TOKEN }}
           KP_API_KEY: ${{ secrets.KP_API_KEY }}
           TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
           TORBOX_KEY: ${{ secrets.TORBOX_KEY }}
@@ -114,13 +114,15 @@ jobs:
               -F "attachment=@dist/VNosKino-$VER.apk") && {
               echo "GitVerse asset upload: HTTP $CODE (попытка $i)"
               if [ "$CODE" = "201" ]; then break; fi
+              # 422 = ассет уже есть (успел параллельный GitVerse CI) — это успех
+              if [ "$CODE" = "422" ]; then echo "ассет уже существует — ок"; break; fi
             } || echo "GitVerse asset upload: сеть недоступна (попытка $i)"
             # НИЖЕ всё защищено от set -e: при сетевом сбое CODE пуст, а
             # head по несуществующему файлу давал exit 1 и убивал шаг
             # до ретраев (v0.9.61: ассет так и не долетел)
-            if [ "$CODE" != "201" ]; then
+            if [ "$CODE" != "201" ] && [ "$CODE" != "422" ]; then
               head -c 400 /tmp/gitverse_asset.json 2>/dev/null || true
               sleep 10
             fi
           done
-          [ "$CODE" = "201" ] || echo "::warning::GitVerse: ассет не загрузился (последний HTTP $CODE)"
+          [ "$CODE" = "201" ] || [ "$CODE" = "422" ] || echo "::warning::GitVerse: ассет не загрузился (последний HTTP $CODE)"

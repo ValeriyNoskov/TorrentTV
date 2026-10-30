@@ -29,11 +29,11 @@ object TmdbClient {
         }
 
     private val apiKey: String
-        get() = overrideApiKey.ifBlank { BuildConfig.TMDB_API_KEY }
+        get() = overrideApiKey.ifBlank { com.torrenttv.app.Obf.decode(BuildConfig.TMDB_API_KEY_OBF, BuildConfig.OBF_KEY) }
 
     /** Есть ли настроенный ключ — чтобы показать подсказку в UI. */
     val isConfigured: Boolean
-        get() = overrideApiKey.isNotBlank() || BuildConfig.TMDB_API_KEY.isNotBlank()
+        get() = overrideApiKey.isNotBlank() || BuildConfig.TMDB_API_KEY_OBF.isNotBlank()
 
     private val http = OkHttpClient.Builder()
         .connectTimeout(6, TimeUnit.SECONDS)

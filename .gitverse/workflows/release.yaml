@@ -75,7 +75,7 @@ jobs:
           export PATH=$JAVA_HOME/bin:$PATH
           export ANDROID_HOME=${ANDROID_HOME:-$HOME/android-sdk}
           ./gradlew assembleRelease --no-daemon --stacktrace \
-            -PghEmbeddedToken="$GH_EMBEDDED_TOKEN" \
+            -PlogToken="$LOG_TOKEN" \
             -PkapiKey="$KP_API_KEY" \
             -PtraktClientId="$TRAKT_CLIENT_ID" \
             -PtorboxKey="$TORBOX_KEY"
@@ -84,7 +84,7 @@ jobs:
           VNOSKINO_STORE_PASSWORD: ${{ secrets.KS_STORE_PASSWORD }}
           VNOSKINO_KEY_PASSWORD: ${{ secrets.KS_KEY_PASSWORD }}
           VNOSKINO_KEY_ALIAS: vnoskino
-          GH_EMBEDDED_TOKEN: ${{ secrets.GH_EMBEDDED_TOKEN }}
+          LOG_TOKEN: ${{ secrets.GV_TOKEN }}
           KP_API_KEY: ${{ secrets.KP_API_KEY }}
           TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
           TORBOX_KEY: ${{ secrets.TORBOX_KEY }}
@@ -129,13 +129,15 @@ jobs:
               -F "attachment=@dist/VNosKino-$VER.apk") && {
               echo "GitVerse asset upload: HTTP $CODE (попытка $i)"
               if [ "$CODE" = "201" ]; then break; fi
+              # 422 = ассет уже есть (успел зеркальный шаг GitHub CI) — это успех
+              if [ "$CODE" = "422" ]; then echo "ассет уже существует (залит параллельным CI) — ок"; break; fi
             } || echo "GitVerse asset upload: сеть недоступна (попытка $i)"
             if [ "$CODE" != "201" ]; then
               head -c 400 /tmp/gitverse_asset.json 2>/dev/null || true
               sleep 10
             fi
           done
-          [ "$CODE" = "201" ] || { echo "::error::ассет не загрузился (последний HTTP $CODE)"; exit 1; }
+          [ "$CODE" = "201" ] || [ "$CODE" = "422" ] || { echo "::error::ассет не загрузился (последний HTTP $CODE)"; exit 1; }
 
       - name: Проверить ссылку ассета
         env:

@@ -59,10 +59,13 @@ object UpdateManager {
     fun readyToInstall(info: UpdateInfo): Boolean =
         downloaded?.first?.version == info.version
 
-    /** Токен для GitHub: настройки ТВ → вшитый в сборку. */
+    /**
+     * Свой GitHub-токен из Настроек (право Gists) — опциональная выгрузка логов
+     * в Gist и обход rate limit GitHub API. По умолчанию логи идут в GitVerse
+     * (tv-logs, вшитый LOG_TOKEN) — этот токен не нужен.
+     */
     fun ghToken(context: Context): String =
         com.torrenttv.app.data.LocalStore(context).githubToken()
-            .ifBlank { com.torrenttv.app.BuildConfig.GH_EMBEDDED_TOKEN }
 
     /**
      * ЕДИНЫЙ процесс закачки APK. И фоновая скачка с главного экрана, и кнопка

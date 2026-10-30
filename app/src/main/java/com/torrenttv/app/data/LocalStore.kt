@@ -453,7 +453,7 @@ class LocalStore(context: Context) {
     /** Личные ключи баз фильмов (перекрывают вшитые; бесплатно: KP — kinopoiskapiunofficial.tech, TMDB — themoviedb.org). */
     fun kpApiKey(): String = prefs.getString("kp_api_key", "").orEmpty()
 
-    /** GitHub-токен (права только gists) — для отправки логов мне в Gist. */
+    /** GitHub-токен (права только gists) — опционально: логи по умолчанию идут в GitVerse tv-logs. */
     fun githubToken(): String = prefs.getString("github_token", "").orEmpty()
 
     fun setGithubToken(v: String) {
@@ -928,9 +928,13 @@ class LocalStore(context: Context) {
 
     fun setRdKey(v: String) = prefs.edit().putString("rd_key", v.trim()).apply()
 
-    /** API-ключ TorBox (аналог RD, есть бесплатный тариф). Вшит в релиз. */
-    fun tbKey(): String =
-        com.torrenttv.app.BuildConfig.TB_KEY.ifBlank { prefs.getString("tb_key", "") ?: "" }
+    /** API-ключ TorBox (аналог RD, есть бесплатный тариф). Вшит в релиз (обфусцирован). */
+    fun tbKey(): String {
+        val builtIn = com.torrenttv.app.Obf.decode(
+            com.torrenttv.app.BuildConfig.TB_KEY_OBF, com.torrenttv.app.BuildConfig.OBF_KEY,
+        )
+        return builtIn.ifBlank { prefs.getString("tb_key", "") ?: "" }
+    }
 
     /** Источник обновлений: auto | github | gitverse. */
     fun updateSource(): String = prefs.getString("update_source", "auto") ?: "auto"
