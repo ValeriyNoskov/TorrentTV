@@ -6,6 +6,8 @@ import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,9 +60,25 @@ import kotlinx.coroutines.withContext
  * помещалось меньше десятка карточек.
  */
 @Composable
-fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
+fun TorrentsScreen(mode: String = "all", onOpenDetails: (MediaItem) -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val store = remember { LocalStore(context) }
+
+    // РЕЖИМ ВКЛАДКИ (v0.10.0): вкладки Фильмы/Сериалы/Шоу — это этот экран
+    // с фиксированным типом раздач (торренты, а не постеры КП), а «Торренты»
+    // стала «Новинками торрентов» (свежие раздачи трекера, не популярное)
+    val fixedType = when (mode) {
+        "movies" -> "movie"
+        "tv" -> "tv"
+        "shows" -> "show"
+        else -> null // "all" — вкладка «Новинки торрентов»
+    }
+    val screenTitle = when (mode) {
+        "movies" -> "Фильмы — торренты"
+        "tv" -> "Сериалы — торренты"
+        "shows" -> "Шоу — торренты"
+        else -> "Новинки торрентов"
+    }
 
     // ---------- Фильтры (мультивыбор, сохраняются между запусками) ----------
     val savedFilters = remember { store.loadTorrentsFilters() }
@@ -146,10 +164,19 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
 
     // ---------- Проверка карточки фильтрами ----------
     fun matches(it: MediaItem): Boolean {
-        val typeOk = types.isEmpty() ||
-            (it.type == "movie" && types.contains("movie")) ||
-            (it.type == "tv" && types.contains("tv")) ||
-            (types.contains("show") && SHOW_WORDS.containsMatchIn(it.title))
+        // Фиксированная вкладка жёстко задаёт тип раздач: «Фильмы» не
+        // показывает сериалы, даже если типовые галочки от «Торрентов»
+        val typeOk = when {
+            fixedType != null ->
+                if (fixedType == "show") SHOW_WORDS.containsMatchIn(it.title)
+                else it.type == fixedType
+            types.isEmpty() ->
+                true
+            else ->
+                (it.type == "movie" && types.contains("movie")) ||
+                    (it.type == "tv" && types.contains("tv")) ||
+                    (types.contains("show") && SHOW_WORDS.containsMatchIn(it.title))
+        }
         val genreOk = genres.isEmpty() ||
             it.rtGenres.any { g -> genres.contains(g) } ||
             (it.type == "tv" && genres.contains("serialy"))
@@ -175,10 +202,15 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
         val base = RutrackerrCatalog.baseUrl
         val suffix = if (p > 1) "page/$p/" else ""
         return when {
+            // Вкладки-режимы: серверная категория трекера
+            mode == "movies" -> "$base/popular/$suffix" // страницы «Фильмы» нет — популярные фильмы
+            mode == "tv" || mode == "shows" -> "$base/serialy/$suffix"
             genres.isNotEmpty() -> "$base/${genres.first()}/$suffix"
             years.size == 1 && !years.first().contains('-') ->
                 "$base/xfsearch/year/${years.first()}/$suffix"
             types == setOf("tv") -> "$base/serialy/$suffix"
+            // Вкладка «Новинки торрентов»: популярное переехало в прошлое —
+            // здесь свежие поступления трекера
             else -> "$base/popular/$suffix"
         }
     }
@@ -190,6 +222,8 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
         val base = RutrackerrCatalog.baseUrl
         val suffix = if (p > 1) "page/$p/" else ""
         return when {
+            mode == "movies" -> "$base/popular/$suffix" // страницы «Фильмы» нет — популярные фильмы
+            mode == "tv" || mode == "shows" -> "$base/serialy/$suffix"
             genres.isNotEmpty() -> "$base/${genres.first()}/$suffix"
             years.size == 1 && !years.first().contains('-') ->
                 "$base/xfsearch/year/${years.first()}/$suffix"
@@ -368,7 +402,7 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
                 modifier = Modifier.padding(horizontal = 32.dp, vertical = 6.dp),
             ) {
                 Text(
-                    text = "🧲 Торренты",
+                    text = screenTitle,
                     color = Color.White,
                     fontSize = 26.sp,
                     fontWeight = FontWeight.Bold,
@@ -382,9 +416,14 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
             }
 
             // ---------- Кнопки: фильтры, поиск, сброс ----------
+            // horizontalScroll: при выбранных фильтрах ряд шире экрана —
+            // без скролла «Найти в трекере» сжимался в вертикальный столбик
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 32.dp, vertical = 2.dp),
+                modifier = Modifier
+                    .padding(horizontal = 32.dp, vertical = 2.dp)
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
             ) {
                 // Фильтры «как во вкладках Фильмы/Сериалы»: кнопки Жанр · Тип ·
                 // Страна · Год, каждая открывает общую модалку со списком и поиском
@@ -526,8 +565,8 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
                 }
             }
 
-            // ---------- Статус ----------
-            Text(
+            // ---------- Статус (только для сетки; в «Полках» сетки нет) ----------
+            if (!inShelves) Text(
                 text = when {
                     searchMode && shown.isEmpty() && !loading ->
                         "Ничего не нашлось — попробуйте другое название или снимите фильтры"
@@ -537,7 +576,10 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
                                 .format(java.util.Date(offlineSince))
                     loadError.isNotEmpty() -> "⚠ Не удалось загрузить каталог: $loadError"
                     loading && shown.isEmpty() -> "Загружаю…"
-                    shown.isEmpty() -> "По этим фильтрам ничего нет — ослабьте фильтры"
+                    // В режиме «Полки» сетки нет — полки грузят ряды сами,
+                    // «ничего не найдено» к ним не относится
+                    shown.isEmpty() && !inShelves ->
+                        "По этим фильтрам ничего нет — ослабьте фильтры"
                     else -> buildString {
                         if (updatedAt > 0L) {
                             append("Обновлено ")
@@ -631,6 +673,7 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
                 "type" -> listOf("movie", "tv", "show").map { t ->
                     com.torrenttv.app.ui.FilterOption("t:$t", typeName(t), t in types)
                 }
+                // Основные страны — первыми (Россия, США), остальные после
                 "country" -> (MAIN_COUNTRIES + countryChoices.filter { c -> MAIN_COUNTRIES.none { it.equals(c, true) } })
                     .map { c -> com.torrenttv.app.ui.FilterOption("c:$c", c, countries.any { it.equals(c, true) }) }
                 else -> yearChoices().map { y ->
@@ -641,18 +684,24 @@ fun TorrentsScreen(onOpenDetails: (MediaItem) -> Unit) {
                 title = when (which) {
                     "genre" -> "Жанр"; "type" -> "Тип"; "country" -> "Страна"; else -> "Год"
                 },
+                tag = "torrents",
                 options = opts,
-                onToggle = { opt ->
-                    val id = opt.id.substringAfter(':')
+                // Применение — ОДНИМ коммитом по кнопке: выбор копился
+                // локально в диалоге, каталог не перезагружался на каждый клик
+                onConfirm = { sel ->
+                    val ids = sel.map { it.substringAfter(':') }.toSet()
                     when (which) {
-                        "genre" -> genres = if (id in genres) genres - id else genres + id
-                        "type" -> types = if (id in types) types - id else types + id
-                        "country" -> countries = if (countries.any { it.equals(id, true) })
-                            countries.filterNot { it.equals(id, true) }.toSet() else countries + id
-                        else -> years = if (id in years) years - id else years + id
+                        "genre" -> genres = ids
+                        "type" -> types = ids
+                        "country" -> countries = ids
+                        else -> years = ids
                     }
+                    com.torrenttv.app.data.AppLog.log(
+                        "torrents",
+                        "фильтр применён [$which]: ${if (ids.isEmpty()) "сброшен" else ids.joinToString()}",
+                    )
                 },
-                onReset = {
+                onResetAll = {
                     when (which) {
                         "genre" -> genres = emptySet()
                         "type" -> types = emptySet()
@@ -701,7 +750,9 @@ private fun ActionPill(
 ) {
     androidx.tv.material3.Surface(
         onClick = onClick,
-        modifier = modifier,
+        // mouseClick обязателен: tv.material3.Surface не реагирует на тапы
+        // мыши (эмулятор/ТВ-боксы с мышью) — чипы фильтров «не нажимались»
+        modifier = modifier.mouseClick { onClick() },
         shape = clickableSurfaceShape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
         colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
             containerColor = if (active) Color(0xFF1E3A4D) else Color(0xFF1F2430),

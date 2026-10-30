@@ -17,7 +17,7 @@ object ApibayProvider {
     fun search(query: String, isTvShow: Boolean): List<TorrentResult> {
         val cat = if (isTvShow) "205" else "201"
         val url = "https://apibay.org/q.php?q=${URLEncoder.encode(query, "UTF-8")}&cat=$cat"
-        val body = TorrentHttp.get(url) ?: return emptyList()
+        val body = TorrentHttp.get(url, callTimeoutSec = 6) ?: return emptyList()
 
         val arr = try {
             org.json.JSONArray(body)

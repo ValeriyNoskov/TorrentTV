@@ -352,6 +352,7 @@ fun PlayerScreen(
         // торрент оставался в сессии навсегда — качал, занимал слоты соединений
         // и душил следующие попытки (главная гипотеза «пиров не найдено»)
         var buffered = false
+        var headDiagLogged = false
         try {
         while (!st.isRangeReady(startPos, threshold)) {
             // Частичный старт: если готовность ≥70% и ждём уже больше минуты —
@@ -391,6 +392,23 @@ fun PlayerScreen(
                 "player",
                 "буферизация: peers=${st.peers()} dht=$dht speed=${speed}КБ/с head=${mb}МБ ready=${bufferedPct}%",
             )
+            // Диагностика «качает, но не играет»: первые куски (заголовок) —
+            // have и приоритет. Если have=false при SEVEN — приоритеты не
+            // дошли до движка или пиров-источников начала нет
+            if (System.currentTimeMillis() - sessionStart > 30_000 &&
+                !headDiagLogged && System.currentTimeMillis() % 30_000 < 5_000
+            ) {
+                headDiagLogged = true
+                com.torrenttv.app.data.AppLog.log("player", st.headPiecesDiag(0, 8))
+            }
+            // prioritizeFiles() затирает SEVEN на заголовке/Cues — восстанавливаем
+            // раз в ~10 с, пока буферизация не готова (диагностика показала
+            // NORMAL на кусках 0-7 при 500 МБ скачанного)
+            if (System.currentTimeMillis() - sessionStart > 15_000 &&
+                System.currentTimeMillis() % 10_000 < 5_000
+            ) {
+                st.ensureCriticalPieces()
+            }
             delay(5000)
         }
         buffered = true
@@ -745,6 +763,20 @@ private fun VideoPlayer(
             }
     }
 
+    // Хранитель критичных кусков: prioritizeFiles() применяется движком
+    // асинхронно и затирает SEVEN заголовка/Cues, поставленные при старте —
+    // «качает, но не играет» (диагностика: куски 0-7 = NORMAL при 500 МБ
+    // скачанного). Раз в 10 с восстанавливаем. Позицию перемотки здесь НЕ
+    // трогаем: ExoPlayer при seek переоткрывает DataSource и там свой boost
+    // (передача currentPosition как байтов ставила SEVEN на 0.2 МБ файла)
+    LaunchedEffect(stream) {
+        val st = stream ?: return@LaunchedEffect
+        while (true) {
+            kotlinx.coroutines.delay(10_000)
+            withContext(Dispatchers.IO) { st.ensureCriticalPieces() }
+        }
+    }
+
     // Конец видео: обработчик снаружи (автозакрытие фильма / следующая серия)
     var showSkip by remember { mutableStateOf(false) } // «Пропустить титры» доступна
 
@@ -845,21 +877,13 @@ private fun VideoPlayer(
 
     DisposableEffect(player) {
         var audioApplied = false
+        // Единая телеметрия плеера (состояния/дорожки/кадры/воспроизведение) —
+        // v0.10.0: раньше этот listener содержал копии тех же методов, и они
+        // дублировались с OnlinePlayerScreen/LivePlayerScreen — чинились по
+        // отдельности. Диагностические методы теперь в PlayerCore
+        PlayerCore.attach(player, "player")
         val listener = object : androidx.media3.common.Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
-                // РАЗВЁРНУТЫЙ ЛОГ: каждое состояние плеера, не только READY —
-                // по цепочке IDLE→BUFFERING→READY видно, где плеер застрял
-                val stName = when (state) {
-                    androidx.media3.common.Player.STATE_IDLE -> "IDLE"
-                    androidx.media3.common.Player.STATE_BUFFERING -> "BUFFERING"
-                    androidx.media3.common.Player.STATE_READY -> "READY"
-                    androidx.media3.common.Player.STATE_ENDED -> "ENDED"
-                    else -> "?$state"
-                }
-                com.torrenttv.app.data.AppLog.log(
-                    "player",
-                    "состояние: $stName pos=${player.currentPosition / 1000}s буфер=${player.bufferedPosition / 1000}s",
-                )
                 if (state == androidx.media3.common.Player.STATE_READY) {
                     errorMsg = ""
                 }
@@ -873,31 +897,6 @@ private fun VideoPlayer(
                         if (episode != null) nextCountdown = 8 else onEnded()
                     }
                 }
-            }
-
-            // Ключевая диагностика «чёрного экрана»: READY есть, ошибок нет,
-            // а кадр так и не отрисовался — на ТВ видно только заставку
-            override fun onRenderedFirstFrame() {
-                com.torrenttv.app.data.AppLog.log(
-                    "player",
-                    "первый кадр отрисован pos=${player.currentPosition / 1000}s",
-                )
-            }
-
-            // «Как раскрашивается картинка»: дорожка видео — размер, кодек.
-            // Если кадра нет, здесь видно, дал ли демукс видео вообще
-            override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
-                val f = player.videoFormat
-                com.torrenttv.app.data.AppLog.log(
-                    "player",
-                    "видеодорожка: ${videoSize.width}x${videoSize.height}" +
-                        (f?.sampleMimeType?.let { " формат=$it" } ?: "") +
-                        (f?.codecs?.let { " кодек=$it" } ?: ""),
-                )
-            }
-
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                com.torrenttv.app.data.AppLog.log("player", if (isPlaying) "воспроизведение: ИДЁТ" else "воспроизведение: пауза/стоп")
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
@@ -1103,6 +1102,7 @@ private fun VideoPlayer(
     }
     var panelTick by remember { mutableStateOf(0) }
     val playFocus = remember { FocusRequester() }
+    val panelPlayFocus = remember { FocusRequester() }
 
     // BACK-иерархия: базовый выход первым, оверлеи после (перекрывают его).
     // Выход — только двойным BACK (3 сек): первый прячет панель, второй —
@@ -1140,7 +1140,10 @@ private fun VideoPlayer(
     LaunchedEffect(showPanel) {
         if (showPanel) {
             repeat(5) {
-                runCatching { playFocus.requestFocus() }
+                // Фокус на MX-панель (транспортная ▶ в нижнем ряду);
+                // playFocus — запасной, если панель ещё не в композиции
+                runCatching { panelPlayFocus.requestFocus() }
+                    .onFailure { runCatching { playFocus.requestFocus() } }
                 kotlinx.coroutines.delay(60)
             }
         }
@@ -1300,11 +1303,11 @@ private fun VideoPlayer(
                     Spacer(Modifier.height(26.dp))
                     Text(
                         "↩ Показать видео",
-                        color = Color(0xFF062B10),
+                        color = Color.White,
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier
-                            .background(Color(0xFF7FB84F), RoundedCornerShape(10.dp))
+                            .background(Color(0xFF2A2A2A), RoundedCornerShape(10.dp))
                             .padding(horizontal = 20.dp, vertical = 6.dp),
                     )
                 }
@@ -1319,7 +1322,7 @@ private fun VideoPlayer(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .padding(top = 70.dp)
-                    .background(Color(0xCC1F2430), RoundedCornerShape(12.dp))
+                    .background(Color(0xCC262626), RoundedCornerShape(12.dp))
                     .padding(horizontal = 20.dp, vertical = 8.dp),
             )
         }
@@ -1481,7 +1484,7 @@ private fun VideoPlayer(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .padding(top = 18.dp)
-                    .background(Color(0xCC1F2430), RoundedCornerShape(10.dp))
+                    .background(Color(0xCC262626), RoundedCornerShape(10.dp))
                     .padding(horizontal = 14.dp, vertical = 8.dp),
             )
         }
@@ -1507,7 +1510,7 @@ private fun VideoPlayer(
                     .padding(end = 28.dp, bottom = if (showPanel || showGear || showFiles) 150.dp else 28.dp)
                     .focusRequester(segSkipFocus),
                 colors = androidx.tv.material3.ButtonDefaults.colors(
-                    containerColor = Color(0xCC1F2430),
+                    containerColor = Color(0xCC262626),
                     contentColor = Color.White,
                     focusedContainerColor = Color(0xFFE8ECF4),
                     focusedContentColor = Color.Black,
@@ -1540,7 +1543,7 @@ private fun VideoPlayer(
                     .padding(end = 28.dp, bottom = if (showPanel || showGear || showFiles) 150.dp else 28.dp)
                     .focusRequester(skipFocus),
                 colors = androidx.tv.material3.ButtonDefaults.colors(
-                    containerColor = Color(0xCC1F2430),
+                    containerColor = Color(0xCC262626),
                     contentColor = Color.White,
                     focusedContainerColor = Color(0xFFE8ECF4),
                     focusedContentColor = Color.Black,
@@ -1689,7 +1692,7 @@ private fun VideoPlayer(
                         onClick = { showJump = true; showFiles = false; showGear = false; panelTick++ },
                         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
                         colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Color(0xFF1F2430),
+                            containerColor = Color(0xFF2A2A2A),
                             contentColor = Color.White,
                             focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
@@ -1707,12 +1710,66 @@ private fun VideoPlayer(
                         },
                         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
                         colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Color(0xFF1F2430),
+                            containerColor = Color(0xFF2A2A2A),
                             contentColor = Color(0xB3FFFFFF),
                             focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
                         ),
                     ) { Text("${speeds[speedIdx]}×", fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
+                    Spacer(Modifier.weight(1f))
+                    // Транспортная тройка по центру панели — раскладка как в
+                    // MX Player: крупные ⏪ ▶/⏸ ⏩ под сикбаром, не мелкие
+                    // значки в углу. Focused — контрастный (видно с дивана)
+                    androidx.tv.material3.Surface(
+                        onClick = {
+                            val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
+                            player.seekTo((player.currentPosition - 10_000L).coerceIn(0L, dur))
+                            seekInfo = "⏪︎ −10 сек"; panelTick++
+                        },
+                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF2A2A2A),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFE8ECF4),
+                            focusedContentColor = Color.Black,
+                        ),
+                    ) { Text("⏪︎", fontSize = 24.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
+                    Spacer(Modifier.width(10.dp))
+                    androidx.tv.material3.Surface(
+                        onClick = {
+                            if (player.isPlaying) player.pause() else player.play()
+                            panelTick++
+                        },
+                        modifier = Modifier.focusRequester(panelPlayFocus),
+                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF2A2A2A),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFE8ECF4),
+                            focusedContentColor = Color.Black,
+                        ),
+                    ) {
+                        Text(
+                            if (player.isPlaying) "▮▮" else "▶︎",
+                            fontSize = 26.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
+                        )
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    androidx.tv.material3.Surface(
+                        onClick = {
+                            val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
+                            player.seekTo((player.currentPosition + 10_000L).coerceIn(0L, dur))
+                            seekInfo = "⏩︎ +10 сек"; panelTick++
+                        },
+                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0xFF2A2A2A),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFE8ECF4),
+                            focusedContentColor = Color.Black,
+                        ),
+                    ) { Text("⏩︎", fontSize = 24.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
                     Spacer(Modifier.weight(1f))
                     // 🎵 Дорожки — аудио и субтитры в одном меню (раньше было
                     // ДВЕ кнопки, обе открывали один и тот же TrackMenuOverlay)
@@ -1720,7 +1777,7 @@ private fun VideoPlayer(
                         onClick = { showTrackMenu = true },
                         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
                         colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Color(0xFF1F2430),
+                            containerColor = Color(0xFF2A2A2A),
                             contentColor = Color.White,
                             focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
@@ -1738,7 +1795,7 @@ private fun VideoPlayer(
                         },
                         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
                         colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Color(0xFF1F2430),
+                            containerColor = Color(0xFF2A2A2A),
                             contentColor = Color.White,
                             focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
@@ -1754,7 +1811,7 @@ private fun VideoPlayer(
                         },
                         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
                         colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Color(0xFF1F2430),
+                            containerColor = Color(0xFF2A2A2A),
                             contentColor = Color.White,
                             focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
@@ -1766,7 +1823,7 @@ private fun VideoPlayer(
                             onClick = { showFiles = !showFiles; showGear = false },
                             shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
                             colors = ClickableSurfaceDefaults.colors(
-                                containerColor = Color(0xFF1F2430),
+                                containerColor = Color(0xFF2A2A2A),
                                 contentColor = Color.White,
                                 focusedContainerColor = Color(0xFFE8ECF4),
                                 focusedContentColor = Color.Black,
@@ -1778,7 +1835,7 @@ private fun VideoPlayer(
                         onClick = { showGear = !showGear; showFiles = false },
                         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
                         colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Color(0xFF1F2430),
+                            containerColor = Color(0xFF2A2A2A),
                             contentColor = Color.White,
                             focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,
@@ -1819,7 +1876,7 @@ private fun VideoPlayer(
                             shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
                         ),
                         colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
-                            containerColor = if (current) Color(0xFF3A5A2E) else Color(0xFF1F2430),
+                            containerColor = if (current) Color(0xFF4A4A4A) else Color(0xFF2A2A2A),
                             contentColor = Color.White,
                             focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color.Black,

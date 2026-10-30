@@ -66,9 +66,10 @@ import kotlinx.coroutines.withContext
  */
 private val USER_SECTIONS = listOf(
     Triple("update", "⬆ Обновление", "Проверить и установить новую версию"),
-    Triple("keywords", "🚫 Стоп-слова", "Слова-исключения для поиска раздач"),
+    Triple("playback", "🎬 Экран и карточки", "Масштаб интерфейса, размер постеров"),
+    Triple("player", "▶️ Плеер", "Внешний плеер, пропуск заставок, клавиатура"),
+    Triple("storage", "💾 Торренты и кеш", "Окно просмотра, хранение, очистка кеша"),
     Triple("tv", "📡 ТВ-каналы", "Свой плейлист добавляется к встроенному списку"),
-    Triple("player", "📺 Плеер", "Встроенный или внешний плеер (VLC, MX Player), клавиатура"),
 )
 
 /** Только для разработчика: диагностика, логи, ключи, расход лимитов. */
@@ -403,7 +404,9 @@ fun SettingsScreen(onBack: () -> Unit) {
                         }
                     }
 
-                    "player" -> {
+                    "playback" -> {
+                        // ЭКРАН И КАРТОЧКИ: всё, что влияет на вид каталогов
+                        // и списков — раньше это лежало в «Плеере» и терялось
                         // Масштаб интерфейса: цикл 1.0 → 0.85 → 0.75 → 1.0.
                         // Применяется сразу ко всему UI (кнопки, карточки, текст)
                         SettingsRow(
@@ -414,6 +417,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 else -> "Мелкий"
                             },
                             valueOk = true,
+                            modifier = Modifier.focusRequester(contentFocus),
                         ) {
                             uiScale = when {
                                 uiScale >= 0.99f -> 0.85f
@@ -423,40 +427,6 @@ fun SettingsScreen(onBack: () -> Unit) {
                             store.setUiScale(uiScale)
                         }
                         SettingsNote("Компактный — по умолчанию: на ТВ с крупным масштабом кнопки и карточки мельче.")
-                        SettingsRow(
-                            title = if (extPlayer) "✅ Всегда внешний плеер" else "⬜ Всегда внешний плеер",
-                            value = if (extPlayer) "ВКЛ — видео открывается в VLC/MX Player" else "ВЫКЛ — встроенный плеер",
-                            valueOk = extPlayer,
-                            modifier = Modifier.focusRequester(contentFocus),
-                        ) {
-                            extPlayer = !extPlayer
-                            store.setUseExternalPlayer(extPlayer)
-                        }
-                        SettingsNote("Видео будет открываться в VLC/MX Player, если он установлен.")
-                        // Окно просмотра: качается ~5 мин вперёд от позиции,
-                        // хвост файла не докачивается (экономный режим)
-                        val winMode = store.streamWindow()
-                        SettingsRow(
-                            title = if (winMode) "✅ Окно просмотра" else "⬜ Окно просмотра",
-                            value = if (winMode) "ВКЛ — качается ~5 мин вперёд от места просмотра"
-                                    else "ВЫКЛ — файл качается целиком",
-                            valueOk = winMode,
-                        ) {
-                            store.setStreamWindow(!winMode)
-                            com.torrenttv.app.data.AppLog.log("settings", "нажал: окно просмотра → ${!winMode}")
-                        }
-                        // Предзагрузка следующей серии: мгновенное переключение,
-                        // но кеш растёт быстрее (доп. файл ~1-2 ГБ). Выключение —
-                        // «качать только то, что смотрю»
-                        val preload = store.preloadNext()
-                        SettingsRow(
-                            title = if (preload) "✅ Предзагрузка следующей серии" else "⬜ Предзагрузка следующей серии",
-                            value = if (preload) "ВКЛ — переключение серий мгновенное" else "ВЫКЛ — качается только то, что смотришь",
-                            valueOk = preload,
-                        ) {
-                            store.setPreloadNext(!preload)
-                            com.torrenttv.app.data.AppLog.log("settings", "нажал: предзагрузка след. серии → ${!preload}")
-                        }
                         // Размер карточек: четыре варианта, циклом.
                         // Дефолт 140 («Мелкие»): на ТВ влезает больше карточек
                         // без скролла — жалоба владельца на крупные постеры
@@ -479,6 +449,72 @@ fun SettingsScreen(onBack: () -> Unit) {
                             store.setCardWidthDp(cardWidthDp)
                         }
                         SettingsNote("Размер постеров во всех каталогах. Мелкие — по умолчанию.")
+                    }
+
+                    "player" -> {
+                        // ПЛЕЕР: как видео открывается и что показывается
+                        // во время просмотра
+                        SettingsRow(
+                            title = if (extPlayer) "✅ Всегда внешний плеер" else "⬜ Всегда внешний плеер",
+                            value = if (extPlayer) "ВКЛ — видео открывается в VLC/MX Player" else "ВЫКЛ — встроенный плеер",
+                            valueOk = extPlayer,
+                            modifier = Modifier.focusRequester(contentFocus),
+                        ) {
+                            extPlayer = !extPlayer
+                            store.setUseExternalPlayer(extPlayer)
+                        }
+                        SettingsNote("Видео будет открываться в VLC/MX Player, если он установлен.")
+                        var skipDb by remember { mutableStateOf(store.skipDbEnabled()) }
+                        SettingsRow(
+                            title = if (skipDb) "✅ Пропуск заставок и титров по базам" else "⬜ Пропуск заставок и титров по базам",
+                            value = if (skipDb) "ВКЛ — заставка/пересказ сами, титры/анонс кнопкой" else "ВЫКЛ — всё смотрим как есть",
+                            valueOk = skipDb,
+                        ) {
+                            skipDb = !skipDb
+                            store.setSkipDbEnabled(skipDb)
+                        }
+                        SettingsNote("Точные таймкоды из открытых баз разметки (SkipDB/IntroDB) по IMDb — то, что знает сообщество. Не перемотка по догадкам.")
+                        // Внешняя клавиатура: раньше был целый раздел «⌨ Ввод»
+                        // ради одного тумблера — теперь рядок здесь
+                        SettingsRow(
+                            title = if (extKb) "✅ Внешняя клавиатура" else "⬜ Внешняя клавиатура",
+                            value = if (extKb) "ВКЛ — текст вводится с клавиатуры/пульта" else "ВЫКЛ — встроенная экранная клавиатура",
+                            valueOk = extKb,
+                        ) {
+                            extKb = !extKb
+                            store.setUseExternalKeyboard(extKb)
+                        }
+                        SettingsNote("Включите, если пульт/аэромышь с клавиатурой — текст вводится напрямую.")
+                    }
+
+                    "storage" -> {
+                        // ТОРРЕНТЫ И КЕШ: что и сколько качается, где удалять.
+                        // Раньше очистка кеша пряталась в «Плеере» — не находили
+                        // Окно просмотра: качается ~5 мин вперёд от позиции,
+                        // хвост файла не докачивается (экономный режим)
+                        val winMode = store.streamWindow()
+                        SettingsRow(
+                            title = if (winMode) "✅ Окно просмотра" else "⬜ Окно просмотра",
+                            value = if (winMode) "ВКЛ — качается ~5 мин вперёд от места просмотра"
+                                    else "ВЫКЛ — файл качается целиком",
+                            valueOk = winMode,
+                            modifier = Modifier.focusRequester(contentFocus),
+                        ) {
+                            store.setStreamWindow(!winMode)
+                            com.torrenttv.app.data.AppLog.log("settings", "нажал: окно просмотра → ${!winMode}")
+                        }
+                        // Предзагрузка следующей серии: мгновенное переключение,
+                        // но кеш растёт быстрее (доп. файл ~1-2 ГБ). Выключение —
+                        // «качать только то, что смотрю»
+                        val preload = store.preloadNext()
+                        SettingsRow(
+                            title = if (preload) "✅ Предзагрузка следующей серии" else "⬜ Предзагрузка следующей серии",
+                            value = if (preload) "ВКЛ — переключение серий мгновенное" else "ВЫКЛ — качается только то, что смотришь",
+                            valueOk = preload,
+                        ) {
+                            store.setPreloadNext(!preload)
+                            com.torrenttv.app.data.AppLog.log("settings", "нажал: предзагрузка след. серии → ${!preload}")
+                        }
                         // TTL недосмотренного: начатое и забытое удаляется само
                         // по возрасту, не дожидаясь лимита 6 ГБ
                         val retentionTitles = mapOf(
@@ -539,27 +575,6 @@ fun SettingsScreen(onBack: () -> Unit) {
                             }
                         }
                         SettingsNote("Недосмотренное хранится для мгновенного «Продолжить» (лимит 20 ГБ). Досмотренное удаляется само.")
-                        var skipDb by remember { mutableStateOf(store.skipDbEnabled()) }
-                        SettingsRow(
-                            title = if (skipDb) "✅ Пропуск заставок и титров по базам" else "⬜ Пропуск заставок и титров по базам",
-                            value = if (skipDb) "ВКЛ — заставка/пересказ сами, титры/анонс кнопкой" else "ВЫКЛ — всё смотрим как есть",
-                            valueOk = skipDb,
-                        ) {
-                            skipDb = !skipDb
-                            store.setSkipDbEnabled(skipDb)
-                        }
-                        SettingsNote("Точные таймкоды из открытых баз разметки (SkipDB/IntroDB) по IMDb — то, что знает сообщество. Не перемотка по догадкам.")
-                        // Внешняя клавиатура: раньше был целый раздел «⌨ Ввод»
-                        // ради одного тумблера — теперь рядок здесь
-                        SettingsRow(
-                            title = if (extKb) "✅ Внешняя клавиатура" else "⬜ Внешняя клавиатура",
-                            value = if (extKb) "ВКЛ — текст вводится с клавиатуры/пульта" else "ВЫКЛ — встроенная экранная клавиатура",
-                            valueOk = extKb,
-                        ) {
-                            extKb = !extKb
-                            store.setUseExternalKeyboard(extKb)
-                        }
-                        SettingsNote("Включите, если пульт/аэромышь с клавиатурой — текст вводится напрямую.")
                     }
 
 
@@ -799,16 +814,6 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 "доступность GitHub/КП, поиск раздач. Отчёт автоматически уйдёт в Gist."
                         )
                         SettingsNote("Крестик у источника — его блокирует провайдер, это не неисправность.")
-                    }
-
-                    else -> { // keywords
-                        SettingsRow(
-                            title = "Стоп-слова",
-                            value = if (keywords.isEmpty()) "Нет" else keywords.take(3).joinToString(", ") +
-                                if (keywords.size > 3) " …" else "",
-                            valueOk = keywords.isNotEmpty(),
-                        ) { subscreen = "keywords" }
-                        SettingsNote("Слова-исключения для поиска раздач. Жанры и страны скрываются кнопкой «⚙ Фильтры» прямо в каталогах.")
                     }
                 }
             }

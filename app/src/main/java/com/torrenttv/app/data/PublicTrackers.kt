@@ -25,7 +25,7 @@ object EztvProvider {
         } else {
             sb.append("&query_term=").append(URLEncoder.encode(query, "UTF-8"))
         }
-        val body = TorrentHttp.get(sb.toString()) ?: return emptyList()
+        val body = TorrentHttp.get(sb.toString(), callTimeoutSec = 6) ?: return emptyList()
         val root = try { JSONObject(body) } catch (_: Exception) { return emptyList() }
         val arr = root.optJSONArray("torrents") ?: return emptyList()
 
@@ -55,7 +55,7 @@ object SolidTorrentsProvider {
 
     fun search(query: String): List<TorrentResult> {
         val url = "https://solidtorrents.to/api/v1/search?q=${URLEncoder.encode(query, "UTF-8")}"
-        val body = TorrentHttp.get(url) ?: return emptyList()
+        val body = TorrentHttp.get(url, callTimeoutSec = 6) ?: return emptyList()
         val root = try { JSONObject(body) } catch (_: Exception) { return emptyList() }
         // Форматы ответа: {"results": {"items": [...]}} либо {"results": [...]}
         val arr = root.optJSONObject("results")?.optJSONArray("items")
@@ -91,7 +91,7 @@ object BtdigProvider {
 
     fun search(query: String): List<TorrentResult> {
         val url = "https://btdig.com/search?q=${URLEncoder.encode(query, "UTF-8")}&order=0"
-        val html = TorrentHttp.get(url) ?: return emptyList()
+        val html = TorrentHttp.get(url, callTimeoutSec = 6) ?: return emptyList()
 
         // Блоки раздач: magnet + рядом название; сиды — если найдём рядом цифры
         val out = mutableListOf<TorrentResult>()
@@ -145,12 +145,29 @@ object RutorProvider {
 
     fun search(query: String): List<TorrentResult> {
         val q = URLEncoder.encode(query, "UTF-8")
+        // ЗЕРКАЛА ПАРАЛЛЕЛЬНО: раньше перебирали подряд — каждое мёртвое
+        // зеркало жрало свой connect-таймаут (лог: rutor = 71 с на 4 зеркала),
+        // что разваливало весь поиск. Теперь все зеркала спрашиваем сразу,
+        // берём первый непустой ответ; итоговый дедлайн держит callTimeout
+        // клиента (6 с), корутина не может прервать блокирующий OkHttp
+        val results = java.util.concurrent.atomic.AtomicReference<List<TorrentResult>?>(null)
+        val latch = java.util.concurrent.CountDownLatch(1)
         for (base in MIRRORS) {
-            val html = TorrentHttp.get("$base/search/0/0/100/2/$q") ?: continue
-            val out = parse(html)
-            if (out.isNotEmpty()) return out
+            Thread {
+                try {
+                    val html = TorrentHttp.get("$base/search/0/0/100/2/$q", callTimeoutSec = 6)
+                    if (html != null && results.get() == null) {
+                        val parsed = runCatching { parse(html) }.getOrElse { emptyList() }
+                        if (parsed.isNotEmpty()) results.compareAndSet(null, parsed)
+                    }
+                } finally {
+                    latch.countDown()
+                }
+            }.start()
         }
-        return emptyList()
+        // Первый непустой ответ или все зеркала ответили пусто
+        latch.await(8, java.util.concurrent.TimeUnit.SECONDS)
+        return results.get() ?: emptyList()
     }
 
     private fun parse(html: String): List<TorrentResult> {

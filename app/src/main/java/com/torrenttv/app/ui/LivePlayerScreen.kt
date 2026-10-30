@@ -111,6 +111,9 @@ fun LivePlayerScreen(
     }
 
     DisposableEffect(Unit) {
+        // Единая телеметрия v0.10.0: состояния/дорожки/кадры — как в остальных
+        // плеерах, один формат лога для всех экранов
+        PlayerCore.attach(player, "tv")
         val listener = object : Player.Listener {
             override fun onPlayerError(e: PlaybackException) {
                 error = "${e.errorCodeName} (код ${e.errorCode})"

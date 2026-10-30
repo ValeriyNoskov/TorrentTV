@@ -10,3 +10,4 @@ keystore-password.txt
 *.jks
 *.jks.old
 ses_*.json
+torrenttv-repository-clone.json

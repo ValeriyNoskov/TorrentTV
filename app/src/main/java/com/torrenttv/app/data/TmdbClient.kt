@@ -60,6 +60,9 @@ object TmdbClient {
 
     private fun get(path: String, params: Map<String, String> = emptyMap()): JSONObject? {
         if (!isConfigured) return null
+        // Подробный лог v0.10.0: каждый запрос TMDB виден с исходом
+        // (кеш/сеть/сбой/устаревший кеш) — «полка пустая» перестаёт быть загадкой
+        fun logTmdb(outcome: String) = AppLog.log("tmdb", "GET $path → $outcome")
         // Свежий кеш — БЕЗ сети и ДО проверки cooldown: после одного сбоя
         // кешированные каталоги не должны пустеть на 10 минут (ревью данных)
         val cached = KinopoiskClient.sharedFresh(buildUrl(path, params))?.let {
@@ -67,10 +70,12 @@ object TmdbClient {
         }
         if (System.currentTimeMillis() < cooldownUntil) {
             lastFailed = true
+            logTmdb("cooldown, кеш=${cached != null}")
             return cached
         }
         if (cached != null) {
             lastFailed = false
+            logTmdb("кеш")
             return cached
         }
         val url = buildUrl(path, params)
@@ -82,23 +87,28 @@ object TmdbClient {
                 if (body != null) {
                     lastFailed = false
                     KinopoiskClient.sharedPut(url, body)
+                    logTmdb("HTTP ${resp.code}, ${body.length} байт")
                     JSONObject(body)
                 } else {
                     if (resp.code == 429 || resp.code == 401 || resp.code >= 500) {
                         cooldownUntil = System.currentTimeMillis() + 10 * 60_000L
                     }
                     lastFailed = true
+                    logTmdb("HTTP ${resp.code} → cooldown 10мин")
                     // Источник сбойнул — отдаём устаревший кеш, полки не пустеют
                     KinopoiskClient.sharedStale(url)?.let { s ->
                         lastFailed = false
+                        logTmdb("отдал устаревший кеш (${s.length} байт)")
                         runCatching { JSONObject(s) }.getOrNull()
                     }
                 }
             }
         } catch (e: Exception) {
             lastFailed = true
+            logTmdb("СЕТЬ FAIL: ${e.message}")
             KinopoiskClient.sharedStale(url)?.let { s ->
                 lastFailed = false
+                logTmdb("отдал устаревший кеш (${s.length} байт)")
                 runCatching { JSONObject(s) }.getOrNull()
             }
         }

@@ -275,6 +275,107 @@ object TorrentEngine {
             0
         }
 
+        /**
+         * Диагностика первых кусков: have и приоритет по каждому. Нужно понять
+         * «качает, но не играет»: если куски заголовка не have при SEVEN —
+         * приоритеты не дошли до движка либо у пиров нет начала файла.
+         */
+        fun headPiecesDiag(n: Int): String = try {
+            val sb = StringBuilder("диагностика кусков [0..${n - 1}]: ")
+            for (i in 0 until n) {
+                val pr = try { handle.piecePriority(i).name } catch (_: Exception) { "?" }
+                val have = try { handle.havePiece(i) } catch (_: Exception) { false }
+                sb.append(if (have) "✓" else "✗").append("(").append(pr.first()).append(") ")
+            }
+            val pieceLen = ti.pieceLength()
+            sb.append("pieceLen=").append(pieceLen)
+            sb.toString()
+        } catch (e: Exception) {
+            "диагностика кусков FAIL: ${e.message}"
+        }
+
+        /**
+         * Повторная установка SEVEN на заголовок (4 МБ от начала файла) и индекс
+         * Cues (последние 8 МБ). Нужна потому, что prioritizeFiles() применяется
+         * движком асинхронно и затирает piece-приоритеты, выставленные сразу
+         * после него (диагностика: куски 0-7 = NORMAL вместо SEVEN, ready=0%
+         * при 500 МБ скачанного — «качает, но не играет»).
+         */
+        fun ensureCriticalPieces() {
+            try {
+                val pieceLen = ti.pieceLength()
+                if (pieceLen <= 0) return
+                val n = ti.numPieces()
+                val endAbs = fileOffset + fileSize
+                val lastPiece = ((endAbs - 1) / pieceLen).toInt().coerceIn(0, n - 1)
+                val headTo = ((fileOffset + 4L * 1024 * 1024) / pieceLen).toInt().coerceIn(0, lastPiece)
+                val cueFrom = ((endAbs - 8L * 1024 * 1024).coerceAtLeast(fileOffset) / pieceLen)
+                    .toInt().coerceIn(0, lastPiece)
+                for (i in 0..headTo) handle.piecePriority(i, Priority.SEVEN)
+                for (i in cueFrom..lastPiece) handle.piecePriority(i, Priority.SEVEN)
+            } catch (_: Exception) {
+            }
+        }
+
+        /**
+         * Диагностика кусков, начиная с startPiece: have и приоритет по каждому.
+         * «Качает, но не играет»: если куски не have при SEVEN — приоритеты не
+         * дошли до движка либо у подключённых пиров нет этих кусков.
+         */
+        fun headPiecesDiag(startPiece: Int, n: Int): String = try {
+            val sb = StringBuilder("диагностика кусков [$startPiece..${startPiece + n - 1}]: ")
+            for (i in startPiece until startPiece + n) {
+                if (i < 0 || i >= ti.numPieces()) continue
+                val pr = try { handle.piecePriority(i).name } catch (_: Exception) { "?" }
+                val have = try { handle.havePiece(i) } catch (_: Exception) { false }
+                sb.append("$i=").append(if (have) "✓" else "✗").append("(").append(pr.first()).append(") ")
+            }
+            sb.append("pieceLen=${ti.pieceLength()} seeds=${seeds()}")
+            sb.toString()
+        } catch (e: Exception) {
+            "диагностика кусков FAIL: ${e.message}"
+        }
+
+        /** Диагностика кусков вокруг позиции ВНУТРИ файла (для лога чтения). */
+        fun piecesDiagAt(filePos: Long, n: Int): String = try {
+            val pieceLen = ti.pieceLength()
+            headPiecesDiag(((fileOffset + filePos) / pieceLen).toInt(), n)
+        } catch (_: Exception) {
+            "диагностика FAIL"
+        }
+
+        /**
+         * Форс докачки зависших кусков диапазона: setPieceDeadline(i, 0) —
+         * libtorrent переотправляет запросы и качает кусок вне очереди.
+         * Нужен для сигнатуры «один кусок ✗(S) при соседях ✓(S) и живых
+         * пирах»: запросы куска висят у пиров и без deadline не
+         * переотправляются (диагностика: 591=✗(S) при 590/592/593=✓).
+         */
+        fun forcePieces(filePos: Long, length: Long): Int = try {
+            val pieceLen = ti.pieceLength()
+            if (pieceLen <= 0) 0
+            else {
+                val abs = fileOffset + filePos
+                val end = (abs + length).coerceAtMost(fileOffset + fileSize)
+                val first = (abs / pieceLen).toInt().coerceIn(0, ti.numPieces() - 1)
+                val last = ((end - 1).coerceAtLeast(abs) / pieceLen).toInt().coerceIn(0, ti.numPieces() - 1)
+                var forced = 0
+                for (i in first..last) {
+                    val have = try { handle.havePiece(i) } catch (_: Exception) { false }
+                    if (!have) {
+                        runCatching {
+                            handle.piecePriority(i, Priority.SEVEN)
+                            handle.setPieceDeadline(i, 0)
+                            forced++
+                        }
+                    }
+                }
+                forced
+            }
+        } catch (_: Exception) {
+            0
+        }
+
         /** Снять последовательную загрузку: она качает строго по порядку и
          *  не даёт приоритетам кусков (индекс MKV в конце, перемотка) работать. */
         fun clearSequential() {

@@ -210,6 +210,9 @@ object KinopoiskClient {
         if (inCooldown()) {
             val stale = cacheStale(url)
             lastFailed = stale == null
+            com.torrenttv.app.data.AppLog.log(
+                "kp", "GET $path → cooldown, кеш=${if (stale != null) "устаревший" else "нет"}",
+            )
             return stale?.let { s -> runCatching { JSONObject(s) }.getOrNull() }
         }
 
@@ -239,6 +242,7 @@ object KinopoiskClient {
                     .build()
             ).execute()
         } catch (e: Exception) {
+            com.torrenttv.app.data.AppLog.log("kp", "GET ${url.substringAfter(".dev")} FAIL: ${e.message}")
             return null
         }
         resp.use { r ->
@@ -246,6 +250,7 @@ object KinopoiskClient {
                 val b = r.body!!.string()
                 cache[url] = System.currentTimeMillis() to b
                 persistCache()
+                com.torrenttv.app.data.AppLog.log("kp", "GET ${url.substringAfter(".dev")} → HTTP ${r.code}, ${b.length} байт")
                 return b
             }
             // Суточный лимит ключа — есть следующий: переключиться и повторить

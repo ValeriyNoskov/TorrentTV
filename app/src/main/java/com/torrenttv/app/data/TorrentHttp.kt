@@ -25,6 +25,37 @@ object TorrentHttp {
         .readTimeout(8, TimeUnit.SECONDS)
         .build()
 
+    // Фабрика клиентов по жёсткому пределу callTimeout: корутина НЕ может
+    // прервать блокирующий OkHttp-вызов (отмена кооперативная — внутри
+    // execute() нет suspend-точек), поэтому провайдеры поиска вешали поиск
+    // на 20-70 с при «таймауте 8с» на корутине. callTimeout рубит сам OkHttp.
+    private val clientsByTimeout = java.util.concurrent.ConcurrentHashMap<Int, OkHttpClient>()
+
+    fun clientFor(callTimeoutSec: Int): OkHttpClient = clientsByTimeout.getOrPut(callTimeoutSec) {
+        OkHttpClient.Builder()
+            .connectTimeout(minOf(callTimeoutSec, 8).toLong(), TimeUnit.SECONDS)
+            .readTimeout(callTimeoutSec.toLong(), TimeUnit.SECONDS)
+            .callTimeout(callTimeoutSec.toLong(), TimeUnit.SECONDS)
+            .build()
+    }
+
+    /** GET с жёстким callTimeout (поиск): callTimeoutSec 6 = провайдер дольше
+     *  6 секунд существовать не может, независимо от DNS/IPv6-затыков. */
+    fun get(url: String, headers: Map<String, String> = emptyMap(), callTimeoutSec: Int = 30): String? = try {
+        val b = Request.Builder().url(url)
+        headers.forEach { (k, v) -> b.header(k, v) }
+        clientFor(callTimeoutSec).newCall(b.build()).execute().use { resp ->
+            if (!resp.isSuccessful) {
+                // Точный код ответа в лог — иначе «не ответил» скрывает 4xx
+                com.torrenttv.app.data.AppLog.log("net", "GET $url → HTTP ${resp.code}")
+                null
+            } else resp.body?.string()
+        }
+    } catch (e: Exception) {
+        com.torrenttv.app.data.AppLog.log("net", "GET $url FAIL: ${e.message}")
+        null
+    }
+
     /** GET с короткими таймаутами (каталог трекера) или null при ошибке. */
     fun getFast(url: String, headers: Map<String, String> = emptyMap()): String? = try {
         val b = Request.Builder().url(url)
@@ -37,21 +68,6 @@ object TorrentHttp {
     }
 
     /** GET, вернуть тело строки или null при любой ошибке. */
-    fun get(url: String, headers: Map<String, String> = emptyMap()): String? = try {
-        val b = Request.Builder().url(url)
-        headers.forEach { (k, v) -> b.header(k, v) }
-        client.newCall(b.build()).execute().use { resp ->
-            if (!resp.isSuccessful) {
-                // Точный код ответа в лог — иначе «не ответил» скрывает 4xx
-                com.torrenttv.app.data.AppLog.log("net", "GET $url → HTTP ${resp.code}")
-                null
-            } else resp.body?.string()
-        }
-    } catch (e: Exception) {
-        com.torrenttv.app.data.AppLog.log("net", "GET $url FAIL: ${e.message}")
-        null
-    }
-
     /** GET, вернуть тело байтами (для .torrent-файлов) или null при любой ошибке. */
     fun getBytes(url: String, headers: Map<String, String> = emptyMap()): ByteArray? = try {
         val b = Request.Builder().url(url)

@@ -1,6 +1,7 @@
 package com.torrenttv.app.ui
 
 import androidx.compose.foundation.background
+import com.torrenttv.app.data.AppLog
 import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -32,6 +33,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -192,20 +194,31 @@ data class FilterOption(val id: String, val label: String, val checked: Boolean)
 /**
  * Модалка фильтра «как в Зоне»: поиск сверху (в фокусе при открытии),
  * ниже вертикальный список с галочками — ↑↓ листает, ОК ставит/снимает
- * галочку. Курсор не «прыгает» по странице. singleSelect — радио-режим
- * (Тип/Рейтинг): новая галочка снимает предыдущую.
+ * галочку. Курсор не «прыгает» по странице.
+ *
+ * v0.10.0 (жалоба «при установке галочки перемещаюсь в конец списка»):
+ * выбор живёт ВНУТРИ диалога в локальном наборе — список опций не
+ * пересоздаётся, фокус остаётся на строке, каталог под модалкой не
+ * перезагружается на каждый клик. Применение — только «✓ Применить»;
+ * «Сбросить всё» снимает галочки локально. Каждый шаг — в лог.
  */
 @Composable
 fun FilterListDialog(
     title: String,
+    tag: String = "filter",
     options: List<FilterOption>,
-    onToggle: (FilterOption) -> Unit,
-    onReset: () -> Unit,
+    onConfirm: (Set<String>) -> Unit,
+    onResetAll: () -> Unit,
     onClose: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
     var keyboard by remember { mutableStateOf(false) }
     val listFocus = remember { FocusRequester() }
+    // Локальный выбор: клик меняет ТОЛЬКО этот набор — родительский стейт
+    // и список опций не трогаем до «Применить»
+    var selected by remember(options) {
+        mutableStateOf(options.filter { it.checked }.map { it.id }.toSet())
+    }
 
     androidx.activity.compose.BackHandler { onClose() }
 
@@ -215,9 +228,15 @@ fun FilterListDialog(
         if (!keyboard) runCatching { listFocus.requestFocus() }
     }
     // Забрать фокус в модалку СРАЗУ: без этого на ТВ фокус остаётся на полках
-    // каталога ПОД модалкой — DPAD листает задний экран, в фильтр «не попасть»
-    // (на эмуляторе проверялось тапами мыши — и баг не был виден)
-    LaunchedEffect(Unit) { runCatching { listFocus.requestFocus() } }
+    // каталога ПОД модалкой — DPAD листает задний экран, в фильтр «не попасть».
+    // awaitFrame — жём завершение композиции: requestFocus ДО привязки
+    // FocusRequester падает и runCatching молча глотал потерю фокуса
+    LaunchedEffect(Unit) {
+        withFrameNanos { } // один кадр: FocusRequester к этому моменту привязан
+        runCatching { listFocus.requestFocus() }
+            .onFailure { AppLog.log(tag, "диалог [$title]: фокус FAIL: ${it.message}") }
+        AppLog.log(tag, "диалог [$title]: открыт, фокус на поиске")
+    }
 
     // Затемнение поверх каталога; сам каталог виден по краям
     Box(
@@ -266,7 +285,8 @@ fun FilterListDialog(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                 )
             }
-            // Список с галочками, сжатый поиском по подстроке
+            // Список с галочками, сжатый поиском по подстроке.
+            // Ключ — id: строка НЕ пересоздаётся при toggle (фокус на месте)
             val shown = if (query.isBlank()) options else options.filter {
                 it.label.contains(query.trim(), ignoreCase = true)
             }
@@ -276,8 +296,17 @@ fun FilterListDialog(
                     .height(340.dp),
             ) {
                 items(shown, key = { it.id }) { opt ->
+                    val isChecked = opt.id in selected
+                    fun toggle() {
+                        // Только локальный набор: список и родитель не трогаются
+                        selected = if (opt.id in selected) selected - opt.id else selected + opt.id
+                        AppLog.log(
+                            tag,
+                            "фильтр [$title]: ${if (isChecked) "снял" else "выбрал"} «${opt.label}» (выбрано ${selected.size})",
+                        )
+                    }
                     androidx.tv.material3.Surface(
-                        onClick = { onToggle(opt) },
+                        onClick = { toggle() },
                         shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color.Transparent,
@@ -287,7 +316,7 @@ fun FilterListDialog(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .mouseClick { onToggle(opt) },
+                            .mouseClick { toggle() },
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -299,17 +328,17 @@ fun FilterListDialog(
                                     .padding(end = 12.dp)
                                     .size(20.dp)
                                     .background(
-                                        if (opt.checked) Color(0xFF0E1116) else Color.Transparent,
+                                        if (isChecked) Color(0xFF0E1116) else Color.Transparent,
                                         RoundedCornerShape(5.dp),
                                     )
                                     .border(
                                         2.dp,
-                                        if (opt.checked) Color(0xFF0E1116) else Color(0xFF55617A),
+                                        if (isChecked) Color(0xFF0E1116) else Color(0xFF55617A),
                                         RoundedCornerShape(5.dp),
                                     ),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                if (opt.checked) {
+                                if (isChecked) {
                                     Text(
                                         "✓",
                                         color = Color(0xFFA9D7F5),
@@ -332,9 +361,21 @@ fun FilterListDialog(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
-                val chosen = options.count { it.checked }
+                val chosen = selected.size
+                fun applyFilter() {
+                    AppLog.log(tag, "фильтр [$title]: Применить → ${selected.map { id -> options.firstOrNull { it.id == id }?.label ?: id }}")
+                    onConfirm(selected)
+                    onClose()
+                }
+                fun resetAll() {
+                    AppLog.log(tag, "фильтр [$title]: сбросить всё (было ${selected.size})")
+                    selected = emptySet()
+                    // «Сбросить всё» сразу применяет пустой набор: каталог
+                    // открывается без фильтра — два клика вместо трёх
+                    onResetAll()
+                }
                 Surface(
-                    onClick = onClose,
+                    onClick = { applyFilter() },
                     shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = Color(0xFFA9D7F5),
@@ -342,7 +383,7 @@ fun FilterListDialog(
                         focusedContainerColor = Color(0xFFBFE3F7),
                         focusedContentColor = Color(0xFF0E1116),
                     ),
-                    modifier = Modifier.mouseClick { onClose() },
+                    modifier = Modifier.mouseClick { applyFilter() },
                 ) {
                     Text(
                         "✓ Применить",
@@ -353,7 +394,7 @@ fun FilterListDialog(
                 }
                 Spacer(Modifier.width(10.dp))
                 Surface(
-                    onClick = onReset,
+                    onClick = { resetAll() },
                     shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = Color(0xFF1F2430),
@@ -361,10 +402,10 @@ fun FilterListDialog(
                         focusedContainerColor = Color(0xFFA9D7F5),
                         focusedContentColor = Color(0xFF0E1116),
                     ),
-                    modifier = Modifier.mouseClick { onReset() },
+                    modifier = Modifier.mouseClick { resetAll() },
                 ) {
                     Text(
-                        "Сбросить",
+                        "Сбросить всё",
                         fontSize = 15.sp,
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                     )
@@ -532,7 +573,11 @@ fun AppButton(
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier.height(heightDp),
+        // mouseClick: tv-material Button реагирует только на D-pad,
+        // тап мыши (эмулятор) игнорируется без явного pointerInput
+        modifier = modifier
+            .height(heightDp)
+            .mouseClick { if (enabled) onClick() },
         enabled = enabled,
         shape = shape,
         colors = colors,
@@ -957,7 +1002,7 @@ fun SideNav(active: Screen, onTab: (Screen) -> Unit, restoreFocusTick: Int = 0) 
             focusRequester = activeFocus.takeIf { active == Screen.Shows }) { expanded = it }
         SideBarButton("📡", "ТВ", Screen.Tv, active, onTab, expanded,
             focusRequester = activeFocus.takeIf { active == Screen.Tv }) { expanded = it }
-        SideBarButton("🧲", "Торренты", Screen.Torrents, active, onTab, expanded,
+        SideBarButton("🧲", "Новинки торрентов", Screen.Torrents, active, onTab, expanded,
             focusRequester = activeFocus.takeIf { active == Screen.Torrents }) { expanded = it }
         SideBarButton("🔍", "Поиск", Screen.Search, active, onTab, expanded,
             focusRequester = activeFocus.takeIf { active == Screen.Search }) { expanded = it }

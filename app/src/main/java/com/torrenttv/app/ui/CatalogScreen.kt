@@ -371,42 +371,40 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: ()
                 "genre" -> "Жанр"; "type" -> "Тип"; "country" -> "Страна"
                 "year" -> "Год"; else -> "Рейтинг"
             },
+            tag = "catalog",
             options = opts,
-            onToggle = { opt ->
-                val id = opt.id.substringAfter(':')
+            // Применение одним коммитом: смешанный выбор (радио-тип/рейтинг
+            // и мульти-жанры/годы) разбираем по префиксу id; последний
+            // радио-выбор побеждает
+            onConfirm = { sel ->
                 when (which) {
                     "genre" -> {
-                        val gid = id.toIntOrNull() ?: return@FilterListDialog
-                        fGenres = if (gid in fGenres) fGenres - gid else fGenres + gid
+                        fGenres = sel.mapNotNull { it.substringAfter(':').toIntOrNull() }.toSet()
                         store.setFilterGenreIds(fGenres)
                     }
                     "type" -> {
-                        fType = if (fType == id) "" else id
+                        fType = sel.lastOrNull()?.substringAfter(':') ?: ""
                         store.setFilterType(fType)
                     }
                     "country" -> {
-                        val cid = id.toIntOrNull() ?: return@FilterListDialog
-                        fCountries = if (cid in fCountries) fCountries - cid else fCountries + cid
+                        fCountries = sel.mapNotNull { it.substringAfter(':').toIntOrNull() }.toSet()
                         store.setFilterCountryIds(fCountries)
                     }
                     "year" -> {
-                        if (opt.id.startsWith("p:")) {
-                            fYearPreset = if (fYearPreset == id) "" else id
-                            store.setFilterYearPreset(fYearPreset)
-                        } else {
-                            val y = id.toIntOrNull() ?: return@FilterListDialog
-                            fYears = if (y in fYears) fYears - y else fYears + y
-                            store.setFilterYearIds(fYears)
-                        }
+                        val preset = sel.lastOrNull { it.startsWith("p:") }?.substringAfter("p:") ?: ""
+                        fYearPreset = preset
+                        fYears = sel.filter { it.startsWith("y:") }
+                            .mapNotNull { it.substringAfter("y:").toIntOrNull() }.toSet()
+                        store.setFilterYearIds(fYears)
+                        store.setFilterYearPreset(fYearPreset)
                     }
                     else -> {
-                        val r = id.toIntOrNull() ?: return@FilterListDialog
-                        fMinRating = if (fMinRating == r) 0 else r
+                        fMinRating = sel.lastOrNull()?.substringAfter("r:")?.toIntOrNull() ?: 0
                         store.setFilterMinRating(fMinRating)
                     }
                 }
             },
-            onReset = {
+            onResetAll = {
                 when (which) {
                     "genre" -> { fGenres = emptySet(); store.setFilterGenreIds(fGenres) }
                     "type" -> { fType = ""; store.setFilterType("") }

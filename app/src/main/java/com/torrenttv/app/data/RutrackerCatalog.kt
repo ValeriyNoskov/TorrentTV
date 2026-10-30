@@ -27,9 +27,10 @@ object RutrackerrCatalog {
         return category(url, 1)
     }
 
-    /** Популярные фильмы: главная-подобные списки фильмов. */
+    /** Популярные фильмы: главная-подобные списки фильмов.
+     *  v0.10.0: раздела /filmy/ на сайте больше нет (404) — /popular/. */
     fun popularMovies(page: Int = 1): List<MediaItem> =
-        category("$BASE/filmy/", page).ifEmpty { newItems(page) }
+        category("$BASE/popular/", page).ifEmpty { newItems(page) }
 
     /** Сериалы. */
     fun popularTv(page: Int = 1): List<MediaItem> = category("$BASE/serialy/", page)

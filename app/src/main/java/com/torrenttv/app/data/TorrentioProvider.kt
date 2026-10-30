@@ -26,7 +26,7 @@ object TorrentioProvider {
         if (id.isBlank()) return emptyList()
         val kind = if (season > 0 && episode > 0) "series/$id:$season:$episode" else "movie/$id"
         val url = "https://torrentio.strem.fun/stream/$kind.json"
-        val body = TorrentHttp.get(url) ?: return emptyList()
+        val body = TorrentHttp.get(url, callTimeoutSec = 6) ?: return emptyList()
 
         val streams = try {
             JSONObject(body).optJSONArray("streams") ?: return emptyList()

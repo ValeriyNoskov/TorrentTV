@@ -71,6 +71,7 @@ class TorrentDataSource(private val st: TorrentEngine.StreamSession) : DataSourc
         val deadline = System.currentTimeMillis() + 90_000
         var lastWaitLog = 0L
         var lastProgressLog = filePos
+        var lastDiagLog = 0L
         while (waitLen > 0 && !st.isRangeReady(filePos, waitLen)) {
             // Ожидание кусков дольше 1 с — в лог: видно, движется ли готовность
             // (порог 5 с не срабатывал: пользователь выходил раньше первого лога)
@@ -84,8 +85,27 @@ class TorrentDataSource(private val st: TorrentEngine.StreamSession) : DataSourc
                         "peers=${st.peers()} dht=${TorrentEngine.session.dhtNodes()} " +
                         "head=${st.headBytes() / 1024 / 1024}МБ",
                 )
+                // Раз в 5 с — диагностика кусков вокруг читаемой позиции:
+                // have/приоритет каждого, чтобы видеть, доходит ли SEVEN
+                // до движка и качается ли проблемный кусок
+                if (now - lastDiagLog > 5_000) {
+                    lastDiagLog = now
+                    com.torrenttv.app.data.AppLog.log("player", st.piecesDiagAt(filePos, 4))
+                }
             }
             if (!TorrentEngine.session.isRunning) throw IOException("Торрент-сессия остановлена")
+            // Зависшие куски: если готовность окна не меняется 15 с при живых
+            // пирах — форсим недостающие куски (setPieceDeadline): запросы
+            // переотправляются, кусок качается вне очереди
+            if (System.currentTimeMillis() - lastWaitLog > 15_000) {
+                val forced = st.forcePieces(filePos, waitLen)
+                if (forced > 0) {
+                    com.torrenttv.app.data.AppLog.log(
+                        "player",
+                        "форс кусков: $forced шт. вокруг файлПоз=${filePos / 1024 / 1024}МБ (готовность стояла)",
+                    )
+                }
+            }
             if (System.currentTimeMillis() > deadline) {
                 throw IOException("Куски не загружаются — пиры недоступны")
             }

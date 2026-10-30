@@ -439,6 +439,9 @@ fun OnlinePlayerScreen(
 
     // Запомненные аудио и субтитры: применяем один раз при появлении дорожек
     DisposableEffect(player) {
+        // Единая телеметрия v0.10.0 — тот же набор событий, что в
+        // торрент-плеере и эфире: один формат лога для всех экранов
+        PlayerCore.attach(player, "online")
         var audioApplied = false
         var subsApplied = false
         val listener = object : Player.Listener {

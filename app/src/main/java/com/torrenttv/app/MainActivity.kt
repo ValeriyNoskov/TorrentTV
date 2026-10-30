@@ -269,7 +269,7 @@ private fun App(voiceQuery: androidx.compose.runtime.State<String>) {
             Screen.TvShows -> "Сериалы"
             Screen.Shows -> "Шоу"
             Screen.Tv -> "ТВ"
-            Screen.Torrents -> "Торренты"
+            Screen.Torrents -> "Новинки торрентов"
             Screen.Favorites -> "Избранное"
             Screen.Continue -> "Продолжить"
             Screen.Search -> "Поиск"
@@ -353,9 +353,12 @@ private fun App(voiceQuery: androidx.compose.runtime.State<String>) {
                     },
                 )
 
-                Screen.Movies -> CatalogScreen(mode = "movies", onOpenDetails = { screen = Screen.Details(it) }, onSearch = { screen = Screen.Search })
-                Screen.TvShows -> CatalogScreen(mode = "tv", onOpenDetails = { screen = Screen.Details(it) }, onSearch = { screen = Screen.Search })
-                Screen.Shows -> CatalogScreen(mode = "shows", onOpenDetails = { screen = Screen.Details(it) }, onSearch = { screen = Screen.Search })
+                // v0.10.0: вкладки Фильмы/Сериалы/Шоу — каталог ТРЕКЕРА
+                // (раздачи с магнитами), а не постеры КП. Каждая карточка =
+                // торрент: открытие → детали раздачи → плеер
+                Screen.Movies -> TorrentsScreen(mode = "movies", onOpenDetails = { screen = Screen.Details(it) })
+                Screen.TvShows -> TorrentsScreen(mode = "tv", onOpenDetails = { screen = Screen.Details(it) })
+                Screen.Shows -> TorrentsScreen(mode = "shows", onOpenDetails = { screen = Screen.Details(it) })
                 Screen.Tv -> TvScreen(
                     onPlay = { ch, list -> screen = Screen.Live(ch, list) },
                 )

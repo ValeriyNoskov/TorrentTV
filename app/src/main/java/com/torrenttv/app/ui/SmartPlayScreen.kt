@@ -297,26 +297,30 @@ fun SmartPlayScreen(
                 LazyColumn(state = listState, modifier = Modifier.weight(1f)) {
                     items(choices.size) { i ->
                         val c = choices[i]
-                        androidx.tv.material3.Surface(
-                            onClick = {
-                                com.torrenttv.app.data.AppLog.log(
-                                    "smart",
-                                    when (c) {
-                                        is SmartChoice.Resume -> "выбор: «Продолжить» (сохранённый магнит)"
-                                        is SmartChoice.Instant -> "выбор: «Играть сразу» → ${c.r.name.take(60)} (${c.r.seeds} сидов)"
-                                        is SmartChoice.Torrent -> "выбор: раздача → ${c.r.name.take(60)} (${c.r.seeds} сидов)"
-                                    },
-                                )
+                        // Единый обработчик: tv-material Surface глух к тапу мыши,
+                        // поэтому дублируем через mouseClick (см. Components.kt)
+                        val onPick = {
+                            com.torrenttv.app.data.AppLog.log(
+                                "smart",
                                 when (c) {
-                                    is SmartChoice.Resume -> onPlayTorrent()
-                                    // Сериал — сначала список файлов (серий), фильм — сразу в плеер
-                                    is SmartChoice.Instant -> if (item.type != "movie") onPickFiles(c.r) else playTorrent(c.r)
-                                    is SmartChoice.Torrent -> if (item.type != "movie") onPickFiles(c.r) else playTorrent(c.r)
-                                }
-                            },
+                                    is SmartChoice.Resume -> "выбор: «Продолжить» (сохранённый магнит)"
+                                    is SmartChoice.Instant -> "выбор: «Играть сразу» → ${c.r.name.take(60)} (${c.r.seeds} сидов)"
+                                    is SmartChoice.Torrent -> "выбор: раздача → ${c.r.name.take(60)} (${c.r.seeds} сидов)"
+                                },
+                            )
+                            when (c) {
+                                is SmartChoice.Resume -> onPlayTorrent()
+                                // Сериал — сначала список файлов (серий), фильм — сразу в плеер
+                                is SmartChoice.Instant -> if (item.type != "movie") onPickFiles(c.r) else playTorrent(c.r)
+                                is SmartChoice.Torrent -> if (item.type != "movie") onPickFiles(c.r) else playTorrent(c.r)
+                            }
+                        }
+                        androidx.tv.material3.Surface(
+                            onClick = onPick,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 3.dp),
+                                .padding(vertical = 3.dp)
+                                .mouseClick { onPick() },
                             shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(
                                 shape = RoundedCornerShape(10.dp),
                             ),
