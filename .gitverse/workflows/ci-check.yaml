@@ -1,0 +1,59 @@
+name: CI Check
+
+# Разовая проверка окружения облачного раннера GitVerse: что предустановлено
+# (Java, Android SDK), тянет ли сборку Android-проекта. По результату решаем,
+# переносить ли релизный workflow с GitHub Actions на GitVerse CI.
+on: [push]
+
+jobs:
+  env:
+    name: Проверка окружения раннера
+    runs-on: ubuntu-latest
+    steps:
+      - name: Клонируем репозиторий
+        uses: actions/checkout@v4
+
+      - name: Что предустановлено
+        run: |
+          echo "=== Java ==="
+          java -version 2>&1 || echo "java НЕ предустановлена"
+          echo "=== Android SDK ==="
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          ls "$ANDROID_HOME" 2>/dev/null || echo "ANDROID_HOME пуст/нет"
+          which sdkmanager adb 2>/dev/null || echo "sdkmanager/adb не в PATH"
+          echo "=== Система ==="
+          nproc
+          free -h | head -2
+          df -h /tmp | tail -1
+
+      - name: Ставим JDK 17 (Temurin), если нет
+        run: |
+          if java -version 2>&1 | grep -q '"17'; then
+            echo "JDK 17 уже есть"
+          else
+            echo "Ставлю JDK 17…"
+            curl -sL "https://api.adoptium.net/v3/binary/latest/17/ga/linux/x64/jdk/hotspot/normal/eclipse" -o /tmp/jdk.tar.gz
+            mkdir -p "$HOME/jdk" && tar xzf /tmp/jdk.tar.gz -C "$HOME/jdk" --strip-components=1
+            echo "JAVA_HOME=$HOME/jdk" >> "$GITHUB_ENV" || true
+            echo ">>> JDK установлен: $($HOME/jdk/bin/java -version 2>&1 | head -1)"
+          fi
+
+      - name: Пробная сборка debug-APK
+        run: |
+          export JAVA_HOME=${JAVA_HOME:-$HOME/jdk}
+          export PATH=$JAVA_HOME/bin:$PATH
+          java -version
+          # Android SDK ставим через cmdline-tools, если его нет
+          if [ -z "$ANDROID_HOME" ] || [ ! -d "$ANDROID_HOME/platforms" ]; then
+            echo "Ставлю Android SDK cmdline-tools…"
+            mkdir -p "$HOME/android-sdk/cmdline-tools"
+            curl -sL "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o /tmp/sdk.zip
+            unzip -q /tmp/sdk.zip -d "$HOME/android-sdk/cmdline-tools" && mv "$HOME/android-sdk/cmdline-tools/cmdline-tools" "$HOME/android-sdk/cmdline-tools/latest"
+            export ANDROID_HOME="$HOME/android-sdk"
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "platform-tools" > /dev/null
+          fi
+          export ANDROID_HOME=${ANDROID_HOME:-$HOME/android-sdk}
+          ./gradlew assembleDebug --no-daemon 2>&1 | tail -5
+          ls -la app/build/outputs/apk/debug/ || true
