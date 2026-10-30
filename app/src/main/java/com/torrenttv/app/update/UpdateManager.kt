@@ -28,9 +28,10 @@ object UpdateManager {
     private val http = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
-        // Общий лимит на всю загрузку APK: без него при плохом соединении
-        // «Скачивание…» висит вечно (readTimeout — лишь пауза между байтами)
-        .callTimeout(10, TimeUnit.MINUTES)
+        // Общий лимит на всю загрузку APK: GitHub из РФ отдаёт ~140 КБ/с —
+        // 85 МБ занимает ~10 минут, прежние 10 минут обрывали закачку
+        // по таймауту как раз у финала
+        .callTimeout(30, TimeUnit.MINUTES)
         .build()
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -92,7 +93,8 @@ object UpdateManager {
                     val total = body.contentLength()
                     com.torrenttv.app.data.AppLog.log(
                         "update",
-                        "скачивание v${info.version}: ${if (total > 0) "${total / 1024 / 1024} МБ" else "размер неизвестен"}",
+                        "скачивание v${info.version}: ${if (total > 0) "${total / 1024 / 1024} МБ" else "размер неизвестен"} " +
+                            "с ${info.apkUrl.substringBefore("/", "https://").removePrefix("https://").substringBefore("/")}",
                     )
                     body.byteStream().use { input ->
                         tmpFile.outputStream().use { output ->
@@ -100,17 +102,25 @@ object UpdateManager {
                             var read: Int
                             var done = 0L
                             var lastPct = -1
+                            var lastPctAt = 0L
                             while (input.read(buf).also { read = it } != -1) {
                                 output.write(buf, 0, read)
                                 done += read
                                 if (total > 0) {
                                     val pct = (done * 100 / total).toInt()
                                     if (pct != lastPct) {
+                                        // Скорость по последнему отрезку 10%:
+                                        // по ней из Gist видно, кто тормозит
+                                        val now = System.currentTimeMillis()
+                                        val speed = if (lastPctAt > 0 && now > lastPctAt)
+                                            (done - lastPct * total / 100) / ((now - lastPctAt) / 1000.0) / 1024 / 1024
+                                        else 0.0
                                         lastPct = pct
+                                        lastPctAt = now
                                         progressPct = pct
                                         // В лог — каждые 10%: по нему видно темп и где встало
                                         if (pct % 10 == 0) {
-                                            com.torrenttv.app.data.AppLog.log("update", "скачивание v${info.version}: $pct%")
+                                            com.torrenttv.app.data.AppLog.log("update", "скачивание v${info.version}: $pct% (${"%.1f".format(speed)} МБ/с)")
                                         }
                                     }
                                 }
@@ -171,7 +181,8 @@ object UpdateManager {
                 // Раньше null трактовался как fail — и авто-режим показывал
                 // «Не удалось проверить» при работавшей проверке (жалоба владельца)
                 val lock = Object()
-                var got: UpdateInfo? = null
+                var gotGithub: UpdateInfo? = null
+                var gotGitverse: UpdateInfo? = null
                 var noUpdate = false // хоть один источник ответил «у вас последняя»
                 var firstErr: String? = null
                 var finished = 0
@@ -180,7 +191,9 @@ object UpdateManager {
                         if (r.isSuccess) {
                             noUpdate = true
                             val v = r.getOrNull()
-                            if (v != null && got == null) got = v
+                            if (v != null) {
+                                if (name == "GitVerse") gotGitverse = v else gotGithub = v
+                            }
                         } else if (firstErr == null) {
                             firstErr = "$name: ${r.exceptionOrNull()?.message ?: "не удалось"}"
                         }
@@ -194,11 +207,16 @@ object UpdateManager {
                 Thread {
                     handle(runCatching { fetchGitverse(currentVersion) }, "GitVerse")
                 }.start()
-                // Ждём: обновление найдено, либо «последняя» от источника,
-                // либо оба ответили ошибкой
+                // Ждём ОБА ответа: выбор источника не по скорости проверки
+                // (GitHub-API отвечает за 0.3 с и всегда «выигрывал»), а по
+                // скорости СКАЧКИ — GitVerse (зеркало в РФ) отдаёт APK в ~20
+                // раз быстрее GitHub из РФ (владелец: браузер 20 с, апдейтер
+                // >10 мин). Обе проверки теперь быстрые — HTML-парс
                 synchronized(lock) {
-                    while (got == null && !noUpdate && finished < 2) lock.wait()
+                    while (finished < 2) lock.wait()
                 }
+                // Приоритет GitVerse: найдено там — берём оттуда
+                val got = gotGitverse ?: gotGithub
                 mainHandler.post {
                     if (got != null) onResult(got)
                     else if (noUpdate) onResult(null)
