@@ -1,0 +1,150 @@
+name: Release
+
+# Пуш в release -> GitVerse CI сам собирает ПОДПИСАННЫЙ APK (release-ключ)
+# и публикует GitVerse Release. GitVerse — ОСНОВНОЕ место релизов: апдейтер
+# приложения качает отсюда всегда. GitHub Release (собирает .github/workflows/
+# release.yml) остаётся зеркалом.
+#
+# Секреты репозитория GitVerse (Settings -> Секреты), должны быть добавлены
+# вручную владельцем:
+#   KEYSTORE_B64       — keystore в base64
+#   KS_STORE_PASSWORD  — пароль keystore
+#   KS_KEY_PASSWORD    — пароль ключа
+#   GH_EMBEDDED_TOKEN  — GitHub-токен, вшивается в APK
+#   KP_API_KEY         — ключ Кинопоиска, вшивается в APK
+#   TRAKT_CLIENT_ID    — Trakt, вшивается в APK
+#   TORBOX_KEY         — TorBox, вшивается в APK
+#   GITVERSE_TOKEN     — токен для API GitVerse (создание релиза/ассета)
+on:
+  push:
+    branches: [release]
+  workflow_dispatch:
+
+env:
+  REPO_API: https://api.gitverse.ru/repos/ChipN/TorrentTV
+
+jobs:
+  build-and-publish:
+    name: Сборка и публикация релиза (GitVerse)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Клонируем репозиторий
+        uses: actions/checkout@v4
+
+      - name: JDK 17 (Temurin), если нет
+        run: |
+          if java -version 2>&1 | grep -q '"17'; then
+            echo "JDK 17 уже есть"
+          else
+            curl -sL "https://api.adoptium.net/v3/binary/latest/17/ga/linux/x64/jdk/hotspot/normal/eclipse" -o /tmp/jdk.tar.gz
+            mkdir -p "$HOME/jdk" && tar xzf /tmp/jdk.tar.gz -C "$HOME/jdk" --strip-components=1
+            echo "JAVA_HOME=$HOME/jdk" >> "$GITHUB_ENV"
+          fi
+
+      - name: Android SDK, если нет
+        run: |
+          if [ -z "$ANDROID_HOME" ] || [ ! -d "$ANDROID_HOME/platforms" ]; then
+            mkdir -p "$HOME/android-sdk/cmdline-tools"
+            curl -sL "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o /tmp/sdk.zip
+            unzip -q /tmp/sdk.zip -d "$HOME/android-sdk/cmdline-tools" && mv "$HOME/android-sdk/cmdline-tools/cmdline-tools" "$HOME/android-sdk/cmdline-tools/latest"
+            echo "ANDROID_HOME=$HOME/android-sdk" >> "$GITHUB_ENV"
+            yes | "$HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+            "$HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "platform-tools" > /dev/null
+          fi
+
+      - name: Извлечь версию
+        id: version
+        run: |
+          V=$(grep -o 'versionName = "[^"]*"' app/build.gradle.kts | sed 's/versionName = "//;s/"//')
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "Версия приложения: $V"
+
+      - name: Восстановить ключ подписи
+        run: |
+          mkdir -p keystore
+          echo "$KEYSTORE_B64" | base64 -d > keystore/release-keystore.jks
+          ls -la keystore/
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+
+      - name: Сборка подписанного APK
+        run: |
+          export JAVA_HOME=${JAVA_HOME:-$HOME/jdk}
+          export PATH=$JAVA_HOME/bin:$PATH
+          export ANDROID_HOME=${ANDROID_HOME:-$HOME/android-sdk}
+          ./gradlew assembleRelease --no-daemon --stacktrace \
+            -PghEmbeddedToken="$GH_EMBEDDED_TOKEN" \
+            -PkapiKey="$KP_API_KEY" \
+            -PtraktClientId="$TRAKT_CLIENT_ID" \
+            -PtorboxKey="$TORBOX_KEY"
+        env:
+          VNOSKINO_KEYSTORE: ${{ github.workspace }}/keystore/release-keystore.jks
+          VNOSKINO_STORE_PASSWORD: ${{ secrets.KS_STORE_PASSWORD }}
+          VNOSKINO_KEY_PASSWORD: ${{ secrets.KS_KEY_PASSWORD }}
+          VNOSKINO_KEY_ALIAS: vnoskino
+          GH_EMBEDDED_TOKEN: ${{ secrets.GH_EMBEDDED_TOKEN }}
+          KP_API_KEY: ${{ secrets.KP_API_KEY }}
+          TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
+          TORBOX_KEY: ${{ secrets.TORBOX_KEY }}
+
+      - name: Переименовать APK
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/release/*.apk dist/VNosKino-${{ steps.version.outputs.version }}.apk
+          ls -la dist/
+
+      - name: Опубликовать GitVerse Release
+        env:
+          GITVERSE_TOKEN: ${{ secrets.GITVERSE_TOKEN }}
+          VER: ${{ steps.version.outputs.version }}
+        run: |
+          API="$REPO_API"
+          AH="Authorization: Bearer $GITVERSE_TOKEN"
+          AH2="Accept: application/vnd.gitverse.object+json;version=1"
+          SHA=$(git rev-parse HEAD)
+          # Тег: если уже существует (например, создан зеркальным шагом
+          # GitHub CI) — не мешает, идём дальше
+          curl -sf -m 60 -X POST -H "$AH" -H "$AH2" -H "Content-Type: application/json" \
+            "$API/git/refs" \
+            -d "{\"ref\":\"refs/tags/v$VER\",\"sha\":\"$SHA\"}" > /dev/null || true
+          # Релиз: создать; если уже есть (дубль запуска) — найти существующий
+          REL_ID=$(curl -sf -m 60 -X POST -H "$AH" -H "$AH2" -H "Content-Type: application/json" \
+            "$API/releases" \
+            -d "{\"tag_name\":\"v$VER\",\"name\":\"v$VER\",\"body\":\"Обновление v$VER. APK также на GitHub (зеркало).\"}" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])" 2>/dev/null)
+          if [ -z "$REL_ID" ]; then
+            echo "Создание не удалось — ищу существующий релиз v$VER"
+            REL_ID=$(curl -sf -m 60 -H "$AH" -H "$AH2" "$API/releases/tags/v$VER" \
+              | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])" 2>/dev/null)
+          fi
+          [ -n "$REL_ID" ] || { echo "::error::релиз не создан и не найден"; exit 1; }
+          echo "GitVerse release id=$REL_ID"
+          # Ретраи: загрузка 85 МБ может обрываться; код и ответ — в лог
+          for i in 1 2 3; do
+            CODE=$(curl -s -m 900 -X POST -H "$AH" -H "$AH2" \
+              -o /tmp/gitverse_asset.json -w "%{http_code}" \
+              "$API/releases/$REL_ID/assets?name=VNosKino-$VER.apk" \
+              -F "attachment=@dist/VNosKino-$VER.apk") && {
+              echo "GitVerse asset upload: HTTP $CODE (попытка $i)"
+              if [ "$CODE" = "201" ]; then break; fi
+            } || echo "GitVerse asset upload: сеть недоступна (попытка $i)"
+            if [ "$CODE" != "201" ]; then
+              head -c 400 /tmp/gitverse_asset.json 2>/dev/null || true
+              sleep 10
+            fi
+          done
+          [ "$CODE" = "201" ] || { echo "::error::ассет не загрузился (последний HTTP $CODE)"; exit 1; }
+
+      - name: Проверить ссылку ассета
+        env:
+          VER: ${{ steps.version.outputs.version }}
+        run: |
+          sleep 5
+          # Ассет качается анонимно — без токена: как это делает апдейтер
+          URL=$(curl -sf -m 30 -H "Accept: application/vnd.gitverse.object+json;version=1" \
+            "$REPO_API/releases/tags/v$VER" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['assets'][0]['browser_download_url'])")
+          echo "Ассет: $URL"
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" -r 0-1023 -L "$URL")
+          echo "Пробная докачка первых 1КБ: HTTP $CODE"
+          [ "$CODE" = "206" ] || [ "$CODE" = "200" ] || { echo "::error::ассет не качается"; exit 1; }
