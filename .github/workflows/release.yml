@@ -115,7 +115,12 @@ jobs:
               echo "GitVerse asset upload: HTTP $CODE (попытка $i)"
               if [ "$CODE" = "201" ]; then break; fi
             } || echo "GitVerse asset upload: сеть недоступна (попытка $i)"
-            [ "$CODE" = "201" ] || head -c 400 /tmp/gitverse_asset.json 2>/dev/null
-            sleep 10
+            # НИЖЕ всё защищено от set -e: при сетевом сбое CODE пуст, а
+            # head по несуществующему файлу давал exit 1 и убивал шаг
+            # до ретраев (v0.9.61: ассет так и не долетел)
+            if [ "$CODE" != "201" ]; then
+              head -c 400 /tmp/gitverse_asset.json 2>/dev/null || true
+              sleep 10
+            fi
           done
           [ "$CODE" = "201" ] || echo "::warning::GitVerse: ассет не загрузился (последний HTTP $CODE)"
