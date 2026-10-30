@@ -104,7 +104,18 @@ jobs:
             exit 0
           }
           echo "GitVerse release id=$REL_ID"
-          curl -sf -m 600 -X POST -H "$AH" -H "$AH2" \
-            "$API/releases/$REL_ID/assets?name=VNosKino-$VER.apk" \
-            -F "attachment=@dist/VNosKino-$VER.apk" > /dev/null \
-            || echo "::warning::GitVerse: ассет не загрузился"
+          # Логируем код и ответ: раньше curl -sf молчал — падение загрузки
+          # видно было только по «ассет не загрузился», без причины (v0.9.60:
+          # релиз остался без APK, апдейтер GitVerse не находил файл)
+          for i in 1 2 3; do
+            CODE=$(curl -s -m 900 -X POST -H "$AH" -H "$AH2" \
+              -o /tmp/gitverse_asset.json -w "%{http_code}" \
+              "$API/releases/$REL_ID/assets?name=VNosKino-$VER.apk" \
+              -F "attachment=@dist/VNosKino-$VER.apk") && {
+              echo "GitVerse asset upload: HTTP $CODE (попытка $i)"
+              if [ "$CODE" = "201" ]; then break; fi
+            } || echo "GitVerse asset upload: сеть недоступна (попытка $i)"
+            [ "$CODE" = "201" ] || head -c 400 /tmp/gitverse_asset.json 2>/dev/null
+            sleep 10
+          done
+          [ "$CODE" = "201" ] || echo "::warning::GitVerse: ассет не загрузился (последний HTTP $CODE)"
