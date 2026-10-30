@@ -80,8 +80,8 @@ fun TorrentsScreen(mode: String = "all", onOpenDetails: (MediaItem) -> Unit) {
         else -> "Новинки торрентов"
     }
 
-    // ---------- Фильтры (мультивыбор, сохраняются между запусками) ----------
-    val savedFilters = remember { store.loadTorrentsFilters() }
+    // ---------- Фильтры (мультивыбор, раздельные по вкладкам, сохраняются) ----------
+    val savedFilters = remember { store.loadTorrentsFilters(mode) }
     var types by remember { mutableStateOf(savedFilters.types) }        // movie | tv | show
     var genres by remember { mutableStateOf(savedFilters.genres) }      // slug'и категорий
     var countries by remember { mutableStateOf(savedFilters.countries) }
@@ -90,7 +90,7 @@ fun TorrentsScreen(mode: String = "all", onOpenDetails: (MediaItem) -> Unit) {
 
 
     LaunchedEffect(types, genres, countries, years) {
-        store.saveTorrentsFilters(LocalStore.TorrentsFilters(types, genres, countries, years))
+        store.saveTorrentsFilters(mode, LocalStore.TorrentsFilters(types, genres, countries, years))
     }
 
     // ---------- Данные ----------
@@ -101,11 +101,11 @@ fun TorrentsScreen(mode: String = "all", onOpenDetails: (MediaItem) -> Unit) {
     var reloadTick by remember { mutableStateOf(0) }
     // Сортировка: «Полки» (по умолчанию, как во вкладках Фильмы/Сериалы) /
     // «Поступившие» (сетка-лента). Выбор запоминается.
-    var sort by remember { mutableStateOf(store.lastTorrentsSort().ifBlank { "shelves" }) }
+    var sort by remember { mutableStateOf(store.lastTorrentsSort(mode).ifBlank { "shelves" }) }
     fun changeSort(v: String) {
         if (sort == v) return
         sort = v
-        store.saveTorrentsSort(v)
+        store.saveTorrentsSort(mode, v)
         reloadTick++
     }
     var updatedAt by remember { mutableStateOf(0L) }

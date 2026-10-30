@@ -517,41 +517,49 @@ class LocalStore(context: Context) {
     }
 
     // ---------- Фильтры каталога «как в Зоне»: списки с галочками ----------
+    // Фильтры РАЗДЕЛЬНЫЕ по вкладкам (жалоба владельца: «фильтр сразу
+    // фильтрует во всех вкладках»): ключи с префиксом вкладки
+    // filter_<scope>_*. Старые глобальные ключи filter_* подхватываются
+    // при чтении как стартовые значения (миграция без записи).
 
-    /** Выбранные жанры (id, включение). Пусто — без фильтра по жанру. */
-    fun filterGenreIds(): Set<Int> = intSetPref("filter_genres")
+    fun filterGenreIds(scope: String): Set<Int> =
+        intSetPref("filter_${scope}_genres").ifEmpty { intSetPref("filter_genres") }
 
-    fun setFilterGenreIds(v: Set<Int>) = putIntSetPref("filter_genres", v)
+    fun setFilterGenreIds(scope: String, v: Set<Int>) = putIntSetPref("filter_${scope}_genres", v)
 
-    /** Выбранные страны (id, включение). */
-    fun filterCountryIds(): Set<Int> = intSetPref("filter_countries")
+    fun filterCountryIds(scope: String): Set<Int> =
+        intSetPref("filter_${scope}_countries").ifEmpty { intSetPref("filter_countries") }
 
-    fun setFilterCountryIds(v: Set<Int>) = putIntSetPref("filter_countries", v)
+    fun setFilterCountryIds(scope: String, v: Set<Int>) = putIntSetPref("filter_${scope}_countries", v)
 
-    /** Отдельные выбранные годы (включение любого из них). */
-    fun filterYearIds(): Set<Int> = intSetPref("filter_years")
+    fun filterYearIds(scope: String): Set<Int> =
+        intSetPref("filter_${scope}_years").ifEmpty { intSetPref("filter_years") }
 
-    fun setFilterYearIds(v: Set<Int>) = putIntSetPref("filter_years", v)
+    fun setFilterYearIds(scope: String, v: Set<Int>) = putIntSetPref("filter_${scope}_years", v)
 
-    /** Пресет годов: "" | "2020+" | "2010-2019" | "2000-2009" | "1990s". */
-    fun filterYearPreset(): String = prefs.getString("filter_year_preset", "").orEmpty()
+    fun filterYearPreset(scope: String): String =
+        prefs.getString("filter_${scope}_year_preset", "").orEmpty()
+            .ifEmpty { prefs.getString("filter_year_preset", "").orEmpty() }
 
-    fun setFilterYearPreset(v: String) {
-        prefs.edit().putString("filter_year_preset", v).apply()
+    fun setFilterYearPreset(scope: String, v: String) {
+        prefs.edit().putString("filter_${scope}_year_preset", v).apply()
     }
 
-    /** Мин. рейтинг КП: 0 — любой, иначе 7 / 8. */
-    fun filterMinRating(): Int = prefs.getInt("filter_min_rating", 0)
-
-    fun setFilterMinRating(v: Int) {
-        prefs.edit().putInt("filter_min_rating", v).apply()
+    fun filterMinRating(scope: String): Int {
+        val v = prefs.getInt("filter_${scope}_min_rating", 0)
+        return if (v != 0) v else prefs.getInt("filter_min_rating", 0)
     }
 
-    /** Тип карточки: "" — все, иначе "movie" | "tv". */
-    fun filterType(): String = prefs.getString("filter_type", "").orEmpty()
+    fun setFilterMinRating(scope: String, v: Int) {
+        prefs.edit().putInt("filter_${scope}_min_rating", v).apply()
+    }
 
-    fun setFilterType(v: String) {
-        prefs.edit().putString("filter_type", v).apply()
+    fun filterType(scope: String): String =
+        prefs.getString("filter_${scope}_type", "").orEmpty()
+            .ifEmpty { prefs.getString("filter_type", "").orEmpty() }
+
+    fun setFilterType(scope: String, v: String) {
+        prefs.edit().putString("filter_${scope}_type", v).apply()
     }
 
     private fun intSetPref(key: String): Set<Int> =
@@ -565,14 +573,15 @@ class LocalStore(context: Context) {
     /**
      * Прохождение карточки через фильтры «включением»: выбрал жанры/страны/
      * годы — показываются только совпадения. Пустые наборы не фильтруют.
+     * Фильтры свои у каждой вкладки (scope = mode: movies/series/shows).
      */
-    fun passesFilters(item: MediaItem): Boolean {
-        val g = filterGenreIds()
+    fun passesFilters(item: MediaItem, scope: String): Boolean {
+        val g = filterGenreIds(scope)
         if (g.isNotEmpty() && item.genreIds.none { it in g }) return false
-        val c = filterCountryIds()
+        val c = filterCountryIds(scope)
         if (c.isNotEmpty() && item.countryIds.none { it in c }) return false
-        val years = filterYearIds()
-        val preset = filterYearPreset()
+        val years = filterYearIds(scope)
+        val preset = filterYearPreset(scope)
         if (years.isNotEmpty() || preset.isNotEmpty()) {
             val y = item.year.toIntOrNull() ?: return false
             val yearOk = (y in years) || when (preset) {
@@ -584,21 +593,21 @@ class LocalStore(context: Context) {
             }
             if (!yearOk) return false
         }
-        val minR = filterMinRating()
+        val minR = filterMinRating(scope)
         if (minR > 0 && item.rating < minR) return false
-        val t = filterType()
+        val t = filterType(scope)
         if (t.isNotBlank() && item.type != t) return false
         return true
     }
 
-    /** Сброс всех фильтров «включением» (кнопка «очистить всё»). */
-    fun clearAllFilters() {
-        setFilterGenreIds(emptySet())
-        setFilterCountryIds(emptySet())
-        setFilterYearIds(emptySet())
-        setFilterYearPreset("")
-        setFilterMinRating(0)
-        setFilterType("")
+    /** Сброс всех фильтров вкладки scope (кнопка «очистить всё»). */
+    fun clearAllFilters(scope: String) {
+        setFilterGenreIds(scope, emptySet())
+        setFilterCountryIds(scope, emptySet())
+        setFilterYearIds(scope, emptySet())
+        setFilterYearPreset(scope, "")
+        setFilterMinRating(scope, 0)
+        setFilterType(scope, "")
     }
 
     /** Пропускать ли карточку с учётом настроек фильтрации. */
@@ -706,11 +715,17 @@ class LocalStore(context: Context) {
     fun saveCatalogSort(mode: String, sort: String) {
         prefs.edit().putString("catalogsort:$mode", sort).apply()
     }
-/** Сортировка раздела «Торренты»: «popular» (по умолчанию) / «posted». */
-    fun lastTorrentsSort(): String = prefs.getString("torrentssort", "popular") ?: "popular"
+    /**
+     * Сортировка раздела «Торренты» вкладки scope: «popular» (по умолчанию) /
+     * «posted». Раздельная по вкладкам, старый общий ключ — фолбэк.
+     */
+    fun lastTorrentsSort(scope: String): String =
+        prefs.getString("torrentssort:$scope", null)
+            ?: prefs.getString("torrentssort", "popular")
+            ?: "popular"
 
-    fun saveTorrentsSort(sort: String) {
-        prefs.edit().putString("torrentssort", sort).apply()
+    fun saveTorrentsSort(scope: String, sort: String) {
+        prefs.edit().putString("torrentssort:$scope", sort).apply()
     }
 
 
@@ -720,6 +735,11 @@ class LocalStore(context: Context) {
     /**
      * Фильтры раздела «Торренты» — мультивыбор по каждому разделу
      * (тип, жанры, страны, годы). Пустой набор = «любой».
+     * Фильтры РАЗДЕЛЬНЫЕ по вкладкам (жалоба владельца: «фильтр сразу
+     * фильтрует во всех вкладках»): ключ torrents_filters_<scope>,
+     * scope = mode экрана (all/movies/tv/shows). Старый общий ключ
+     * torrents_filters подхватывается при чтении как стартовое значение
+     * (миграция без записи) — у старых пользователей фильтры не сбросятся.
      */
     data class TorrentsFilters(
         val types: Set<String> = emptySet(),     // movie | tv | show
@@ -731,10 +751,10 @@ class LocalStore(context: Context) {
         val isEmpty: Boolean get() = count == 0
     }
 
-    /** Фильтры «Торрентов» (мультивыбор) — переживают выход и перезапуск. */
-    fun saveTorrentsFilters(f: TorrentsFilters) {
+    /** Фильтры «Торрентов» вкладки scope (мультивыбор) — переживают выход и перезапуск. */
+    fun saveTorrentsFilters(scope: String, f: TorrentsFilters) {
         prefs.edit().putString(
-            "torrents_filters",
+            "torrents_filters_$scope",
             JSONObject()
                 .put("types", JSONArray(f.types.toList()))
                 .put("genres", JSONArray(f.genres.toList()))
@@ -744,8 +764,9 @@ class LocalStore(context: Context) {
         ).apply()
     }
 
-    fun loadTorrentsFilters(): TorrentsFilters = runCatching {
-        val raw = prefs.getString("torrents_filters", null)
+    fun loadTorrentsFilters(scope: String): TorrentsFilters = runCatching {
+        val raw = prefs.getString("torrents_filters_$scope", null)
+            ?: prefs.getString("torrents_filters", null)   // старый общий ключ
         if (raw == null) return@runCatching legacyTorrentsFilter()
         val o = JSONObject(raw)
         fun set(name: String): Set<String> {

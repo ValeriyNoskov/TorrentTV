@@ -354,14 +354,18 @@ fun PlayerScreen(
         var buffered = false
         var headDiagLogged = false
         try {
-        while (!st.isRangeReady(startPos, threshold)) {
+        while (!st.isRangeReady(startPos, threshold) || !st.cuesReady()) {
             // Частичный старт: если готовность ≥70% и ждём уже больше минуты —
             // запускаем. Редкие куски (есть только у недоступных сидов) могли
             // держать 85% вечно при 500+ МБ скачанного — буферизация FAIL по
-            // таймауту, хотя играть было можно (лог 20:03-20:05)
+            // таймауту, хотя играть было можно (лог 20:03-20:05).
+            // НО частичный старт требует готовых Cues (хвост): без индекса
+            // MKV ExoPlayer всё равно не начнёт — полезет за ним в конец
+            // файла и зависнет («фильм так и не запустился», лог «Титанов»:
+            // старт при 71% head, pos=2058МБ=размер файла, 17 с ожидания)
             val elapsed = System.currentTimeMillis() - sessionStart
             val rf = st.readyFraction(startPos, threshold)
-            if (elapsed > 60_000 && rf >= 0.7f) {
+            if (elapsed > 60_000 && rf >= 0.7f && st.cuesReady()) {
                 com.torrenttv.app.data.AppLog.log(
                     "player",
                     "буферизация: ${elapsed / 1000} с, готовность ${(rf * 100).toInt()}% — стартую частично, доберём на паузах",
@@ -390,7 +394,7 @@ fun PlayerScreen(
             }
             com.torrenttv.app.data.AppLog.log(
                 "player",
-                "буферизация: peers=${st.peers()} dht=$dht speed=${speed}КБ/с head=${mb}МБ ready=${bufferedPct}%",
+                "буферизация: peers=${st.peers()} dht=$dht speed=${speed}КБ/с head=${mb}МБ ready=${bufferedPct}% cues=${if (st.cuesReady()) "✓" else "✗"}",
             )
             // Диагностика «качает, но не играет»: первые куски (заголовок) —
             // have и приоритет. Если have=false при SEVEN — приоритеты не
@@ -1327,65 +1331,10 @@ private fun VideoPlayer(
             )
         }
 
-        // Центр: полупрозрачные пауза/перемотка — появляются при любом нажатии
-        // на пульте и исчезают вместе с панелью (как в YouTube/Kinopoisk).
-        // Фокус на «Пауза»: OK — пауза, ←/→ — между кнопками.
-        if ((showPanel || showFiles || showGear || showTrackMenu) && nextCountdown == null) {
-            Row(
-                modifier = Modifier.align(Alignment.Center),
-                horizontalArrangement = Arrangement.spacedBy(26.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                androidx.tv.material3.Surface(
-                    onClick = {
-                        val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
-                        player.seekTo((player.currentPosition - 10_000L).coerceIn(0L, dur))
-                        seekInfo = "⏪︎ −10 сек"; panelTick++
-                    },
-                    shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(16.dp)),
-                    colors = ClickableSurfaceDefaults.colors(
-                        containerColor = Color(0x99151B26),
-                        contentColor = Color.White,
-                        focusedContainerColor = Color(0xFFE8ECF4),
-                        focusedContentColor = Color.Black,
-                    ),
-                ) { Text("⏪︎", fontSize = 24.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
-                androidx.tv.material3.Surface(
-                    onClick = {
-                        if (player.isPlaying) player.pause() else player.play()
-                        panelTick++
-                    },
-                    modifier = Modifier.focusRequester(playFocus),
-                    shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(16.dp)),
-                    colors = ClickableSurfaceDefaults.colors(
-                        containerColor = Color(0x99151B26),
-                        contentColor = Color.White,
-                        focusedContainerColor = Color(0xFFE8ECF4),
-                        focusedContentColor = Color.Black,
-                    ),
-                ) {
-                    Text(
-                        if (player.isPlaying) "▮▮" else "▶︎",
-                        fontSize = 26.sp,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp),
-                    )
-                }
-                androidx.tv.material3.Surface(
-                    onClick = {
-                        val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
-                        player.seekTo((player.currentPosition + 10_000L).coerceIn(0L, dur))
-                        seekInfo = "⏩︎ +10 сек"; panelTick++
-                    },
-                    shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(16.dp)),
-                    colors = ClickableSurfaceDefaults.colors(
-                        containerColor = Color(0x99151B26),
-                        contentColor = Color.White,
-                        focusedContainerColor = Color(0xFFE8ECF4),
-                        focusedContentColor = Color.Black,
-                    ),
-                ) { Text("⏩︎", fontSize = 24.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
-            }
-        }
+        // Центральные полупрозрачные кнопки (YouTube-стиль) УДАЛЕНЫ:
+        // дублировали транспортную тройку MX-панели (жалоба владельца
+        // «в плеере задублированы кнопки пуск и перемотка»). Транспорт —
+        // только в панели: ⏪ ▶/⏸ ⏩ под сикбаром
 
         // ⏳ Буферизация посреди просмотра: чёрный экран ≠ «зависло»
         if (playerBuf && errorMsg.isBlank() && nextCountdown == null && !showFiles && !showGear && !showTrackMenu) {

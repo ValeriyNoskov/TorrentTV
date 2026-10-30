@@ -59,12 +59,12 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: ()
     var countriesAll by remember { mutableStateOf<List<Genre>>(emptyList()) }
     // Фильтры «как в Зоне» (включение): жанры, тип, страны, годы, рейтинг.
     // Живут в LocalStore — переживают выход из каталога и перезапуск.
-    var fGenres by remember { mutableStateOf(store.filterGenreIds()) }
-    var fType by remember { mutableStateOf(store.filterType()) }
-    var fCountries by remember { mutableStateOf(store.filterCountryIds()) }
-    var fYears by remember { mutableStateOf(store.filterYearIds()) }
-    var fYearPreset by remember { mutableStateOf(store.filterYearPreset()) }
-    var fMinRating by remember { mutableStateOf(store.filterMinRating()) }
+    var fGenres by remember { mutableStateOf(store.filterGenreIds(mode)) }
+    var fType by remember { mutableStateOf(store.filterType(mode)) }
+    var fCountries by remember { mutableStateOf(store.filterCountryIds(mode)) }
+    var fYears by remember { mutableStateOf(store.filterYearIds(mode)) }
+    var fYearPreset by remember { mutableStateOf(store.filterYearPreset(mode)) }
+    var fMinRating by remember { mutableStateOf(store.filterMinRating(mode)) }
     // Какая модалка фильтра открыта: "genre" | "type" | "country" | "year" | "rating" | null
     var openFilter by remember { mutableStateOf<String?>(null) }
     // Справочники жанров/стран — для списков и имён бейджей
@@ -225,7 +225,7 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: ()
                     }
                     androidx.tv.material3.Surface(
                         onClick = {
-                            store.clearAllFilters()
+                            store.clearAllFilters(mode)
                             fGenres = emptySet(); fType = ""; fCountries = emptySet()
                             fYears = emptySet(); fYearPreset = ""; fMinRating = 0
                         },
@@ -237,7 +237,7 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: ()
                             focusedContentColor = Color(0xFF0E1116),
                         ),
                         modifier = Modifier.mouseClick {
-                            store.clearAllFilters()
+                            store.clearAllFilters(mode)
                             fGenres = emptySet(); fType = ""; fCountries = emptySet()
                             fYears = emptySet(); fYearPreset = ""; fMinRating = 0
                         },
@@ -277,7 +277,7 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: ()
                         }
                     },
                     onOpen = onOpenDetails,
-                    filterFn = { store.isAllowed(it) && store.passesFilters(it) },
+                    filterFn = { store.isAllowed(it) && store.passesFilters(it, mode) },
                 )
             }
         }
@@ -290,7 +290,7 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: ()
                         if (mode == "movies") MediaApi.newMovies(page) else MediaApi.newTv(page)
                     },
                     onOpen = onOpenDetails,
-                    filterFn = { store.isAllowed(it) && store.passesFilters(it) },
+                    filterFn = { store.isAllowed(it) && store.passesFilters(it, mode) },
                 )
             }
             item {
@@ -304,7 +304,7 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: ()
                         }
                     },
                     onOpen = onOpenDetails,
-                    filterFn = { store.isAllowed(it) && store.passesFilters(it) },
+                    filterFn = { store.isAllowed(it) && store.passesFilters(it, mode) },
                 )
             }
             item {
@@ -314,7 +314,7 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: ()
                         if (mode == "movies") MediaApi.russianMovies(page) else MediaApi.russianTv(page)
                     },
                     onOpen = onOpenDetails,
-                    filterFn = { store.isAllowed(it) && store.passesFilters(it) },
+                    filterFn = { store.isAllowed(it) && store.passesFilters(it, mode) },
                 )
             }
             item {
@@ -324,7 +324,7 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: ()
                         if (mode == "movies") MediaApi.foreignMovies(page) else MediaApi.foreignTv(page)
                     },
                     onOpen = onOpenDetails,
-                    filterFn = { store.isAllowed(it) && store.passesFilters(it) },
+                    filterFn = { store.isAllowed(it) && store.passesFilters(it, mode) },
                 )
             }
         }
@@ -380,37 +380,37 @@ fun CatalogScreen(mode: String, onOpenDetails: (MediaItem) -> Unit, onSearch: ()
                 when (which) {
                     "genre" -> {
                         fGenres = sel.mapNotNull { it.substringAfter(':').toIntOrNull() }.toSet()
-                        store.setFilterGenreIds(fGenres)
+                        store.setFilterGenreIds(mode, fGenres)
                     }
                     "type" -> {
                         fType = sel.lastOrNull()?.substringAfter(':') ?: ""
-                        store.setFilterType(fType)
+                        store.setFilterType(mode, fType)
                     }
                     "country" -> {
                         fCountries = sel.mapNotNull { it.substringAfter(':').toIntOrNull() }.toSet()
-                        store.setFilterCountryIds(fCountries)
+                        store.setFilterCountryIds(mode, fCountries)
                     }
                     "year" -> {
                         val preset = sel.lastOrNull { it.startsWith("p:") }?.substringAfter("p:") ?: ""
                         fYearPreset = preset
                         fYears = sel.filter { it.startsWith("y:") }
                             .mapNotNull { it.substringAfter("y:").toIntOrNull() }.toSet()
-                        store.setFilterYearIds(fYears)
-                        store.setFilterYearPreset(fYearPreset)
+                        store.setFilterYearIds(mode, fYears)
+                        store.setFilterYearPreset(mode, fYearPreset)
                     }
                     else -> {
                         fMinRating = sel.lastOrNull()?.substringAfter("r:")?.toIntOrNull() ?: 0
-                        store.setFilterMinRating(fMinRating)
+                        store.setFilterMinRating(mode, fMinRating)
                     }
                 }
             },
             onResetAll = {
                 when (which) {
-                    "genre" -> { fGenres = emptySet(); store.setFilterGenreIds(fGenres) }
-                    "type" -> { fType = ""; store.setFilterType("") }
-                    "country" -> { fCountries = emptySet(); store.setFilterCountryIds(fCountries) }
-                    "year" -> { fYears = emptySet(); fYearPreset = ""; store.setFilterYearIds(fYears); store.setFilterYearPreset("") }
-                    else -> { fMinRating = 0; store.setFilterMinRating(0) }
+                    "genre" -> { fGenres = emptySet(); store.setFilterGenreIds(mode, fGenres) }
+                    "type" -> { fType = ""; store.setFilterType(mode, "") }
+                    "country" -> { fCountries = emptySet(); store.setFilterCountryIds(mode, fCountries) }
+                    "year" -> { fYears = emptySet(); fYearPreset = ""; store.setFilterYearIds(mode, fYears); store.setFilterYearPreset(mode, "") }
+                    else -> { fMinRating = 0; store.setFilterMinRating(mode, 0) }
                 }
             },
             onClose = { openFilter = null },

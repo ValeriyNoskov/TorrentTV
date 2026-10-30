@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
+
 package com.torrenttv.app.ui
 
 import androidx.compose.foundation.background
@@ -37,6 +39,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.input.pointer.pointerInput
@@ -222,20 +225,20 @@ fun FilterListDialog(
 
     androidx.activity.compose.BackHandler { onClose() }
 
-    // После закрытия клавиатурной шторки фокус возвращаем в поле поиска:
+    // После закрытия клавиатурной шторки фокус возвращаем в список:
     // иначе фокус «исчезает» и DPAD снова листает каталог под модалкой
     LaunchedEffect(keyboard) {
         if (!keyboard) runCatching { listFocus.requestFocus() }
     }
     // Забрать фокус в модалку СРАЗУ: без этого на ТВ фокус остаётся на полках
     // каталога ПОД модалкой — DPAD листает задний экран, в фильтр «не попасть».
-    // awaitFrame — жём завершение композиции: requestFocus ДО привязки
-    // FocusRequester падает и runCatching молча глотал потерю фокуса
+    // Фокус — на первую опцию списка (жалоба: «фокус не на фильтре при
+    // включении»); поиск достижим шагом UP
     LaunchedEffect(Unit) {
         withFrameNanos { } // один кадр: FocusRequester к этому моменту привязан
         runCatching { listFocus.requestFocus() }
             .onFailure { AppLog.log(tag, "диалог [$title]: фокус FAIL: ${it.message}") }
-        AppLog.log(tag, "диалог [$title]: открыт, фокус на поиске")
+        AppLog.log(tag, "диалог [$title]: открыт, фокус на списке")
     }
 
     // Затемнение поверх каталога; сам каталог виден по краям
@@ -250,15 +253,84 @@ fun FilterListDialog(
                 .align(Alignment.Center)
                 .width(460.dp)
                 .background(Color(0xFF141922), RoundedCornerShape(16.dp))
-                .border(1.dp, Color(0xFF2A3648), RoundedCornerShape(16.dp)),
+                .border(1.dp, Color(0xFF2A3648), RoundedCornerShape(16.dp))
+                // Скролл на ВСЁМ диалоге (шапка + поиск + список): вертикальная
+                // фокус-навигация внутри одного контейнера доходит и до кнопок
+                // шапки, и до строк — раздельные скролл-зоны глотали переходы
+                .verticalScroll(rememberScrollState())
+                // Фокус не покидает диалог: без этого DPAD на краях списка
+                // уходил на полки каталога ПОД модалкой (жалоба: «если
+                // вкладка фильтра открыта фокус только на нем»)
+                .focusProperties { exit = { FocusRequester.Cancel } },
         ) {
-            Text(
-                title,
-                color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(start = 20.dp, top = 14.dp),
-            )
+            // Шапка: заголовок + кнопки ПРИМЕНИТЬ/СБРОСИТЬ всегда на виду —
+            // раньше они были под списком 340dp и для нажатия нужен был
+            // скролл до низа (жалоба владельца)
+            val chosen = selected.size
+            fun applyFilter() {
+                AppLog.log(tag, "фильтр [$title]: Применить → ${selected.map { id -> options.firstOrNull { it.id == id }?.label ?: id }}")
+                onConfirm(selected)
+                onClose()
+            }
+            fun resetAll() {
+                AppLog.log(tag, "фильтр [$title]: сбросить всё (было ${selected.size})")
+                selected = emptySet()
+                // «Сбросить всё» сразу применяет пустой набор и ЗАКРЫВАЕТ
+                // диалог: два клика вместо трёх
+                onResetAll()
+                onClose()
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 4.dp),
+            ) {
+                Text(
+                    title,
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                )
+                Surface(
+                    onClick = { applyFilter() },
+                    shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color(0xFFA9D7F5),
+                        contentColor = Color(0xFF0E1116),
+                        focusedContainerColor = Color(0xFFBFE3F7),
+                        focusedContentColor = Color(0xFF0E1116),
+                    ),
+                    modifier = Modifier
+                        .mouseClick { applyFilter() },
+                ) {
+                    Text(
+                        "✓ Применить",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Surface(
+                    onClick = { resetAll() },
+                    shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color(0xFF1F2430),
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFA9D7F5),
+                        focusedContentColor = Color(0xFF0E1116),
+                    ),
+                    modifier = Modifier.mouseClick { resetAll() },
+                ) {
+                    Text(
+                        "Сбросить всё",
+                        fontSize = 15.sp,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    )
+                }
+            }
             // Поиск: всегда первое поле; ОК — клавиатурная шторка.
             // Фокус забираем себе: иначе DPAD двигал подсветку по полкам
             // каталога ПОД модалкой — казалось, что фильтр не открывается.
@@ -274,7 +346,6 @@ fun FilterListDialog(
                 modifier = Modifier
                     .padding(horizontal = 16.dp, vertical = 6.dp)
                     .fillMaxWidth()
-                    .focusRequester(listFocus)
                     // mouseClick — чтобы Surface кликался тапом мыши в эмуляторе
                     .mouseClick { keyboard = true },
             ) {
@@ -286,16 +357,16 @@ fun FilterListDialog(
                 )
             }
             // Список с галочками, сжатый поиском по подстроке.
-            // Ключ — id: строка НЕ пересоздаётся при toggle (фокус на месте)
+            // Обычный Column + verticalScroll вместо LazyColumn: у LazyColumn
+            // DPAD-UP на первом элементе глотался списком — фокус не выходил
+            // к поиску и кнопкам шапки (QA: «Применить» недостижима с пульта)
             val shown = if (query.isBlank()) options else options.filter {
                 it.label.contains(query.trim(), ignoreCase = true)
             }
-            LazyColumn(
-                Modifier
-                    .padding(horizontal = 10.dp)
-                    .height(340.dp),
+            Column(
+                Modifier.padding(horizontal = 10.dp),
             ) {
-                items(shown, key = { it.id }) { opt ->
+                shown.forEachIndexed { idx, opt ->
                     val isChecked = opt.id in selected
                     fun toggle() {
                         // Только локальный набор: список и родитель не трогаются
@@ -316,6 +387,12 @@ fun FilterListDialog(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
+                            // Фокус при открытии — на первую опцию списка
+                            .then(
+                                if (idx == 0) Modifier
+                                    .focusRequester(listFocus)
+                                else Modifier
+                            )
                             .mouseClick { toggle() },
                     ) {
                         Row(
@@ -357,66 +434,13 @@ fun FilterListDialog(
                     }
                 }
             }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            ) {
-                val chosen = selected.size
-                fun applyFilter() {
-                    AppLog.log(tag, "фильтр [$title]: Применить → ${selected.map { id -> options.firstOrNull { it.id == id }?.label ?: id }}")
-                    onConfirm(selected)
-                    onClose()
-                }
-                fun resetAll() {
-                    AppLog.log(tag, "фильтр [$title]: сбросить всё (было ${selected.size})")
-                    selected = emptySet()
-                    // «Сбросить всё» сразу применяет пустой набор: каталог
-                    // открывается без фильтра — два клика вместо трёх
-                    onResetAll()
-                }
-                Surface(
-                    onClick = { applyFilter() },
-                    shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
-                    colors = ClickableSurfaceDefaults.colors(
-                        containerColor = Color(0xFFA9D7F5),
-                        contentColor = Color(0xFF0E1116),
-                        focusedContainerColor = Color(0xFFBFE3F7),
-                        focusedContentColor = Color(0xFF0E1116),
-                    ),
-                    modifier = Modifier.mouseClick { applyFilter() },
-                ) {
-                    Text(
-                        "✓ Применить",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                    )
-                }
-                Spacer(Modifier.width(10.dp))
-                Surface(
-                    onClick = { resetAll() },
-                    shape = clickableSurfaceShape(RoundedCornerShape(10.dp)),
-                    colors = ClickableSurfaceDefaults.colors(
-                        containerColor = Color(0xFF1F2430),
-                        contentColor = Color.White,
-                        focusedContainerColor = Color(0xFFA9D7F5),
-                        focusedContentColor = Color(0xFF0E1116),
-                    ),
-                    modifier = Modifier.mouseClick { resetAll() },
-                ) {
-                    Text(
-                        "Сбросить всё",
-                        fontSize = 15.sp,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                    )
-                }
-                Spacer(Modifier.weight(1f))
-                Text(
-                    if (chosen > 0) "Выбрано: $chosen" else title,
-                    color = Color(0xFF8A94A6),
-                    fontSize = 13.sp,
-                )
-            }
+            // Счётчик выбранных — внизу, кнопки действий теперь в шапке
+            Text(
+                if (chosen > 0) "Выбрано: $chosen" else title,
+                color = Color(0xFF8A94A6),
+                fontSize = 13.sp,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+            )
         }
     }
 
@@ -947,6 +971,13 @@ fun SideNav(active: Screen, onTab: (Screen) -> Unit, restoreFocusTick: Int = 0) 
     // restoreFocusTick>0 — сигнал «мы вернулись на вкладку»: ставим фокус
     // на активный (жёлтый) пункт меню.
     val activeFocus = remember(active) { androidx.compose.ui.focus.FocusRequester() }
+    // Вход фокуса в меню СНАРУЖИ (влево из контента): Compose отдаёт фокус
+    // последней зафокусированной кнопке, а владелец ждёт пункт АКТИВНОЙ
+    // вкладки («открыл вкладку → перешёл в меню влево → фокус на кнопке,
+    // из которой вышел»). Переносим фокус на активный пункт.
+    var focusedItem by remember { mutableStateOf<Screen?>(null) }
+    var menuHadFocus by remember { mutableStateOf(false) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     LaunchedEffect(restoreFocusTick, active) {
         if (restoreFocusTick > 0) {
             kotlinx.coroutines.delay(250) // даём композиции вкладки устояться
@@ -964,7 +995,16 @@ fun SideNav(active: Screen, onTab: (Screen) -> Unit, restoreFocusTick: Int = 0) 
             .fillMaxHeight()
             .background(Color(0xFF12161F))
             .verticalScroll(rememberScrollState())
-            .padding(vertical = 6.dp),
+            .padding(vertical = 6.dp)
+            .onFocusChanged { st ->
+                if (st.hasFocus && !menuHadFocus && focusedItem != active) {
+                    scope.launch {
+                        kotlinx.coroutines.delay(80) // фокус должен «устояться»
+                        runCatching { activeFocus.requestFocus() }
+                    }
+                }
+                menuHadFocus = st.hasFocus
+            },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
@@ -987,27 +1027,27 @@ fun SideNav(active: Screen, onTab: (Screen) -> Unit, restoreFocusTick: Int = 0) 
             )
         }
         SideBarButton("🏠", "Главная", Screen.Home, active, onTab, expanded,
-            focusRequester = activeFocus.takeIf { active == Screen.Home }) { expanded = it }
+            focusRequester = activeFocus.takeIf { active == Screen.Home }, onFocusedItem = { focusedItem = it }, onFocusInBar = { expanded = it })
         SideBarButton("▶︎", "Продолжить", Screen.Continue, active, onTab, expanded,
-            focusRequester = activeFocus.takeIf { active == Screen.Continue }) { expanded = it }
+            focusRequester = activeFocus.takeIf { active == Screen.Continue }, onFocusedItem = { focusedItem = it }, onFocusInBar = { expanded = it })
         SideBarButton("⭐", "Избранное", Screen.Favorites, active, onTab, expanded,
-            focusRequester = activeFocus.takeIf { active == Screen.Favorites }) { expanded = it }
+            focusRequester = activeFocus.takeIf { active == Screen.Favorites }, onFocusedItem = { focusedItem = it }, onFocusInBar = { expanded = it })
         // «Смотреть позже» убрано: дублировало избранное — есть фильтр
         // «Фильмы / Сериалы» (решение владельца).
         SideBarButton("🎬", "Фильмы", Screen.Movies, active, onTab, expanded,
-            focusRequester = activeFocus.takeIf { active == Screen.Movies }) { expanded = it }
+            focusRequester = activeFocus.takeIf { active == Screen.Movies }, onFocusedItem = { focusedItem = it }, onFocusInBar = { expanded = it })
         SideBarButton("📺", "Сериалы", Screen.TvShows, active, onTab, expanded,
-            focusRequester = activeFocus.takeIf { active == Screen.TvShows }) { expanded = it }
+            focusRequester = activeFocus.takeIf { active == Screen.TvShows }, onFocusedItem = { focusedItem = it }, onFocusInBar = { expanded = it })
         SideBarButton("🎪", "Шоу", Screen.Shows, active, onTab, expanded,
-            focusRequester = activeFocus.takeIf { active == Screen.Shows }) { expanded = it }
+            focusRequester = activeFocus.takeIf { active == Screen.Shows }, onFocusedItem = { focusedItem = it }, onFocusInBar = { expanded = it })
         SideBarButton("📡", "ТВ", Screen.Tv, active, onTab, expanded,
-            focusRequester = activeFocus.takeIf { active == Screen.Tv }) { expanded = it }
+            focusRequester = activeFocus.takeIf { active == Screen.Tv }, onFocusedItem = { focusedItem = it }, onFocusInBar = { expanded = it })
         SideBarButton("🧲", "Новинки торрентов", Screen.Torrents, active, onTab, expanded,
-            focusRequester = activeFocus.takeIf { active == Screen.Torrents }) { expanded = it }
+            focusRequester = activeFocus.takeIf { active == Screen.Torrents }, onFocusedItem = { focusedItem = it }, onFocusInBar = { expanded = it })
         SideBarButton("🔍", "Поиск", Screen.Search, active, onTab, expanded,
-            focusRequester = activeFocus.takeIf { active == Screen.Search }) { expanded = it }
+            focusRequester = activeFocus.takeIf { active == Screen.Search }, onFocusedItem = { focusedItem = it }, onFocusInBar = { expanded = it })
         SideBarButton("⚙", "Настройки", Screen.Settings, active, onTab, expanded,
-            focusRequester = activeFocus.takeIf { active == Screen.Settings }) { expanded = it }
+            focusRequester = activeFocus.takeIf { active == Screen.Settings }, onFocusedItem = { focusedItem = it }, onFocusInBar = { expanded = it })
         // Сразу после настроек — всегда видна, никаких прыжков вниз
         SideBarExitButton(expanded) { expanded = it }
     }
@@ -1023,6 +1063,7 @@ fun SideBarButton(
     expanded: Boolean = true,
     focusRequester: androidx.compose.ui.focus.FocusRequester? = null,
     onFocusInBar: (Boolean) -> Unit = {},
+    onFocusedItem: (Screen) -> Unit = {},
 ) {
     val isActive = active == target
     Surface(
@@ -1034,7 +1075,10 @@ fun SideBarButton(
             )
             .width(if (expanded) 150.dp else 56.dp)
             .mouseClick { onTab(target) }
-            .onFocusChanged { onFocusInBar(it.hasFocus) },
+            .onFocusChanged {
+                if (it.isFocused) onFocusedItem(target)
+                onFocusInBar(it.hasFocus)
+            },
         shape = clickableSurfaceShape(RoundedCornerShape(12.dp)),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (isActive) Color(0xFFA9D7F5) else Color.Transparent,

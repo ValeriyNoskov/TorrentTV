@@ -311,8 +311,20 @@ object TorrentEngine {
                 val headTo = ((fileOffset + 4L * 1024 * 1024) / pieceLen).toInt().coerceIn(0, lastPiece)
                 val cueFrom = ((endAbs - 8L * 1024 * 1024).coerceAtLeast(fileOffset) / pieceLen)
                     .toInt().coerceIn(0, lastPiece)
-                for (i in 0..headTo) handle.piecePriority(i, Priority.SEVEN)
-                for (i in cueFrom..lastPiece) handle.piecePriority(i, Priority.SEVEN)
+                // setPieceDeadline(i, 0) помимо SEVEN: куски с дедлайном
+                // качаются ВНЕ очереди и переотправляются, иначе SEVEN
+                // конкурирует с head-буфером и Cues (индекс MKV) не
+                // докачиваются — ExoPlayer лезет за индексом в конец файла
+                // и висит «фильм так и не запустился» (лог: pos=2058МБ =
+                // ровно размер файла, 3723=✗(S) при 29 пирах)
+                for (i in 0..headTo) {
+                    handle.piecePriority(i, Priority.SEVEN)
+                    if (!handle.havePiece(i)) runCatching { handle.setPieceDeadline(i, 0) }
+                }
+                for (i in cueFrom..lastPiece) {
+                    handle.piecePriority(i, Priority.SEVEN)
+                    if (!handle.havePiece(i)) runCatching { handle.setPieceDeadline(i, 0) }
+                }
             } catch (_: Exception) {
             }
         }
@@ -426,6 +438,29 @@ object TorrentEngine {
             return headBytes() > 0 || length <= 0L
         }
 
+        /**
+         * Готов ли ХВОСТ файла (индекс Cues, последние 8 МБ). ExoPlayer при
+         * открытии MKV читает индекс в КОНЦЕ файла — без него воспроизведение
+         * не начинается, даже если начало скачано (лог: pos=2058МБ = размер
+         * файла, «чтение ждёт куски» до выхода). Входит в условие старта
+         * буферизации наравне с готовностью начала.
+         */
+        fun cuesReady(): Boolean = try {
+            val pieceLen = ti.pieceLength()
+            if (pieceLen <= 0) true
+            else {
+                val endAbs = fileOffset + fileSize
+                val lastPiece = ((endAbs - 1) / pieceLen).toInt().coerceIn(0, ti.numPieces() - 1)
+                val cueFrom = ((endAbs - 8L * 1024 * 1024).coerceAtLeast(fileOffset) / pieceLen)
+                    .toInt().coerceIn(0, lastPiece)
+                (cueFrom..lastPiece).all { i ->
+                    try { handle.havePiece(i) } catch (_: Exception) { false }
+                }
+            }
+        } catch (_: Exception) {
+            true
+        }
+
         /** Доля готовых кусков в диапазоне файла [filePos, filePos+length), 0..1. */
         fun readyFraction(filePos: Long, length: Long): Float {
             try {
@@ -486,7 +521,14 @@ object TorrentEngine {
                 val headTo = ((fileOffset + 4L * 1024 * 1024) / pieceLen).toInt().coerceIn(0, n - 1)
                 val cueFrom = ((fileOffset + fileSize - 8L * 1024 * 1024).coerceAtLeast(fileOffset) / pieceLen)
                     .toInt().coerceIn(0, n - 1)
-                for (i in from..to) handle.piecePriority(i, Priority.SEVEN)
+                for (i in from..to) {
+                    handle.piecePriority(i, Priority.SEVEN)
+                    // Deadline для отсутствующих кусков ОКНА: SEVEN стоит в
+                    // общей очереди и может висеть на редких кусках (лог:
+                    // 3723=✗(S) при живых пирах) — перемотка «не смотрится».
+                    // Deadline качает их вне очереди.
+                    if (!handle.havePiece(i)) runCatching { handle.setPieceDeadline(i, 0) }
+                }
                 // Понижаем всё вне окна внутри НАШЕГО файла (соседние файлы
                 // пачки не трогаем — у них свои приоритеты)
                 val fFirst = (fileOffset / pieceLen).toInt().coerceIn(0, n - 1)
