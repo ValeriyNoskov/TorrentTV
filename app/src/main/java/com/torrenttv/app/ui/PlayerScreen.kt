@@ -891,6 +891,27 @@ private fun VideoPlayer(
         }
     }
 
+    // Сторож застревания: буферизация торрента завершена, но READY не пришло
+    // («контент не показывает», лог ТВ 0.9.64: ExoPlayer открыл заголовок и
+    // хвост Cues и замолчал — ни READY, ни ошибки). Раз в 10 с — полное
+    // состояние плеера и позиции чтения, чтобы видеть, жив ли транспортный
+    // поток ExoPlayer и что он делает
+    LaunchedEffect(player) {
+        var watchdog = 0
+        while (true) {
+            kotlinx.coroutines.delay(10_000)
+            if (player.playbackState != androidx.media3.common.Player.STATE_READY) {
+                watchdog++
+                com.torrenttv.app.data.AppLog.log(
+                    "player",
+                    "застрял (не READY): state=${player.playbackState} " +
+                        "pos=${player.currentPosition / 1000}с буфер=${player.bufferedPosition / 1000}с " +
+                        "head=${stream?.headBytes()?.div(1024)?.div(1024)}МБ watchdog=$watchdog",
+                )
+            } else watchdog = 0
+        }
+    }
+
     DisposableEffect(player) {
         var audioApplied = false
         // Единая телеметрия плеера (состояния/дорожки/кадры/воспроизведение) —

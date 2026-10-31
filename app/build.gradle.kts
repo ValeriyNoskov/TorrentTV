@@ -25,8 +25,8 @@ android {
         applicationId = "com.torrenttv.app"
         minSdk = 29          // Android 10 — минимальная версия Android TV по требованию
         targetSdk = 34
-        versionCode = 200
-        versionName = "0.9.64"
+        versionCode = 201
+        versionName = "0.9.65"
         // Ключ метаданных (kinopoiskapiunofficial.tech) — задаётся в gradle.properties: kpApiKey=...
         buildConfigField("String", "OBF_KEY", "\"$obfKey\"")
         buildConfigField("String", "KP_API_KEY_OBF", "\"${xorHex(findProperty("kpApiKey") as String? ?: "", obfKey)}\"")

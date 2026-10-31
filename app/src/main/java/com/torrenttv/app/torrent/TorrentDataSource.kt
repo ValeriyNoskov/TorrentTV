@@ -29,15 +29,21 @@ class TorrentDataSource(private val st: TorrentEngine.StreamSession) : DataSourc
     // поток и PARSING_CONTAINER_UNSUPPORTED при полностью скачанной серии
     private var filePos = 0L
 
+    // Флаг «первое чтение после open» для диагностики зависаний плеера
+    private var firstReadLogged = false
+
     override fun open(dataSpec: DataSpec): Long {
         pieceAbs = st.fileOffset + dataSpec.position
         filePos = dataSpec.position
+        firstReadLogged = false
         // Подробный лог: сразу видно, в каких координатах открывается файл
+        // (байты, а не МБ: хвост Cues — точные позиции, по ним видно,
+        // что именно запрашивает ExoPlayer, когда «контент не показывает»)
         com.torrenttv.app.data.AppLog.log(
             "player",
             "источник открыт: файл=${st.videoFile.name.take(40)} размер=${st.fileSize / 1024 / 1024}МБ " +
                 "fileOffset=${st.fileOffset / 1024 / 1024}МБ pos=${dataSpec.position / 1024 / 1024}МБ " +
-                "кусок#${pieceAbs / 1024 / 1024}МБ",
+                "кусок#${pieceAbs / 1024 / 1024}МБ length=${dataSpec.length}",
         )
         // Seek в середину: поднимаем приоритет кусков вокруг новой позиции.
         // SEQUENTIAL больше не включается — порядок задаётся приоритетами
@@ -58,6 +64,16 @@ class TorrentDataSource(private val st: TorrentEngine.StreamSession) : DataSourc
     override fun read(target: ByteArray, offset: Int, length: Int): Int {
         if (length == 0) return 0
         val f = raf ?: throw IOException("DataSource closed")
+        // Первое чтение после каждого open — в лог: видно, читает ли ExoPlayer
+        // запрошенный диапазон вообще (зависание «контент не показывает» =
+        // open есть, чтений нет)
+        if (!firstReadLogged) {
+            firstReadLogged = true
+            com.torrenttv.app.data.AppLog.log(
+                "player",
+                "чтение начато: файлПоз=$filePos байт, запрошено $length",
+            )
+        }
 
         // Ждём, пока будут скачаны ВСЕ куски запрошенного диапазона.
         // Таймаут 90 с: без него заблокированный поток ExoPlayer зависает
