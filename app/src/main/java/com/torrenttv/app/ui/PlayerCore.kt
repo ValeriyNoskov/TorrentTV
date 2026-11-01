@@ -3,6 +3,10 @@ package com.torrenttv.app.ui
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
+import androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime
+import androidx.media3.exoplayer.source.LoadEventInfo
+import androidx.media3.exoplayer.source.MediaLoadData
+import java.io.IOException
 
 /**
  * Единая телеметрия для всех трёх плееров (торрент/онлайн/ТВ): раньше каждый
@@ -59,6 +63,45 @@ object PlayerCore {
                 com.torrenttv.app.data.AppLog.log(
                     tag,
                     "playback error: ${error.errorCodeName} pos=${player.currentPosition / 1000}с",
+                )
+            }
+        })
+
+        // События загрузки: ExoPlayer сам рассказывает, что и откуда грузит
+        // и ЧТО ПЛАНИРУЕТ дальше — по ним видно, где конвейер замолчал
+        // («контент не показывает»: после чтения хвоста Cues транспортный
+        // поток больше не читал и не сообщал READY — лог ТВ 0.9.65)
+        // onLoad* живут в AnalyticsListener, не в Player.Listener
+        player.addAnalyticsListener(object : androidx.media3.exoplayer.analytics.AnalyticsListener {
+            override fun onLoadStarted(
+                eventTime: EventTime, loadEventInfo: LoadEventInfo,
+                mediaLoadData: MediaLoadData,
+            ) {
+                com.torrenttv.app.data.AppLog.log(
+                    tag,
+                    "load start: ${loadEventInfo.dataSpec.position}+${loadEventInfo.dataSpec.length}",
+                )
+            }
+
+            override fun onLoadCompleted(
+                eventTime: EventTime, loadEventInfo: LoadEventInfo,
+                mediaLoadData: MediaLoadData,
+            ) {
+                com.torrenttv.app.data.AppLog.log(
+                    tag,
+                    "load ok: ${loadEventInfo.dataSpec.position}+${loadEventInfo.dataSpec.length} " +
+                        "байт=${loadEventInfo.bytesLoaded} за ${loadEventInfo.loadDurationMs}мс",
+                )
+            }
+
+            override fun onLoadError(
+                eventTime: EventTime, loadEventInfo: LoadEventInfo,
+                mediaLoadData: MediaLoadData, error: IOException,
+                wasCanceled: Boolean,
+            ) {
+                com.torrenttv.app.data.AppLog.log(
+                    tag,
+                    "load FAIL: ${error.javaClass.simpleName}: ${error.message} (отменена=$wasCanceled)",
                 )
             }
         })

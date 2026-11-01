@@ -147,6 +147,16 @@ class TorrentDataSource(private val st: TorrentEngine.StreamSession) : DataSourc
             return C.RESULT_END_OF_INPUT
         }
         // pieceAbs/filePos уже сдвинуты в readOnce
+        // Малые запросы (sniff: 3 байта заголовка, 1 байт хвоста) — логируем
+        // результат: по ним видно, вернулся ли read() и что получил ExoPlayer
+        // («контент не показывает»: после 1-байтового чтения хвоста ExoPlayer
+        // замолкал — не ясно было, вернулся ли read вообще)
+        if (length <= 8) {
+            com.torrenttv.app.data.AppLog.log(
+                "player",
+                "чтение ок (sniff): файлПоз=${filePos}байт вернулось=$n из $length",
+            )
+        }
         // Прогресс чтения каждые ~64 МБ — видно, доходит ли плеер до данных
         if (filePos - lastProgressLog > 64L * 1024 * 1024) {
             lastProgressLog = filePos
