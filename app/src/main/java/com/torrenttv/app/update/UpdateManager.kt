@@ -84,14 +84,19 @@ object UpdateManager {
         Thread {
             try {
                 val request = Request.Builder().url(info.apkUrl)
-                    // GitVerse-URL качаем с ВШИТЫМ GitVerse-токеном (нужен для
-                    // приватного репо), GitHub-URL — с пользовательским токеном.
-                    // GitVerse-attachments принимают схему "token", НЕ "Bearer"
-                    // (Bearer отдаёт 401 — проверено на живом API)
+                    // GitVerse-attachments ПРИВАТНОГО репо отдаются ТОЛЬКО
+                    // через api.gitverse.ru/attachments/<uuid> с Bearer +
+                    // Accept: application/vnd.gitverse.object+json (проверено:
+                    // gitverse.ru/api/attachments + "token" → 400, Bearer →
+                    // 401, api.gitverse.ru + Bearer + Accept → 200).
+                    // GitHub-URL — с пользовательским токеном.
                     .apply {
                         if (info.apkUrl.contains("gitverse.ru")) {
                             val t = gitverseToken()
-                            if (t.isNotBlank()) header("Authorization", "token $t")
+                            if (t.isNotBlank()) {
+                                header("Authorization", "Bearer $t")
+                                header("Accept", "application/vnd.gitverse.object+json;version=1")
+                            }
                         } else {
                             val t = ghToken(context)
                             if (t.isNotBlank()) header("Authorization", "Bearer $t")
@@ -293,7 +298,8 @@ object UpdateManager {
      *
      * API: GET /repos/ChipN/TorrentTV/releases?per_page=1 → JSON, первый
      * элемент = новейший релиз (tag_name, body, assets[].uuid).
-     * APK качается по /api/attachments/<uuid>.
+     * APK качается по api.gitverse.ru/attachments/<uuid> с Bearer —
+     * единственный путь, работающий для приватного репо.
      */
     private fun fetchGitverse(currentVersion: String): UpdateInfo? {
         // Основной путь: API с токеном (работает и для приватного репо)
@@ -320,8 +326,10 @@ object UpdateManager {
                         )
                         return null
                     }
-                    // APK: attachment релиза. browser_download_url отдаёт 404 —
-                    // используем проверенный /api/attachments/<uuid>
+                    // APK: attachment релиза. browser_download_url отдаёт 404.
+                    // Приватный репо: вложение отдаётся ТОЛЬКО через
+                    // api.gitverse.ru/attachments/<uuid> с Bearer+Accept
+                    // (gitverse.ru/api/attachments с "token" в приватном — 400)
                     val assets = rel.getJSONArray("assets")
                     var apkUuid = ""
                     for (i in 0 until assets.length()) {
@@ -331,8 +339,16 @@ object UpdateManager {
                             break
                         }
                     }
-                    if (apkUuid.isBlank()) throw IllegalStateException("у релиза v$tag нет APK")
-                    val apkUrl = "https://gitverse.ru/api/attachments/$apkUuid"
+                    if (apkUuid.isBlank()) {
+                        // Релиз уже создан, но CI ещё не прикрепил APK
+                        // (задержка 4-6 мин) — НЕ ошибка, молча ждём
+                        com.torrenttv.app.data.AppLog.log(
+                            "update",
+                            "проверка [GitVerse]: релиз v$tag уже есть, APK ещё не прикреплён CI → у вас последняя",
+                        )
+                        return null
+                    }
+                    val apkUrl = "https://api.gitverse.ru/attachments/$apkUuid"
                     com.torrenttv.app.data.AppLog.log(
                         "update",
                         "проверка [GitVerse]: последний релиз v$tag, текущая v$currentVersion → доступно обновление",
