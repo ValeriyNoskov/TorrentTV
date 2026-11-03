@@ -83,88 +83,153 @@ object UpdateManager {
         progressPct = 0
         Thread {
             try {
-                val request = Request.Builder().url(info.apkUrl)
-                    // GitVerse-attachments ПРИВАТНОГО репо отдаются ТОЛЬКО
-                    // через api.gitverse.ru/attachments/<uuid> с Bearer +
-                    // Accept: application/vnd.gitverse.object+json (проверено:
-                    // gitverse.ru/api/attachments + "token" → 400, Bearer →
-                    // 401, api.gitverse.ru + Bearer + Accept → 200).
-                    // GitHub-URL — с пользовательским токеном.
-                    .apply {
-                        if (info.apkUrl.contains("gitverse.ru")) {
-                            val t = gitverseToken()
-                            if (t.isNotBlank()) {
-                                header("Authorization", "Bearer $t")
-                                header("Accept", "application/vnd.gitverse.object+json;version=1")
-                            }
-                        } else {
-                            val t = ghToken(context)
-                            if (t.isNotBlank()) header("Authorization", "Bearer $t")
+                val isGitverse = info.apkUrl.contains("gitverse.ru")
+                val tmpFile = File(context.cacheDir, "update-${info.version}.apk.part")
+                val apkFile = File(context.cacheDir, "update-${info.version}.apk")
+
+                // GitVerse-attachments ПРИВАТНОГО репо отдаются ТОЛЬКО
+                // через api.gitverse.ru/attachments/<uuid> с Bearer +
+                // Accept: application/vnd.gitverse.object+json (проверено:
+                // gitverse.ru/api/attachments + "token" → 400, Bearer →
+                // 401, api.gitverse.ru + Bearer + Accept → 200).
+                // GitHub-URL — с пользовательским токеном.
+                fun request(rangeStart: Long?, rangeEnd: Long?): Request {
+                    val b = Request.Builder().url(info.apkUrl)
+                    if (isGitverse) {
+                        val t = gitverseToken()
+                        if (t.isNotBlank()) {
+                            b.header("Authorization", "Bearer $t")
+                            b.header("Accept", "application/vnd.gitverse.object+json;version=1")
                         }
+                    } else {
+                        val t = ghToken(context)
+                        if (t.isNotBlank()) b.header("Authorization", "Bearer $t")
                     }
-                    .build()
-                http.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}")
-                    // Пишем во временный файл: убитый посреди закачки процесс
-                    // не оставит «битый» APK под финальным именем
-                    val tmpFile = File(context.cacheDir, "update-${info.version}.apk.part")
-                    val apkFile = File(context.cacheDir, "update-${info.version}.apk")
-                    val body = response.body ?: throw IllegalStateException("пустой ответ сервера")
-                    val total = body.contentLength()
-                    com.torrenttv.app.data.AppLog.log(
-                        "update",
-                        "скачивание v${info.version}: ${if (total > 0) "${total / 1024 / 1024} МБ" else "размер неизвестен"} " +
-                            "с ${info.apkUrl.substringBefore("/", "https://").removePrefix("https://").substringBefore("/")}",
-                    )
-                    body.byteStream().use { input ->
-                        tmpFile.outputStream().use { output ->
-                            val buf = ByteArray(64 * 1024)
-                            var read: Int
-                            var done = 0L
-                            var lastPct = -1
-                            var lastPctAt = 0L
-                            while (input.read(buf).also { read = it } != -1) {
-                                output.write(buf, 0, read)
-                                done += read
-                                if (total > 0) {
-                                    val pct = (done * 100 / total).toInt()
-                                    if (pct != lastPct) {
-                                        // Скорость по последнему отрезку 10%:
-                                        // по ней из Gist видно, кто тормозит
-                                        val now = System.currentTimeMillis()
-                                        val speed = if (lastPctAt > 0 && now > lastPctAt)
-                                            (done - lastPct * total / 100) / ((now - lastPctAt) / 1000.0) / 1024 / 1024
-                                        else 0.0
-                                        lastPct = pct
-                                        lastPctAt = now
-                                        progressPct = pct
-                                        // В лог — каждые 10%: по нему видно темп и где встало
-                                        if (pct % 10 == 0) {
-                                            com.torrenttv.app.data.AppLog.log("update", "скачивание v${info.version}: $pct% (${"%.1f".format(speed)} МБ/с)")
+                    if (rangeStart != null) b.header("Range", "bytes=$rangeStart-${rangeEnd ?: ""}")
+                    return b.build()
+                }
+
+                // Полный размер файла: GitVerse — 1-байтовый Range 0-0
+                // (полный размер в Content-Range: bytes 0-0/TOTAL)
+                var total = -1L
+                if (isGitverse) {
+                    try {
+                        http.newCall(request(0, 0)).execute().use { r ->
+                            total = r.header("Content-Range")?.substringAfterLast('/')?.toLongOrNull() ?: -1L
+                        }
+                    } catch (e: Exception) { total = -1L }
+                }
+
+                com.torrenttv.app.data.AppLog.log(
+                    "update",
+                    "скачивание v${info.version}: ${if (total > 0) "${total / 1024 / 1024} МБ" else "размер неизвестен"} " +
+                        "с ${info.apkUrl.removePrefix("https://").substringBefore("/")}",
+                )
+
+                val buf = ByteArray(64 * 1024)
+                var done = 0L
+                var lastPct = -1
+                var lastPctAt = 0L
+                // Скорость по последнему отрезку 10%: по ней из Gist видно,
+                // кто тормозит. В лог — каждые 10%: темп и где встало
+                fun report() {
+                    if (total <= 0) return
+                    val pct = (done * 100 / total).toInt()
+                    if (pct == lastPct) return
+                    val now = System.currentTimeMillis()
+                    val speed = if (lastPctAt > 0 && now > lastPctAt)
+                        (done - lastPct * total / 100) / ((now - lastPctAt) / 1000.0) / 1024 / 1024
+                    else 0.0
+                    lastPct = pct
+                    lastPctAt = now
+                    progressPct = pct
+                    if (pct % 10 == 0) {
+                        com.torrenttv.app.data.AppLog.log("update", "скачивание v${info.version}: $pct% (${"%.1f".format(speed)} МБ/с)")
+                    }
+                }
+
+                if (isGitverse && total > 0) {
+                    // GitVerse рвёт длинные HTTP/2-потоки: полный GET и даже
+                    // Range "bytes=0-" отдаёт ~2.6 МБ и падает stream reset
+                    // INTERNAL_ERROR (воспроизведено curl'ом и OkHttp), зато
+                    // кусок 20 МБ с ЯВНЫМ конечным Range проходит целиком.
+                    // Поэтому качаем кусками по 8 МБ с ретраями — короткий
+                    // поток сервер разорвать не успевает
+                    val CHUNK = 8L * 1024 * 1024
+                    val chunkFile = File(context.cacheDir, "update-chunk.part")
+                    tmpFile.delete() // прошлая неудачная закачка не смешается
+                    while (done < total) {
+                        val end = minOf(done + CHUNK, total) - 1
+                        var ok = false
+                        var lastErr: Exception? = null
+                        for (attempt in 1..3) {
+                            try {
+                                http.newCall(request(done, end)).execute().use { response ->
+                                    if (response.code != 206) throw IllegalStateException("HTTP ${response.code} (кусок $done-$end)")
+                                    val input = response.body?.byteStream()
+                                        ?: throw IllegalStateException("пустой ответ сервера")
+                                    chunkFile.outputStream().use { output ->
+                                        var read: Int
+                                        var got = 0L
+                                        while (input.read(buf).also { read = it } != -1) {
+                                            output.write(buf, 0, read)
+                                            got += read
+                                        }
+                                        if (got != end - done + 1) {
+                                            throw IllegalStateException("кусок недокачан: $got из ${end - done + 1}")
                                         }
                                     }
                                 }
-                            }
-                            // Целостность: APK — это ZIP; размер сверяем с сервером
-                            if (total > 0 && done != total) {
-                                throw IllegalStateException("файл скачан не полностью: $done из $total")
+                                // Кусок целиком — дописываем к результату
+                                chunkFile.inputStream().use { i ->
+                                    java.io.FileOutputStream(tmpFile, true).use { i.copyTo(it, buf.size) }
+                                }
+                                ok = true
+                            } catch (e: Exception) {
+                                lastErr = e
+                                Thread.sleep(2000L * attempt)
                             }
                         }
+                        if (!ok) throw lastErr ?: IllegalStateException("кусок $done-$end не скачался")
+                        done = end + 1
+                        report()
                     }
-                    if (tmpFile.length() < 4 || tmpFile.inputStream().use { s ->
-                        ByteArray(2).also { s.read(it) }.toString(Charsets.ISO_8859_1) != "PK"
-                    }) {
-                        tmpFile.delete()
-                        throw IllegalStateException("файл не похож на APK (нет ZIP-сигнатуры)")
+                    chunkFile.delete()
+                } else {
+                    // GitHub: обычный полный GET (без нареканий)
+                    http.newCall(request(null, null)).execute().use { response ->
+                        if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}")
+                        val body = response.body ?: throw IllegalStateException("пустой ответ сервера")
+                        if (total <= 0) total = body.contentLength()
+                        body.byteStream().use { input ->
+                            tmpFile.outputStream().use { output ->
+                                var read: Int
+                                while (input.read(buf).also { read = it } != -1) {
+                                    output.write(buf, 0, read)
+                                    done += read
+                                    report()
+                                }
+                            }
+                        }
+                        // Целостность: размер сверяем с сервером
+                        if (total > 0 && done != total) {
+                            throw IllegalStateException("файл скачан не полностью: $done из $total")
+                        }
                     }
-                    tmpFile.renameTo(apkFile) || run {
-                        tmpFile.delete()
-                        throw IllegalStateException("не удалось переименовать временный файл")
-                    }
-                    downloaded = info to apkFile
-                    com.torrenttv.app.data.AppLog.log("update", "скачивание v${info.version}: готово")
                 }
-            } catch (e: Exception) {
+            if (tmpFile.length() < 4 || tmpFile.inputStream().use { s ->
+                ByteArray(2).also { s.read(it) }.toString(Charsets.ISO_8859_1) != "PK"
+            }) {
+                tmpFile.delete()
+                throw IllegalStateException("файл не похож на APK (нет ZIP-сигнатуры)")
+            }
+            tmpFile.renameTo(apkFile) || run {
+                tmpFile.delete()
+                throw IllegalStateException("не удалось переименовать временный файл")
+            }
+            downloaded = info to apkFile
+            com.torrenttv.app.data.AppLog.log("update", "скачивание v${info.version}: готово")
+        } catch (e: Exception) {
                 com.torrenttv.app.data.AppLog.log("update", "скачивание v${info.version} FAIL: ${e.message}")
             } finally {
                 downloading = false
