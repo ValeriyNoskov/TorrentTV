@@ -408,10 +408,16 @@ fun DetailsScreen(
 
             // ---------- Сезоны и серии (владелец: вместо кнопки «Эпизоды»,
             // с автообновлением при открытии и кнопкой «Обновить») ----------
+            // Серии пробуем собрать у ЛЮБОЙ карточки (movie и tv): каталоги
+            // помечают сериалы фильмами («Полдень» 2026 в КП — movie, секция
+            // серий полностью скрывалась, даже поиск не запускался). Сбор сам
+            // определит сериал: раздачи с S/E-файлами → seasons.isNotEmpty()
+            // → секция появится; у чистого фильма S/E-файлов нет → секции нет.
+            // Лимит дос-поиска (30 минут) защищает от молотилки
             var seasons by remember(item) { mutableStateOf<List<com.torrenttv.app.data.Season>>(emptyList()) }
             var selSeason by remember(item) { mutableStateOf<Int?>(null) }
             var epTick by remember(item) { mutableStateOf(0) }
-            if (item.type == "tv") {
+            if (item.type == "tv" || item.type == "movie") {
                 LaunchedEffect(item, epTick) {
                     // 1) Кеш: секция видна мгновенно
                     val cached = store.loadEpisodeCache(item)
