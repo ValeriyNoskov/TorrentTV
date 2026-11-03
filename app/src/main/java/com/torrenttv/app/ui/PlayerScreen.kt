@@ -45,6 +45,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem as ExoMediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.datasource.DataSource
+import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.ExtractorsFactory
+import androidx.media3.extractor.mkv.MatroskaExtractor
+
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.ui.PlayerView
@@ -758,7 +762,18 @@ private fun VideoPlayer(
                 // Стриминг: ExoPlayer читает недокачанный файл через TorrentDataSource,
                 // который дожидается нужных кусков последовательной загрузки
                 val dataSourceFactory = DataSource.Factory { TorrentDataSource(stream) }
-                val mediaSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                // Фикс «контент не показывает» (лог ТВ 0.9.65): ExoPlayer застревал
+                // в фазе SNIFFING — читал 3 байта заголовка + 1 байт хвоста и
+                // замолкал навсегда (state=BUFFERING, чтений больше нет). Для MKV
+                // сниффинг не нужен: создаём MatroskaExtractor сразу, MP4 и прочие
+                // — через стандартный сниффер. Застревание исчезает вместе с фазой.
+                val extractorsFactory = ExtractorsFactory {
+                    if (stream.videoFile.name.lowercase().endsWith(".mkv"))
+                        arrayOf(MatroskaExtractor())
+                    else
+                        DefaultExtractorsFactory().createExtractors()
+                }
+                val mediaSource = ProgressiveMediaSource.Factory(dataSourceFactory, extractorsFactory)
                     .createMediaSource(ExoMediaItem.fromUri(Uri.parse("torrent://stream/" + item.storeKey)))
                 setMediaSource(mediaSource)
                 prepare()
