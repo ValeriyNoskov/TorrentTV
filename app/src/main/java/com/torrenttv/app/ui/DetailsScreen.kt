@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -103,6 +104,13 @@ fun DetailsScreen(
                 com.torrenttv.app.data.AppLog.log("details", "«${itemState.title}»: постер взят с Trakt")
             }
         }
+        // Постер дотянулся — сразу обновляем карточку в избранном, чтобы
+        // там ВСЕГДА был постер (просьба владельца)
+        if (itemState.posterUrl.isNotBlank() && itemState.posterUrl != item.posterUrl &&
+            store.isFavorite(itemState)
+        ) {
+            store.updateFavorite(itemState)
+        }
     }
     val watchFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     LaunchedEffect(Unit) {
@@ -153,21 +161,18 @@ fun DetailsScreen(
             .background(if (itemState.posterUrl.isNotBlank()) Color.Transparent else Color(0xFF0E1116))
             .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
-        // Вертикальная карточка: постер → кнопки → описание → «Похожее».
-        // Всё листается пультом ВНИЗ (просьба владельца: «двигается вниз,
-        // а не вправо»), поэтому вместо Row с боковым скроллом — одна колонка.
-        Column(
-            Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            // ---------- Постер сверху ----------
-            // 190×280: постер + название + кнопки должны влезать на экран
-            // ЦЕЛИКОМ — иначе фокус на «Смотреть» (под постером) заставляет
-            // автоскролл вытолкнуть постер за верхний край (жалоба владельца)
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        // Постер СЛЕВА и всегда виден (не скроллится), справа — колонка со
+        // скроллом: название → кнопки → описание → серии → «Похожее»
+        // (просьба владельца: раньше всё было одной колонкой, постер
+        // выталкивался вверх при скролле и пропадал)
+        Row(Modifier.fillMaxWidth().weight(1f)) {
+            // ---------- Постер слева ----------
+            Box(
+                Modifier
+                    .width(204.dp)
+                    .fillMaxHeight()
+                    .padding(end = 12.dp),
+            ) {
                 if (itemState.posterUrl.isBlank()) {
                     Box(
                         Modifier
@@ -189,7 +194,13 @@ fun DetailsScreen(
                 }
             }
 
-            // ---------- Название, тип, год ----------
+            Column(
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                // ---------- Название, тип, год ----------
             Text(
                 item.title,
                 color = Color.White,
@@ -324,7 +335,10 @@ fun DetailsScreen(
                     modifier = Modifier.focusRequester(watchFocus),
                 ) { Text("▶︎ Смотреть") }
                 AppButton(onClick = {
-                    fav = store.toggleFavorite(item)
+                    // Сохраняем ОБОГАЩЁННУЮ карточку (itemState): постер мог
+                    // дотянуться с КП/Trakt на этом экране — иначе в избранное
+                    // попадает пустышка без постера
+                    fav = store.toggleFavorite(itemState)
                     com.torrenttv.app.data.AppLog.log(
                         "ui",
                         "нажал: «${if (fav) "В избранном" else "В избранное"}» «${item.title}»",
@@ -481,7 +495,14 @@ fun DetailsScreen(
                     }
                 }
             }
-            if (seasons.isNotEmpty()) {
+            // Для movie-карточек чужие раздачи с похожим названием дают
+            // 1-2 «серий»-мусора («Мёртвые души»-спектакль поймал S11E11
+            // чужого сериала). Настоящий сериал собирает сезонную пачку —
+            // порог для movie: минимум 3 серии
+            val shownSeasons = if (item.type == "movie" && seasons.sumOf { it.episodes.size } < 3) {
+                emptyList()
+            } else seasons
+            if (shownSeasons.isNotEmpty()) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
@@ -512,8 +533,8 @@ fun DetailsScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.padding(top = 8.dp),
                 ) {
-                    itemsIndexed(seasons) { _, s ->
-                        val sel = s.number == (selSeason ?: seasons.first().number)
+                    itemsIndexed(shownSeasons) { _, s ->
+                        val sel = s.number == (selSeason ?: shownSeasons.first().number)
                         Surface(
                             onClick = { selSeason = s.number },
                             shape = clickableSurfaceShape(RoundedCornerShape(18.dp)),
@@ -533,7 +554,7 @@ fun DetailsScreen(
                         }
                     }
                 }
-                val curSeason = seasons.firstOrNull { it.number == (selSeason ?: seasons.first().number) }
+                val curSeason = shownSeasons.firstOrNull { it.number == (selSeason ?: shownSeasons.first().number) }
                 if (curSeason != null) {
                     // Вертикальный список серий (макет design/details_episodes_list.html,
                     // подтверждён владельцем): код+название, дата выхода, одна кнопка —
@@ -635,7 +656,8 @@ fun DetailsScreen(
                     }
                 }
             }
-        }
+            } // правая скролл-колонка
+        } // Row: постер слева + контент справа
 
         AppButton(onClick = onBack) { Text("← Назад") }
     }

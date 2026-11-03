@@ -106,6 +106,18 @@ class LocalStore(context: Context) {
 
     fun favorites(): List<MediaItem> = readList("favorites")
 
+    /** Обновить карточку в избранном (например, дотянутый постер/описание). */
+    fun updateFavorite(item: MediaItem) {
+        val list = favorites().toMutableList()
+        val i = list.indexOfFirst { it.storeKey == item.storeKey }
+        if (i >= 0) {
+            list[i] = item
+            prefs.edit()
+                .putString("favorites", JSONArray(list.map { it.toJson() }).toString())
+                .apply()
+        }
+    }
+
     fun isFavorite(item: MediaItem): Boolean =
         favorites().any { it.storeKey == item.storeKey }
 

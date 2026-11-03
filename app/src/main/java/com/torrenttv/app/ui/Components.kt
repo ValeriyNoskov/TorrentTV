@@ -1317,6 +1317,34 @@ fun FavoritesScreen(onOpenDetails: (MediaItem) -> Unit) {
     var filter by remember { mutableStateOf("all") }
     androidx.compose.runtime.LaunchedEffect(Unit) { favs = store.favorites() }
 
+    // Карточки без постера дотягиваем из КП, затем Trakt — и СОХРАНЯЕМ:
+    // в избранном постер должен быть всегда (просьба владельца)
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        var changed = false
+        for (f in favs) {
+            if (f.posterUrl.isNotBlank()) continue
+            var upd = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { com.torrenttv.app.data.MediaApi.enrich(f, store) }.getOrNull()
+            } ?: f
+            if (upd.posterUrl.isBlank()) {
+                val trakt = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching {
+                        com.torrenttv.app.data.TraktClient.posterUrl(
+                            f.title, f.year, f.type == "tv", f.country,
+                        )
+                    }.getOrNull()
+                }
+                if (!trakt.isNullOrBlank()) upd = upd.copy(posterUrl = trakt)
+            }
+            if (upd.posterUrl.isNotBlank()) {
+                store.updateFavorite(upd)
+                changed = true
+                com.torrenttv.app.data.AppLog.log("details", "«${f.title}»: постер дотянут в избранном")
+            }
+        }
+        if (changed) favs = store.favorites()
+    }
+
     val shown = favs.filter {
         when (filter) {
             "movie" -> it.type == "movie"
