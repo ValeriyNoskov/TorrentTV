@@ -92,6 +92,7 @@ class TorrentDataSource(private val st: TorrentEngine.StreamSession) : DataSourc
         val waitLen = minOf(length.toLong(), st.fileSize - filePos).coerceAtLeast(0)
         val deadline = System.currentTimeMillis() + 90_000
         var lastWaitLog = 0L
+        var lastForceAt = 0L
         var lastProgressLog = filePos
         var lastDiagLog = 0L
         while (waitLen > 0 && !st.isRangeReady(filePos, waitLen)) {
@@ -116,10 +117,14 @@ class TorrentDataSource(private val st: TorrentEngine.StreamSession) : DataSourc
                 }
             }
             if (!TorrentEngine.session.isRunning) throw IOException("Торрент-сессия остановлена")
-            // Зависшие куски: если готовность окна не меняется 15 с при живых
-            // пирах — форсим недостающие куски (setPieceDeadline): запросы
-            // переотправляются, кусок качается вне очереди
-            if (System.currentTimeMillis() - lastWaitLog > 15_000) {
+            // Зависшие куски: если кусок не скачался 15 с при живых пирах —
+            // форсим недостающие (setPieceDeadline): запросы переотправляются,
+            // кусок качается вне очереди. ВАЖНО: таймер НЕ от lastWaitLog
+            // (тот обновляется каждую секунду и обнулял бы отсчёт — форс
+            // никогда не срабатывал, кусок зависал навсегда: лог ТВ «Титаны»
+            // кусок 3130=✗(S) при готовых соседях, часы напролёт)
+            if (System.currentTimeMillis() - lastForceAt > 15_000) {
+                lastForceAt = System.currentTimeMillis()
                 val forced = st.forcePieces(filePos, waitLen)
                 if (forced > 0) {
                     com.torrenttv.app.data.AppLog.log(
