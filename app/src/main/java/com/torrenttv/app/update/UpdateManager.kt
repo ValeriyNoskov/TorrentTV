@@ -84,7 +84,17 @@ object UpdateManager {
         Thread {
             try {
                 val request = Request.Builder().url(info.apkUrl)
-                    .apply { val t = ghToken(context); if (t.isNotBlank()) header("Authorization", "Bearer $t") }
+                    // GitVerse-URL качаем с ВШИТЫМ GitVerse-токеном (нужен для
+                    // приватного репо), GitHub-URL — с пользовательским токеном
+                    .apply {
+                        if (info.apkUrl.contains("gitverse.ru")) {
+                            val t = gitverseToken()
+                            if (t.isNotBlank()) header("Authorization", "Bearer $t")
+                        } else {
+                            val t = ghToken(context)
+                            if (t.isNotBlank()) header("Authorization", "Bearer $t")
+                        }
+                    }
                     .build()
                 http.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}")
@@ -274,14 +284,67 @@ object UpdateManager {
     }
 
     /**
-     * GitVerse (зеркало в РФ). API GitVerse закрыт для анонимов (401 на
-     * /releases/latest — «ошибка не удалось проверить http» на ТВ), поэтому
-     * парсим анонимные HTML-страницы релизов:
-     *  1) страница списка — первый тег `/releases/tag/vX` = новейший релиз;
-     *  2) страница тега — APK виден как `<a download="VNosKino-X.apk"
-     *     href="/api/attachments/<uuid>">`; attachment качается без токена.
+     * GitVerse (зеркало в РФ). Работает через API С ТОКЕНОМ (вшитый LOG_TOKEN —
+     * тот же, что для логов): репозиторий можно сделать приватным, обновления
+     * продолжат приходить. HTML-парсинг остался как фолбэк (старые сценарии:
+     * токен не декодировался и т.п.).
+     *
+     * API: GET /repos/ChipN/TorrentTV/releases?per_page=1 → JSON, первый
+     * элемент = новейший релиз (tag_name, body, assets[].uuid).
+     * APK качается по /api/attachments/<uuid>.
      */
     private fun fetchGitverse(currentVersion: String): UpdateInfo? {
+        // Основной путь: API с токеном (работает и для приватного репо)
+        try {
+            val token = gitverseToken()
+            if (token.isNotBlank()) {
+                val request = Request.Builder()
+                    .url("https://api.gitverse.ru/repos/ChipN/TorrentTV/releases?per_page=1")
+                    .header("Authorization", "Bearer $token")
+                    .header("Accept", "application/vnd.gitverse.object+json;version=1")
+                    .build()
+                http.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}")
+                    val arr = org.json.JSONArray(
+                        response.body?.string() ?: throw IllegalStateException("пустой ответ сервера"),
+                    )
+                    val rel = arr.getJSONObject(0)
+                    val tag = rel.optString("tag_name", "").removePrefix("v")
+                    if (tag.isBlank()) throw IllegalStateException("в ответе API нет tag_name")
+                    if (!isNewer(tag, currentVersion)) {
+                        com.torrenttv.app.data.AppLog.log(
+                            "update",
+                            "проверка [GitVerse]: последний релиз v$tag, текущая v$currentVersion → у вас последняя",
+                        )
+                        return null
+                    }
+                    // APK: attachment релиза. browser_download_url отдаёт 404 —
+                    // используем проверенный /api/attachments/<uuid>
+                    val assets = rel.getJSONArray("assets")
+                    var apkUuid = ""
+                    for (i in 0 until assets.length()) {
+                        val a = assets.getJSONObject(i)
+                        if (a.optString("name", "").endsWith(".apk")) {
+                            apkUuid = a.optString("uuid", "")
+                            break
+                        }
+                    }
+                    if (apkUuid.isBlank()) throw IllegalStateException("у релиза v$tag нет APK")
+                    val apkUrl = "https://gitverse.ru/api/attachments/$apkUuid"
+                    com.torrenttv.app.data.AppLog.log(
+                        "update",
+                        "проверка [GitVerse]: последний релиз v$tag, текущая v$currentVersion → доступно обновление",
+                    )
+                    return UpdateInfo(tag, apkUrl, rel.optString("body", "").take(500))
+                }
+            }
+        } catch (e: Exception) {
+            com.torrenttv.app.data.AppLog.log(
+                "update",
+                "проверка [GitVerse]: API не удался (${e.message}) → пробую HTML-страницы",
+            )
+        }
+        // Фолбэк: анонимные HTML-страницы (работает, пока репозиторий публичный)
         val listHtml = getHtml("https://gitverse.ru/ChipN/TorrentTV/releases")
         val tag = Regex("/ChipN/TorrentTV/releases/tag/v(\\d+\\.\\d+\\.\\d+)")
             .find(listHtml)?.groupValues?.get(1)
@@ -306,6 +369,17 @@ object UpdateManager {
         )
         return UpdateInfo(tag, apkUrl, "")
     }
+
+    /**
+     * Вшитый GitVerse-токен (обфусцированный LOG_TOKEN — тот же, что шлёт логи
+     * в tv-logs). Даёт доступ к приватному репозиторию: обновления работают
+     * и после «Сделать приватным».
+     */
+    private fun gitverseToken(): String = runCatching {
+        com.torrenttv.app.Obf.decode(
+            com.torrenttv.app.BuildConfig.LOG_TOKEN_OBF, com.torrenttv.app.BuildConfig.OBF_KEY,
+        )
+    }.getOrDefault("")
 
     /** GET HTML-страницы GitVerse анонимно, с проверкой кода. */
     private fun getHtml(url: String): String {
