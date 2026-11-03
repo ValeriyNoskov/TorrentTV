@@ -85,11 +85,13 @@ object UpdateManager {
             try {
                 val request = Request.Builder().url(info.apkUrl)
                     // GitVerse-URL качаем с ВШИТЫМ GitVerse-токеном (нужен для
-                    // приватного репо), GitHub-URL — с пользовательским токеном
+                    // приватного репо), GitHub-URL — с пользовательским токеном.
+                    // GitVerse-attachments принимают схему "token", НЕ "Bearer"
+                    // (Bearer отдаёт 401 — проверено на живом API)
                     .apply {
                         if (info.apkUrl.contains("gitverse.ru")) {
                             val t = gitverseToken()
-                            if (t.isNotBlank()) header("Authorization", "Bearer $t")
+                            if (t.isNotBlank()) header("Authorization", "token $t")
                         } else {
                             val t = ghToken(context)
                             if (t.isNotBlank()) header("Authorization", "Bearer $t")
