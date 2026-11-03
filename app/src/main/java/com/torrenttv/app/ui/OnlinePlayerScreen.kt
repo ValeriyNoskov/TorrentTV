@@ -851,6 +851,61 @@ fun OnlinePlayerScreen(
             }
         }
 
+        // Центр: полупрозрачная тройка ⏪︎/▮▮/⏩︎ при показе панели —
+        // раскладка как в MX Player (транспорт по центру, не в панели).
+        // Фокус после показа панели — на ▶/⏸ (playBtnFocus)
+        if (showPanel && !audioMode && nextCountdown == null) {
+            Row(
+                modifier = Modifier.align(Alignment.Center),
+                horizontalArrangement = Arrangement.spacedBy(26.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                @Composable fun CenterBtn(label: String, action: () -> Unit) {
+                    androidx.tv.material3.Surface(
+                        onClick = action,
+                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(16.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0x99151B26),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFE8ECF4),
+                            focusedContentColor = Color.Black,
+                        ),
+                    ) { Text(label, fontSize = 24.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
+                }
+                CenterBtn("⏪︎") {
+                    val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
+                    player.seekTo((player.currentPosition - 10_000L).coerceIn(0L, dur))
+                    seekInfo = "⏪︎ −10 сек"; panelTick++
+                }
+                androidx.tv.material3.Surface(
+                    onClick = {
+                        if (player.isPlaying) player.pause() else player.play()
+                        playing = !player.isPlaying
+                        panelTick++
+                    },
+                    modifier = Modifier.focusRequester(playBtnFocus),
+                    shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(16.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color(0x99151B26),
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFE8ECF4),
+                        focusedContentColor = Color.Black,
+                    ),
+                ) {
+                    Text(
+                        if (playing) "▮▮" else "▶︎",
+                        fontSize = 26.sp,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp),
+                    )
+                }
+                CenterBtn("⏩︎") {
+                    val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
+                    player.seekTo((player.currentPosition + 10_000L).coerceIn(0L, dur))
+                    seekInfo = "⏩︎ +10 сек"; panelTick++
+                }
+            }
+        }
+
         // Название и серия — без технических пометок источника («torrserve»,
         // «filmix» и т.п.). Видно только при открытой панели: владелец просил,
         // чтобы заголовок уходил вместе с меню.
@@ -1067,20 +1122,8 @@ fun OnlinePlayerScreen(
                 player = player,
                 title = titleWithEp,
                 panelTick = panelTick,
-                playFocus = playBtnFocus,
                 onInfo = { seekInfo = it },
                 onAction = { panelTick++ },
-                onJump = { showJump = true; showSettings = false; showQuality = false; panelTick++ },
-                speedLabel = speedLabel,
-                onSpeed = {
-                    val speeds = listOf(1f, 1.25f, 1.5f, 2f, 0.75f)
-                    speedIdx = (speedIdx + 1) % speeds.size
-                    player.setPlaybackSpeed(speeds[speedIdx])
-                    speedLabel = if (speeds[speedIdx] == 1f) "1×" else "${speeds[speedIdx]}×"
-                    com.torrenttv.app.data.AppLog.log("player", "скорость → ${speeds[speedIdx]}×")
-                    panelTick++
-                },
-                onTracks = { showTrackMenu = true },
                 extraEnd = {
                     androidx.tv.material3.Surface(
                         onClick = { showGear = !showGear; panelTick++ },

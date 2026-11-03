@@ -10,9 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.tv.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -21,8 +19,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -33,30 +29,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Text
 
 /**
- * Единая панель плеера «как MX Player» для всех трёх плееров
- * (торрент / онлайн / ТВ): сикбар с растущим шагом перемотки
- * (10с → 30с → 1мин → 5мин при удержании) и нижний ряд кнопок:
- * ⏱ · скорость · [⏪ ▶/⏸ ⏩] · 🎵 Дорожки · ⛶ Масштаб · 🔒.
- * Опциональные кнопки включаются передачей колбэков, слоты
- * extraStart/extraEnd — для плеерных кнопок (Серии, ⚙, Качество).
+ * Единая нижняя панель плеера «как MX Player» для всех плееров:
+ * заголовок + сикбар с растущим шагом перемотки (10с → 30с → 1мин → 5мин
+ * при удержании стрелки). Транспортная тройка ⏪ ▶/⏸ ⏩ живёт В ЦЕНТРЕ
+ * экрана (как в MX), все настройки — в шестерёнке ⚙ (слоты
+ * extraStart/extraEnd — для плеерных кнопок: ☰ Серии, ⚙).
  */
 @Composable
 fun MxPanel(
     player: androidx.media3.exoplayer.ExoPlayer,
     title: String,
     panelTick: Int,
-    playFocus: FocusRequester,
     onInfo: (String) -> Unit,
     onAction: () -> Unit = {},
-    onJump: (() -> Unit)? = null,
-    speedLabel: String? = null,
-    onSpeed: (() -> Unit)? = null,
-    onTracks: (() -> Unit)? = null,
-    scaleLabel: String? = null,
-    onScale: (() -> Unit)? = null,
-    onLock: (() -> Unit)? = null,
     extraStart: @Composable RowScope.() -> Unit = {},
     extraEnd: @Composable RowScope.() -> Unit = {},
 ) {
@@ -185,127 +173,12 @@ fun MxPanel(
                 }
             }
         }
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(8.dp))
+        // Нижний ряд: только плеерные кнопки (Серии) и ⚙ — транспорт в
+        // центре экрана, все настройки внутри шестерёнки
         Row(verticalAlignment = Alignment.CenterVertically) {
-            if (onJump != null) {
-                androidx.tv.material3.Surface(
-                    onClick = onJump,
-                    shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
-                    colors = ClickableSurfaceDefaults.colors(
-                        containerColor = Color(0xFF2A2A2A),
-                        contentColor = Color.White,
-                        focusedContainerColor = Color(0xFFE8ECF4),
-                        focusedContentColor = Color.Black,
-                    ),
-                ) { Text("⏱", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
-                Spacer(Modifier.width(8.dp))
-            }
-            if (onSpeed != null && speedLabel != null) {
-                androidx.tv.material3.Surface(
-                    onClick = onSpeed,
-                    shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
-                    colors = ClickableSurfaceDefaults.colors(
-                        containerColor = Color(0xFF2A2A2A),
-                        contentColor = Color(0xB3FFFFFF),
-                        focusedContainerColor = Color(0xFFE8ECF4),
-                        focusedContentColor = Color.Black,
-                    ),
-                ) { Text(speedLabel, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
-            }
             extraStart()
             Spacer(Modifier.weight(1f))
-            // Транспортная тройка по центру панели — раскладка как в
-            // MX Player: крупные ⏪ ▶/⏸ ⏩ под сикбаром. Focused —
-            // контрастный (видно с дивана)
-            androidx.tv.material3.Surface(
-                onClick = {
-                    val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
-                    player.seekTo((player.currentPosition - 10_000L).coerceIn(0L, dur))
-                    onInfo("⏪︎ −10 сек"); onAction()
-                },
-                shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
-                colors = ClickableSurfaceDefaults.colors(
-                    containerColor = Color(0xFF2A2A2A),
-                    contentColor = Color.White,
-                    focusedContainerColor = Color(0xFFE8ECF4),
-                    focusedContentColor = Color.Black,
-                ),
-            ) { Text("⏪︎", fontSize = 24.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
-            Spacer(Modifier.width(10.dp))
-            androidx.tv.material3.Surface(
-                onClick = {
-                    if (player.isPlaying) player.pause() else player.play()
-                    onAction()
-                },
-                modifier = Modifier.focusRequester(playFocus),
-                shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
-                colors = ClickableSurfaceDefaults.colors(
-                    containerColor = Color(0xFF2A2A2A),
-                    contentColor = Color.White,
-                    focusedContainerColor = Color(0xFFE8ECF4),
-                    focusedContentColor = Color.Black,
-                ),
-            ) {
-                Text(
-                    if (player.isPlaying) "▮▮" else "▶︎",
-                    fontSize = 26.sp, fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
-                )
-            }
-            Spacer(Modifier.width(10.dp))
-            androidx.tv.material3.Surface(
-                onClick = {
-                    val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
-                    player.seekTo((player.currentPosition + 10_000L).coerceIn(0L, dur))
-                    onInfo("⏩︎ +10 сек"); onAction()
-                },
-                shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
-                colors = ClickableSurfaceDefaults.colors(
-                    containerColor = Color(0xFF2A2A2A),
-                    contentColor = Color.White,
-                    focusedContainerColor = Color(0xFFE8ECF4),
-                    focusedContentColor = Color.Black,
-                ),
-            ) { Text("⏩︎", fontSize = 24.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
-            Spacer(Modifier.weight(1f))
-            if (onTracks != null) {
-                androidx.tv.material3.Surface(
-                    onClick = onTracks,
-                    shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
-                    colors = ClickableSurfaceDefaults.colors(
-                        containerColor = Color(0xFF2A2A2A),
-                        contentColor = Color.White,
-                        focusedContainerColor = Color(0xFFE8ECF4),
-                        focusedContentColor = Color.Black,
-                    ),
-                ) { Text("🎵 Дорожки", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
-                Spacer(Modifier.width(8.dp))
-            }
-            if (onScale != null && scaleLabel != null) {
-                androidx.tv.material3.Surface(
-                    onClick = onScale,
-                    shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
-                    colors = ClickableSurfaceDefaults.colors(
-                        containerColor = Color(0xFF2A2A2A),
-                        contentColor = Color.White,
-                        focusedContainerColor = Color(0xFFE8ECF4),
-                        focusedContentColor = Color.Black,
-                    ),
-                ) { Text("⛶ $scaleLabel", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
-                Spacer(Modifier.width(8.dp))
-            }
-            if (onLock != null) {
-                androidx.tv.material3.Surface(
-                    onClick = onLock,
-                    shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
-                    colors = ClickableSurfaceDefaults.colors(
-                        containerColor = Color(0xFF2A2A2A),
-                        contentColor = Color.White,
-                        focusedContainerColor = Color(0xFFE8ECF4),
-                        focusedContentColor = Color.Black,
-                    ),
-                ) { Text("🔒", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) }
-            }
             extraEnd()
         }
     }

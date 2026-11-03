@@ -1382,10 +1382,59 @@ private fun VideoPlayer(
             )
         }
 
-        // Центральные полупрозрачные кнопки (YouTube-стиль) УДАЛЕНЫ:
-        // дублировали транспортную тройку MX-панели (жалоба владельца
-        // «в плеере задублированы кнопки пуск и перемотка»). Транспорт —
-        // только в панели: ⏪ ▶/⏸ ⏩ под сикбаром
+        // Центр: полупрозрачная тройка ⏪︎/▮▮/⏩︎ при показе панели —
+        // раскладка как в MX Player (транспорт В ЦЕНТРЕ экрана, внизу
+        // дубля нет). Фокус после показа панели — на ▶/⏸ (panelPlayFocus)
+        if (showPanel && errorMsg.isBlank() && nextCountdown == null && !showFiles && !showGear && !showTrackMenu) {
+            Row(
+                modifier = Modifier.align(Alignment.Center),
+                horizontalArrangement = Arrangement.spacedBy(26.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                @Composable fun CenterBtn(label: String, action: () -> Unit) {
+                    androidx.tv.material3.Surface(
+                        onClick = action,
+                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(16.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0x99151B26),
+                            contentColor = Color.White,
+                            focusedContainerColor = Color(0xFFE8ECF4),
+                            focusedContentColor = Color.Black,
+                        ),
+                    ) { Text(label, fontSize = 24.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
+                }
+                CenterBtn("⏪︎") {
+                    val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
+                    player.seekTo((player.currentPosition - 10_000L).coerceIn(0L, dur))
+                    seekInfo = "⏪︎ −10 сек"; panelTick++
+                }
+                androidx.tv.material3.Surface(
+                    onClick = {
+                        if (player.isPlaying) player.pause() else player.play()
+                        panelTick++
+                    },
+                    modifier = Modifier.focusRequester(panelPlayFocus),
+                    shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(16.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color(0x99151B26),
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFE8ECF4),
+                        focusedContentColor = Color.Black,
+                    ),
+                ) {
+                    Text(
+                        if (player.isPlaying) "▮▮" else "▶︎",
+                        fontSize = 26.sp,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp),
+                    )
+                }
+                CenterBtn("⏩︎") {
+                    val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
+                    player.seekTo((player.currentPosition + 10_000L).coerceIn(0L, dur))
+                    seekInfo = "⏩︎ +10 сек"; panelTick++
+                }
+            }
+        }
 
         // ⏳ Буферизация посреди просмотра: чёрный экран ≠ «зависло»
         if (playerBuf && errorMsg.isBlank() && nextCountdown == null && !showFiles && !showGear && !showTrackMenu) {
@@ -1686,138 +1735,11 @@ private fun VideoPlayer(
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Пауза/перемотка переехали в центр экрана (полупрозрачные)
-                    // ⏱ Перейти к… — пресеты % (середина фильма и т.п.), как в MX/VLC
-                    androidx.tv.material3.Surface(
-                        onClick = { showJump = true; showFiles = false; showGear = false; panelTick++ },
-                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Color(0xFF2A2A2A),
-                            contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFE8ECF4),
-                            focusedContentColor = Color.Black,
-                        ),
-                    ) { Text("⏱", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
-                    Spacer(Modifier.width(8.dp))
-                    // Скорость: 0.75× → 1× → 1.25× → 1.5× → 2× по кругу
-                    LaunchedEffect(Unit) { player.setPlaybackParameters(player.playbackParameters.withSpeed(speeds[speedIdx])) }
-                    androidx.tv.material3.Surface(
-                        onClick = {
-                            speedIdx = (speedIdx + 1) % speeds.size
-                            player.setPlaybackParameters(player.playbackParameters.withSpeed(speeds[speedIdx]))
-                            seekInfo = "Скорость ${speeds[speedIdx]}×"
-                            panelTick++
-                        },
-                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Color(0xFF2A2A2A),
-                            contentColor = Color(0xB3FFFFFF),
-                            focusedContainerColor = Color(0xFFE8ECF4),
-                            focusedContentColor = Color.Black,
-                        ),
-                    ) { Text("${speeds[speedIdx]}×", fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
+                    // Нижний ряд — по просьбе владельца: транспорт В ЦЕНТРЕ
+                    // ЭКРАНА (как в MX), внизу только ☰ Серии и ⚙; все
+                    // настройки (перейти/скорость/дорожки/масштаб/блокировка)
+                    // — внутри шестерёнки
                     Spacer(Modifier.weight(1f))
-                    // Транспортная тройка по центру панели — раскладка как в
-                    // MX Player: крупные ⏪ ▶/⏸ ⏩ под сикбаром, не мелкие
-                    // значки в углу. Focused — контрастный (видно с дивана)
-                    androidx.tv.material3.Surface(
-                        onClick = {
-                            val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
-                            player.seekTo((player.currentPosition - 10_000L).coerceIn(0L, dur))
-                            seekInfo = "⏪︎ −10 сек"; panelTick++
-                        },
-                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Color(0xFF2A2A2A),
-                            contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFE8ECF4),
-                            focusedContentColor = Color.Black,
-                        ),
-                    ) { Text("⏪︎", fontSize = 24.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
-                    Spacer(Modifier.width(10.dp))
-                    androidx.tv.material3.Surface(
-                        onClick = {
-                            if (player.isPlaying) player.pause() else player.play()
-                            panelTick++
-                        },
-                        modifier = Modifier.focusRequester(panelPlayFocus),
-                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Color(0xFF2A2A2A),
-                            contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFE8ECF4),
-                            focusedContentColor = Color.Black,
-                        ),
-                    ) {
-                        Text(
-                            if (player.isPlaying) "▮▮" else "▶︎",
-                            fontSize = 26.sp, fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
-                        )
-                    }
-                    Spacer(Modifier.width(10.dp))
-                    androidx.tv.material3.Surface(
-                        onClick = {
-                            val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
-                            player.seekTo((player.currentPosition + 10_000L).coerceIn(0L, dur))
-                            seekInfo = "⏩︎ +10 сек"; panelTick++
-                        },
-                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Color(0xFF2A2A2A),
-                            contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFE8ECF4),
-                            focusedContentColor = Color.Black,
-                        ),
-                    ) { Text("⏩︎", fontSize = 24.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
-                    Spacer(Modifier.weight(1f))
-                    // 🎵 Дорожки — аудио и субтитры в одном меню (раньше было
-                    // ДВЕ кнопки, обе открывали один и тот же TrackMenuOverlay)
-                    androidx.tv.material3.Surface(
-                        onClick = { showTrackMenu = true },
-                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Color(0xFF2A2A2A),
-                            contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFE8ECF4),
-                            focusedContentColor = Color.Black,
-                        ),
-                    ) { Text("🎵 Дорожки", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
-                    Spacer(Modifier.width(8.dp))
-                    // ⛶ Масштаб картинки: Вписать → Растянуть → Заполнить (кнопка scale в MX)
-                    androidx.tv.material3.Surface(
-                        onClick = {
-                            scaleIdx = (scaleIdx + 1) % scales.size
-                            pv?.resizeMode = scales[scaleIdx].second
-                            store.setPlayerScale(scaleIdx)
-                            seekInfo = "Масштаб: ${scales[scaleIdx].first}"
-                            panelTick++
-                        },
-                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Color(0xFF2A2A2A),
-                            contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFE8ECF4),
-                            focusedContentColor = Color.Black,
-                        ),
-                    ) { Text("⛶ ${scales[scaleIdx].first}", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
-                    Spacer(Modifier.width(8.dp))
-                    // 🔒 Блокировка экрана (как lock в MX): пульт мёртв, OK — разблок
-                    androidx.tv.material3.Surface(
-                        onClick = {
-                            locked = true
-                            showPanel = false; showFiles = false; showGear = false; showTrackMenu = false
-                            seekInfo = "🔒 Экран заблокирован"
-                        },
-                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Color(0xFF2A2A2A),
-                            contentColor = Color.White,
-                            focusedContainerColor = Color(0xFFE8ECF4),
-                            focusedContentColor = Color.Black,
-                        ),
-                    ) { Text("🔒", fontSize = 15.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
-                    Spacer(Modifier.width(8.dp))
                     if (files.size > 1) {
                         androidx.tv.material3.Surface(
                             onClick = { showFiles = !showFiles; showGear = false },
@@ -1930,6 +1852,87 @@ private fun VideoPlayer(
                         focusedContentColor = Color.Black,
                     ),
                 ) { Text("🧲 Качество (другая раздача)", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
+                // ⏱ Перейти к… — пресеты % (середина фильма и т.п.), как в MX/VLC
+                androidx.tv.material3.Surface(
+                    onClick = { showGear = false; showJump = true; panelTick++ },
+                    shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+                    ),
+                    colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                        containerColor = Color.Transparent,
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFE8ECF4),
+                        focusedContentColor = Color.Black,
+                    ),
+                ) { Text("⏱ Перейти к…", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
+                // Скорость: 0.75× → 1× → 1.25× → 1.5× → 2× по кругу
+                androidx.tv.material3.Surface(
+                    onClick = {
+                        speedIdx = (speedIdx + 1) % speeds.size
+                        player.setPlaybackParameters(player.playbackParameters.withSpeed(speeds[speedIdx]))
+                        gearMsg = "Скорость ${speeds[speedIdx]}×"
+                        panelTick++
+                    },
+                    shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+                    ),
+                    colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                        containerColor = Color.Transparent,
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFE8ECF4),
+                        focusedContentColor = Color.Black,
+                    ),
+                ) { Text("⏩ Скорость: ${speeds[speedIdx]}×", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
+                // 🎵 Дорожки — аудио и субтитры в одном меню
+                androidx.tv.material3.Surface(
+                    onClick = { showGear = false; showTrackMenu = true },
+                    shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+                    ),
+                    colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                        containerColor = Color.Transparent,
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFE8ECF4),
+                        focusedContentColor = Color.Black,
+                    ),
+                ) { Text("🎵 Дорожки", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
+                // ⛶ Масштаб картинки: Вписать → Растянуть → Заполнить (кнопка scale в MX)
+                androidx.tv.material3.Surface(
+                    onClick = {
+                        scaleIdx = (scaleIdx + 1) % scales.size
+                        pv?.resizeMode = scales[scaleIdx].second
+                        store.setPlayerScale(scaleIdx)
+                        gearMsg = "Масштаб: ${scales[scaleIdx].first}"
+                        panelTick++
+                    },
+                    shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+                    ),
+                    colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                        containerColor = Color.Transparent,
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFE8ECF4),
+                        focusedContentColor = Color.Black,
+                    ),
+                ) { Text("⛶ Масштаб: ${scales[scaleIdx].first}", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
+                // 🔒 Блокировка экрана (как lock в MX): пульт мёртв, OK — разблок
+                androidx.tv.material3.Surface(
+                    onClick = {
+                        showGear = false
+                        locked = true
+                        showPanel = false; showFiles = false; showTrackMenu = false
+                        seekInfo = "🔒 Экран заблокирован"
+                    },
+                    shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+                    ),
+                    colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                        containerColor = Color.Transparent,
+                        contentColor = Color.White,
+                        focusedContainerColor = Color(0xFFE8ECF4),
+                        focusedContentColor = Color.Black,
+                    ),
+                ) { Text("🔒 Заблокировать экран", fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
                 androidx.tv.material3.Surface(
                     onClick = {
                         showGear = false

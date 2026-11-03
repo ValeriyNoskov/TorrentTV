@@ -302,7 +302,7 @@ fun LivePlayerScreen(
                 Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .background(Color(0xB3000000))
+                    .background(Color(0xCC0A0E14))
                     .padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
                 // Название канала и передача — только здесь, вместе с меню
@@ -382,7 +382,7 @@ fun LivePlayerScreen(
                         onClick = { showGear = !showGear; panelTick++ },
                         shape = clickableSurfaceShape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
                         colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Color(0xFF1F2430),
+                            containerColor = Color(0xFF2A2A2A),
                             contentColor = Color.White,
                             focusedContainerColor = Color(0xFFE8ECF4),
                             focusedContentColor = Color(0xFF0E1116),
