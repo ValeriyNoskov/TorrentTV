@@ -32,6 +32,12 @@ class TorrentDataSource(private val st: TorrentEngine.StreamSession) : DataSourc
     // Флаг «первое чтение после open» для диагностики зависаний плеера
     private var firstReadLogged = false
 
+    // Агрегатор мелких EBML-чтений (окно 2 с — см. read): счётчик и границы
+    private var tinyReadCount = 0L
+    private var tinyReadFirstPos = -1L
+    private var tinyReadLastPos = -1L
+    private var tinyReadWindowStart = 0L
+
     override fun open(dataSpec: DataSpec): Long {
         pieceAbs = st.fileOffset + dataSpec.position
         filePos = dataSpec.position
@@ -147,15 +153,23 @@ class TorrentDataSource(private val st: TorrentEngine.StreamSession) : DataSourc
             return C.RESULT_END_OF_INPUT
         }
         // pieceAbs/filePos уже сдвинуты в readOnce
-        // Малые запросы (sniff: 3 байта заголовка, 1 байт хвоста) — логируем
-        // результат: по ним видно, вернулся ли read() и что получил ExoPlayer
-        // («контент не показывает»: после 1-байтового чтения хвоста ExoPlayer
-        // замолкал — не ясно было, вернулся ли read вообще)
+        // Малые запросы (EBML-чтения по 1-8 байт: заголовок, хвост с Cues) —
+        // раньше логировали КАЖДОЕ: тысячи строк забивали кольцевой буфер
+        // лога и вытесняли начало сессии (на ТВ 0.9.69 пропал startStream).
+        // Теперь агрегируем в окно 2 с: одна строка вместо сотен
         if (length <= 8) {
-            com.torrenttv.app.data.AppLog.log(
-                "player",
-                "чтение ок (sniff): файлПоз=${filePos}байт вернулось=$n из $length",
-            )
+            if (tinyReadCount == 0L) tinyReadWindowStart = android.os.SystemClock.elapsedRealtime()
+            tinyReadCount++
+            if (tinyReadFirstPos == -1L) tinyReadFirstPos = filePos
+            tinyReadLastPos = filePos
+            if (android.os.SystemClock.elapsedRealtime() - tinyReadWindowStart >= 2000) {
+                com.torrenttv.app.data.AppLog.log(
+                    "player",
+                    "мелкие чтения (EBML): $tinyReadCount шт, поз=${tinyReadFirstPos}..${tinyReadLastPos}байт",
+                )
+                tinyReadCount = 0
+                tinyReadFirstPos = -1L
+            }
         }
         // Прогресс чтения каждые ~64 МБ — видно, доходит ли плеер до данных
         if (filePos - lastProgressLog > 64L * 1024 * 1024) {
